@@ -78,6 +78,31 @@ island:
   # Cooldown (seconds) between an island reset and the next allowed reset.
   reset-cooldown-seconds: 300
 
+  # The starter island that gets built for a new player. (Built-in generator for now;
+  # WorldEdit .schem support comes later.)
+  starter:
+    platform-radius: 3           # 3 => a 7x7 platform
+    platform-block: GRASS_BLOCK  # top surface
+    sub-block: DIRT              # two layers beneath the surface
+    tree: true                  # plant a starter oak
+    bedrock-anchor: true        # a bedrock block under the centre
+    chest:
+      enabled: true             # set false to skip the starter chest entirely
+      # Starter chest contents. One per line as MATERIAL:AMOUNT (vanilla material names).
+      items:
+        - "ICE:2"
+        - "LAVA_BUCKET:1"
+        - "OAK_SAPLING:2"
+        - "MELON_SLICE:1"
+        - "PUMPKIN_SEEDS:1"
+        - "SUGAR_CANE:1"
+        - "BONE_MEAL:4"
+
+  # A visible world border at the island edge (radius above). Keeps players on their island.
+  border:
+    enabled: true
+    warning-blocks: 2           # red vignette this many blocks before the edge
+
 # ── Spawn / hub (where players go when they leave or lose an island) ──────────
 # When a player's island is deleted (and later: when they leave one, or an island
 # unloads out from under them), they are sent here. Point `world` at whatever world

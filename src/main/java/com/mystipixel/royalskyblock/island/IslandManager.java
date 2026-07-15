@@ -131,7 +131,8 @@ public final class IslandManager {
 
         return worlds.createIsland(worldName)
                 .thenCompose(world -> onMain(() -> {
-                    StarterIslandBuilder.paste(world, px, py, pz);
+                    StarterIslandBuilder.paste(world, px, py, pz,
+                            section("island.starter"), plugin.getLogger());
 
                     double hx = px + (homeOff != null ? homeOff.getInt("x", 0) : 0) + 0.5;
                     double hy = py + (homeOff != null ? homeOff.getInt("y", 1) : 1);
@@ -144,6 +145,7 @@ public final class IslandManager {
                     island.setRadius(startingRadius);
                     island.setHome(hx, hy, hz, yaw, pitch);
                     island.putMember(new IslandMember(pid, player.getName(), IslandRole.OWNER, now));
+                    applyBorder(world, island);
                     return island;
                 }))
                 .thenApply(island -> {
@@ -173,6 +175,7 @@ public final class IslandManager {
         }
         return worlds.loadIsland(island.worldName())
                 .thenCompose(world -> onMain(() -> {
+                    applyBorder(world, island);
                     teleportTo(player, island);
                     return true;
                 }));
@@ -189,9 +192,29 @@ public final class IslandManager {
         }
         return worlds.loadIsland(island.worldName())
                 .thenCompose(world -> onMain(() -> {
+                    applyBorder(world, island);
                     teleportTo(visitor, island);
                     return true;
                 }));
+    }
+
+    /**
+     * Apply a world border at the island edge: centred on the island's paste origin, sized to its
+     * radius. No-op if borders are disabled in config. Main thread only.
+     */
+    private void applyBorder(World world, Island island) {
+        if (!plugin.getConfig().getBoolean("island.border.enabled", true)) {
+            return;
+        }
+        ConfigurationSection paste = section("island.paste");
+        double cx = (paste != null ? paste.getInt("x", 0) : 0) + 0.5;
+        double cz = (paste != null ? paste.getInt("z", 0) : 0) + 0.5;
+        org.bukkit.WorldBorder border = world.getWorldBorder();
+        border.setCenter(cx, cz);
+        border.setSize(Math.max(1.0, island.radius() * 2.0));
+        border.setWarningDistance(Math.max(0, plugin.getConfig().getInt("island.border.warning-blocks", 2)));
+        border.setDamageAmount(0.0);
+        border.setDamageBuffer(0.0);
     }
 
     /** Teleport a player to an island home, nudging them upward to a safe spot. Main thread only. */
