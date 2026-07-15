@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock;
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.data.IslandDatabase;
 import com.mystipixel.royalskyblock.island.IslandManager;
+import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 import com.mystipixel.royalskyblock.world.NoOpIslandWorldService;
 import com.mystipixel.royalskyblock.world.asp.AspIslandWorldService;
@@ -59,6 +60,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         });
 
         registerCommands();
+        getServer().getPluginManager().registerEvents(new ProtectionListener(this), this);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()

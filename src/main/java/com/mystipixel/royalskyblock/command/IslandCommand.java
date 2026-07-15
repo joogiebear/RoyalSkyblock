@@ -42,6 +42,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "reload" -> handleReload(sender);
             case "create" -> handleCreate(sender);
             case "home", "go" -> handleHome(sender);
+            case "visit" -> handleVisit(sender, args);
             case "delete" -> handleDelete(sender, args);
             case "admin" -> handleAdmin(sender, args);
             default -> sender.sendMessage(Text.color("&e/is " + sub + " &7isn't wired up yet — coming soon."));
@@ -98,6 +99,37 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                         player.sendMessage(Text.color("&cCouldn't teleport you home: " + rootMessage(error)));
                     } else if (!Boolean.TRUE.equals(ok)) {
                         player.sendMessage(Text.color("&cYou don't have an island yet. Use &e/is create&c."));
+                    }
+                }));
+    }
+
+    private void handleVisit(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.color("&cOnly players can visit an island."));
+            return;
+        }
+        if (!player.hasPermission("royalskyblock.visit")) {
+            player.sendMessage(Text.color("&cYou don't have permission to visit islands."));
+            return;
+        }
+        if (args.length < 2) {
+            player.sendMessage(Text.color("&cUsage: &e/is visit <player>"));
+            return;
+        }
+        String targetName = args[1];
+        java.util.UUID targetId = plugin.getServer().getOfflinePlayer(targetName).getUniqueId();
+        if (targetId.equals(player.getUniqueId())) {
+            handleHome(player);
+            return;
+        }
+        plugin.islands().visit(player, targetId).whenComplete((ok, error) ->
+                onMain(() -> {
+                    if (error != null) {
+                        player.sendMessage(Text.color("&cCouldn't take you there: " + rootMessage(error)));
+                    } else if (!Boolean.TRUE.equals(ok)) {
+                        player.sendMessage(Text.color("&c" + targetName + " doesn't have an island."));
+                    } else {
+                        player.sendMessage(Text.color("&aVisiting &e" + targetName + "&a's island."));
                     }
                 }));
     }
@@ -212,6 +244,16 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
         if (args.length == 2 && args[0].equalsIgnoreCase("delete")) {
             return List.of("confirm");
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("visit")) {
+            String prefix = args[1].toLowerCase(Locale.ROOT);
+            List<String> names = new ArrayList<>();
+            for (Player online : plugin.getServer().getOnlinePlayers()) {
+                if (online.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
+                    names.add(online.getName());
+                }
+            }
+            return names;
         }
         return List.of();
     }

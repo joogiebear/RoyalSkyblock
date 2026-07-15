@@ -40,3 +40,6 @@ permissions:
   royalskyblock.admin:
     description: Administrative island management.
     default: op
+  royalskyblock.bypass:
+    description: Bypass island build protection anywhere.
+    default: op

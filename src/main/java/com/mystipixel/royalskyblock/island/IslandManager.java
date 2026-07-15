@@ -59,6 +59,27 @@ public final class IslandManager {
         return id != null ? getIsland(id) : null;
     }
 
+    /**
+     * Resolve which island a world belongs to. Because every island is its own world named
+     * {@code <prefix><islandId>}, this is a direct parse — no region lookup. Returns {@code null} for
+     * non-island worlds (the hub, the overworld, etc.).
+     */
+    public @Nullable Island getIslandByWorld(World world) {
+        if (world == null) {
+            return null;
+        }
+        String prefix = plugin.getConfig().getString("world.world-name-prefix", "island_");
+        String name = world.getName();
+        if (!name.startsWith(prefix)) {
+            return null;
+        }
+        try {
+            return getIsland(UUID.fromString(name.substring(prefix.length())));
+        } catch (IllegalArgumentException notAnIslandWorld) {
+            return null;
+        }
+    }
+
     /** Fetch an island by id, from cache or the DB. */
     public @Nullable Island getIsland(UUID id) {
         Island cached = byId.get(id);
@@ -153,6 +174,22 @@ public final class IslandManager {
         return worlds.loadIsland(island.worldName())
                 .thenCompose(world -> onMain(() -> {
                     teleportTo(player, island);
+                    return true;
+                }));
+    }
+
+    /**
+     * Send {@code visitor} to another player's island (as a visitor — build protection applies),
+     * loading the world first. Completes with {@code false} if the target has no island.
+     */
+    public CompletableFuture<Boolean> visit(Player visitor, UUID targetPlayer) {
+        Island island = getPlayerIsland(targetPlayer);
+        if (island == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        return worlds.loadIsland(island.worldName())
+                .thenCompose(world -> onMain(() -> {
+                    teleportTo(visitor, island);
                     return true;
                 }));
     }
