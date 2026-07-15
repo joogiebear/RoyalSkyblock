@@ -1,0 +1,126 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — main menu  (/is menu)                                     │
+# │  EcoMenus dialect: title, rows, a mask (1 = filler, 0 = dynamic slot), and │
+# │  a slots list. Each slot sits at a 1-based row + column, with an inline    │
+# │  `item` (material / ecoitems:id / player_head) and left/right-click effects.│
+# └──────────────────────────────────────────────────────────────────────────┘
+
+title: "&6&lYour Skyblock"
+rows: 5
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - gray_stained_glass_pane   # filler painted on every 1 below
+      pattern:
+        - "111111111"
+        - "111111111"
+        - "111111111"
+        - "111111111"
+        - "111111111"
+
+slots:
+  # ── header ──
+  - item: player_head head:%player% name:"&6&l%player%'s Skyblock"
+    lore:
+      - "&7Your per-island Skyblock hub."
+      - ""
+      - "&7Has island: &e%has_island%"
+    row: 1
+    column: 5
+
+  # ── core actions ──
+  - item: grass_block name:"&a&lCreate Island"
+    lore:
+      - "&7Start a fresh island."
+      - ""
+      - "&eClick to create!"
+    row: 2
+    column: 3
+    left-click:
+      - id: player_command
+        args:
+          command: "is create"
+
+  - item: ender_pearl name:"&a&lGo to Your Island"
+    lore:
+      - "&7Teleport to your island home."
+      - ""
+      - "&eClick to travel!"
+    row: 2
+    column: 5
+    left-click:
+      - id: player_command
+        args:
+          command: "is home"
+
+  - item: compass name:"&b&lVisit an Island"
+    lore:
+      - "&7Browse and visit other islands."
+      - ""
+      - "&8Coming soon."
+    row: 2
+    column: 7
+    left-click:
+      - id: message
+        args:
+          message: "&7Island visiting from a menu is coming soon — for now use &e/is visit <player>&7."
+
+  # ── progression (wired as their systems land) ──
+  - item: nether_star name:"&d&lProfiles"
+    lore:
+      - "&7Switch between your profiles"
+      - "&7(Solo, Coop, Ironman)."
+      - ""
+      - "&8Coming with the profile system."
+    row: 4
+    column: 3
+    left-click:
+      - id: message
+        args:
+          message: "&7Profiles are coming soon."
+
+  - item: anvil name:"&6&lIsland Upgrades"
+    lore:
+      - "&7Expand your island's size,"
+      - "&7members, and more."
+      - ""
+      - "&8Coming with upgrades."
+    row: 4
+    column: 5
+    left-click:
+      - id: message
+        args:
+          message: "&7Island upgrades are coming soon."
+
+  - item: comparator name:"&7&lIsland Settings"
+    lore:
+      - "&7Privacy, visitors, and coop."
+      - ""
+      - "&8Coming soon."
+    row: 4
+    column: 7
+    left-click:
+      - id: message
+        args:
+          message: "&7Island settings are coming soon."
+
+  # ── footer ──
+  - item: barrier name:"&c&lClose"
+    row: 5
+    column: 5
+    left-click:
+      - id: close
+
+  - item: tnt name:"&4&lDelete Island"
+    lore:
+      - "&7Permanently delete your island."
+      - ""
+      - "&cThis cannot be undone."
+    row: 5
+    column: 9
+    left-click:
+      - id: open_menu
+        args:
+          menu: confirm-delete

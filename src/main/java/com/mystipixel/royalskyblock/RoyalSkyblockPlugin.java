@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock;
 
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.data.IslandDatabase;
+import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge;
 import com.mystipixel.royalskyblock.island.IslandManager;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
@@ -32,6 +33,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private IslandManager islandManager;
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
+    private GuiManager guiManager;
 
     /** SPIKE: which eco test-slot each player is currently on (defaults to 1). Removed once the real
      *  profile system lands. */
@@ -60,6 +62,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.worldService = aspAvailable() ? new AspIslandWorldService(this) : new NoOpIslandWorldService();
         this.islandManager = new IslandManager(this, database, worldService);
         this.ecoBridge = new EcoProfileBridge();
+        this.guiManager = new GuiManager(this);
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
         // enabled but flag island world ops as unavailable so commands can explain clearly.
@@ -75,6 +78,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
         registerCommands();
         getServer().getPluginManager().registerEvents(new ProtectionListener(this), this);
+        getServer().getPluginManager().registerEvents(guiManager, this);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
@@ -97,10 +101,15 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     public void reload() {
         reloadConfig();
         messageManager.reload();
+        guiManager.reload();
     }
 
     public MessageManager messages() {
         return messageManager;
+    }
+
+    public GuiManager gui() {
+        return guiManager;
     }
 
     private void registerCommands() {

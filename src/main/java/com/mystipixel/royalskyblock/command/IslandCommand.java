@@ -22,7 +22,7 @@ import java.util.UUID;
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
-            "create", "home", "go", "visit", "invite", "kick", "leave",
+            "menu", "create", "home", "go", "visit", "invite", "kick", "leave",
             "sethome", "setwarp", "level", "top", "upgrade", "settings", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
@@ -41,6 +41,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
         String sub = args[0].toLowerCase(Locale.ROOT);
         switch (sub) {
+            case "menu" -> handleMenu(sender);
             case "reload" -> handleReload(sender);
             case "create" -> handleCreate(sender);
             case "home", "go" -> handleHome(sender);
@@ -50,6 +51,14 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             default -> sender.sendMessage(Text.color("&e/is " + sub + " &7isn't wired up yet — coming soon."));
         }
         return true;
+    }
+
+    private void handleMenu(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        plugin.gui().open(player, com.mystipixel.royalskyblock.gui.GuiManager.MAIN);
     }
 
     private void handleReload(CommandSender sender) {
@@ -238,6 +247,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     private void sendHelp(CommandSender sender) {
         plugin.messages().sendPlain(sender, "help.header");
         plugin.messages().sendPlain(sender, "help.subtitle");
+        plugin.messages().sendPlain(sender, "help.menu");
         plugin.messages().sendPlain(sender, "help.create");
         plugin.messages().sendPlain(sender, "help.home");
         plugin.messages().sendPlain(sender, "help.visit");

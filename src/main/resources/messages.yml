@@ -46,6 +46,7 @@ protection:
 help:
   header: "&6&lRoyalSkyblock"
   subtitle: "&7Scalable per-island Skyblock."
+  menu: "&8» &e/is menu &7— open the island menu"
   create: "&8» &e/is create &7— start your island"
   home: "&8» &e/is home &7— go to your island"
   visit: "&8» &e/is visit <player> &7— visit an island"

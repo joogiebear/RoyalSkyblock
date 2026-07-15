@@ -1,0 +1,45 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — delete confirmation  (opened from the main menu)          │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+title: "&4&lDelete your island?"
+rows: 3
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "111111111"
+        - "111111111"
+
+slots:
+  - item: lime_wool name:"&a&lConfirm Delete"
+    lore:
+      - "&7Permanently delete your island"
+      - "&7and everything on it."
+    row: 2
+    column: 3
+    left-click:
+      - id: player_command
+        args:
+          command: "is delete confirm"
+
+  - item: barrier name:"&c&lWarning"
+    lore:
+      - "&7This cannot be undone."
+      - "&7You will be sent to spawn."
+    row: 2
+    column: 5
+
+  - item: red_wool name:"&c&lCancel"
+    lore:
+      - "&7Keep my island."
+    row: 2
+    column: 7
+    left-click:
+      - id: open_menu
+        args:
+          menu: main
