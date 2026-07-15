@@ -14,6 +14,19 @@ matching the rest of the suite.
 - Java 21+.
 - Optional: Vault, PlaceholderAPI, eco / EcoItems, RoyalBank (soft dependencies).
 
+## Configuration files
+
+Organized the same way as the rest of the Royal suite — settings in one file, text and content split out:
+
+| File / folder | Holds |
+|---|---|
+| `config.yml` | All settings, grouped by section (storage, world backend, island generation, spawn, teleport). |
+| `messages.yml` | Every player-facing string. `&` colours, `%token%` placeholders. |
+| `gamemodes/*.yml` | One file per gamemode ruleset (Solo / Coop / Ironman) — *coming with the profile system*. |
+| `gui/*.yml` | One file per menu (EcoMenus dialect) — *coming with the GUIs*. |
+
+Run `/is reload` to reload `config.yml` and `messages.yml`.
+
 ## Storage
 
 - **Island metadata** (`storage.type`): `sqlite` (default) or `mysql`.

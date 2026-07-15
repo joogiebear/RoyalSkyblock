@@ -5,6 +5,7 @@ import com.mystipixel.royalskyblock.data.IslandDatabase;
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge;
 import com.mystipixel.royalskyblock.island.IslandManager;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
+import com.mystipixel.royalskyblock.message.MessageManager;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 
 import java.util.Map;
@@ -30,6 +31,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private IslandWorldService worldService;
     private IslandManager islandManager;
     private EcoProfileBridge ecoBridge;
+    private MessageManager messageManager;
 
     /** SPIKE: which eco test-slot each player is currently on (defaults to 1). Removed once the real
      *  profile system lands. */
@@ -46,6 +48,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     public void onEnable() {
         instance = this;
         saveDefaultConfig();
+        this.messageManager = new MessageManager(this);
 
         this.database = new IslandDatabase(this);
         if (!database.connect()) {
@@ -90,9 +93,14 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         instance = null;
     }
 
-    /** Reload config from disk. Extended in later phases to re-read levels, upgrades and menus. */
+    /** Reload config + messages from disk. Extended in later phases to re-read levels/menus. */
     public void reload() {
         reloadConfig();
+        messageManager.reload();
+    }
+
+    public MessageManager messages() {
+        return messageManager;
     }
 
     private void registerCommands() {

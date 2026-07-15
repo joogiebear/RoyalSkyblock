@@ -221,7 +221,7 @@ public final class IslandManager {
     private void teleportTo(Player player, Island island) {
         Location home = island.homeLocation();
         if (home == null) {
-            player.sendMessage("§cYour island world isn't loaded yet — try again in a moment.");
+            plugin.messages().send(player, "island.world-not-loaded");
             return;
         }
         player.teleport(safeLocation(home));
@@ -268,7 +268,7 @@ public final class IslandManager {
         // Evacuate everyone still on the island BEFORE unloading it — Bukkit.unloadWorld() fails
         // while players are inside, which would otherwise leave the deleted world lingering in memory.
         return onMain(() -> {
-            evacuate(worldName, "&eThe island you were on has been deleted.");
+            evacuate(worldName, plugin.messages().raw("delete.evicted"));
             return null;
         }).thenCompose(ignored -> worlds.deleteIsland(worldName))
                 .thenCompose(ignored -> CompletableFuture.runAsync(

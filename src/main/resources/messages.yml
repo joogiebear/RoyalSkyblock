@@ -1,0 +1,53 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — messages                                                 │
+# │  All player-facing text. Colours use & codes; placeholders use %token%.    │
+# │  Reload with /is reload.                                                   │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+prefix: "&6&lRoyalSkyblock &8» &r"
+
+general:
+  no-permission: "&cYou don't have permission to do that."
+  players-only: "&cOnly players can do that."
+  reloaded: "&aConfiguration reloaded."
+
+island:
+  creating: "&7Creating your island..."
+  created: "&aYour island is ready! Welcome home."
+  create-failed: "&cCouldn't create your island: &7%error%"
+  already-have: "&cYou already have an island. Use &e/is home&c."
+  no-permission-create: "&cYou don't have permission to create an island."
+  worlds-unavailable: "&cIsland worlds are unavailable — the server isn't running Advanced Slime Paper yet."
+  world-not-loaded: "&cYour island world isn't loaded yet — try again in a moment."
+
+home:
+  no-island: "&cYou don't have an island yet. Use &e/is create&c."
+  failed: "&cCouldn't teleport you home: &7%error%"
+
+visit:
+  no-permission: "&cYou don't have permission to visit islands."
+  usage: "&cUsage: &e/is visit <player>"
+  no-target-island: "&c%player% doesn't have an island."
+  visiting: "&aVisiting &e%player%&a's island."
+  failed: "&cCouldn't take you there: &7%error%"
+
+delete:
+  warning: "&c&lWarning: &7this permanently deletes your island and everything on it."
+  confirm-hint: "&7Type &e/is delete confirm &7to proceed."
+  deleting: "&7Deleting your island..."
+  not-owner: "&cYou don't own an island to delete."
+  deleted: "&aYour island has been deleted."
+  failed: "&cCouldn't delete your island: &7%error%"
+  evicted: "&eThe island you were on has been deleted."
+
+protection:
+  cannot-build: "&cYou can't build on this island."
+
+help:
+  header: "&6&lRoyalSkyblock"
+  subtitle: "&7Scalable per-island Skyblock."
+  create: "&8» &e/is create &7— start your island"
+  home: "&8» &e/is home &7— go to your island"
+  visit: "&8» &e/is visit <player> &7— visit an island"
+  delete: "&8» &e/is delete confirm &7— delete your island"
+  reload: "&8» &e/is reload &7— reload config"

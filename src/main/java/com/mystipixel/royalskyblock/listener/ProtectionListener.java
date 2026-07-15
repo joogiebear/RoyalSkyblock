@@ -2,7 +2,6 @@ package com.mystipixel.royalskyblock.listener;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.island.Island;
-import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -56,7 +55,7 @@ public final class ProtectionListener implements Listener {
         long now = System.currentTimeMillis();
         Long last = lastMessage.get(player.getUniqueId());
         if (last == null || now - last > MESSAGE_COOLDOWN_MS) {
-            player.sendMessage(Text.color("&cYou can't build on this island."));
+            plugin.messages().send(player, "protection.cannot-build");
             lastMessage.put(player.getUniqueId(), now);
         }
     }

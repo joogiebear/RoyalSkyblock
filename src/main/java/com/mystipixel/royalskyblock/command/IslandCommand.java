@@ -12,10 +12,12 @@ import org.jetbrains.annotations.NotNull;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
- * The {@code /island} command tree. Phase 1 wires create / home / delete / reload; the remaining
- * subcommands (visit, invite, upgrade, settings, ...) land with their systems in later phases.
+ * The {@code /island} command tree. Player-facing text comes from {@code messages.yml} via
+ * {@link com.mystipixel.royalskyblock.message.MessageManager}; only temporary spike/diagnostic
+ * strings ({@code admin testworld/ecoslot}) are inline.
  */
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
@@ -52,72 +54,72 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private void handleReload(CommandSender sender) {
         if (!sender.hasPermission("royalskyblock.admin")) {
-            sender.sendMessage(Text.color("&cYou don't have permission to do that."));
+            plugin.messages().send(sender, "general.no-permission");
             return;
         }
         plugin.reload();
-        sender.sendMessage(Text.color("&aRoyalSkyblock configuration reloaded."));
+        plugin.messages().send(sender, "general.reloaded");
     }
 
     private void handleCreate(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.color("&cOnly players can create an island."));
+            plugin.messages().send(sender, "general.players-only");
             return;
         }
         if (!player.hasPermission("royalskyblock.create")) {
-            player.sendMessage(Text.color("&cYou don't have permission to create an island."));
+            plugin.messages().send(player, "island.no-permission-create");
             return;
         }
         if (!plugin.isWorldBackendReady()) {
-            player.sendMessage(Text.color("&cIsland worlds are unavailable — the server isn't running Advanced Slime Paper yet."));
+            plugin.messages().send(player, "island.worlds-unavailable");
             return;
         }
         if (plugin.islands().hasIsland(player.getUniqueId())) {
-            player.sendMessage(Text.color("&cYou already have an island. Use &e/is home&c."));
+            plugin.messages().send(player, "island.already-have");
             return;
         }
 
-        player.sendMessage(Text.color("&7Creating your island..."));
+        plugin.messages().send(player, "island.creating");
         plugin.islands().createIsland(player).whenComplete((island, error) ->
                 onMain(() -> {
                     if (error != null) {
-                        player.sendMessage(Text.color("&cCouldn't create your island: " + rootMessage(error)));
+                        plugin.messages().send(player, "island.create-failed", "error", rootMessage(error));
                     } else {
-                        player.sendMessage(Text.color("&aYour island is ready! Welcome home."));
+                        plugin.messages().send(player, "island.created");
                     }
                 }));
     }
 
     private void handleHome(CommandSender sender) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.color("&cOnly players have an island home."));
+            plugin.messages().send(sender, "general.players-only");
             return;
         }
         plugin.islands().goHome(player).whenComplete((ok, error) ->
                 onMain(() -> {
                     if (error != null) {
-                        player.sendMessage(Text.color("&cCouldn't teleport you home: " + rootMessage(error)));
+                        plugin.messages().send(player, "home.failed", "error", rootMessage(error));
                     } else if (!Boolean.TRUE.equals(ok)) {
-                        player.sendMessage(Text.color("&cYou don't have an island yet. Use &e/is create&c."));
+                        plugin.messages().send(player, "home.no-island");
                     }
                 }));
     }
 
     private void handleVisit(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.color("&cOnly players can visit an island."));
+            plugin.messages().send(sender, "general.players-only");
             return;
         }
         if (!player.hasPermission("royalskyblock.visit")) {
-            player.sendMessage(Text.color("&cYou don't have permission to visit islands."));
+            plugin.messages().send(player, "visit.no-permission");
             return;
         }
         if (args.length < 2) {
-            player.sendMessage(Text.color("&cUsage: &e/is visit <player>"));
+            plugin.messages().send(player, "visit.usage");
             return;
         }
         String targetName = args[1];
-        java.util.UUID targetId = plugin.getServer().getOfflinePlayer(targetName).getUniqueId();
+        UUID targetId = plugin.getServer().getOfflinePlayer(targetName).getUniqueId();
         if (targetId.equals(player.getUniqueId())) {
             handleHome(player);
             return;
@@ -125,41 +127,43 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.islands().visit(player, targetId).whenComplete((ok, error) ->
                 onMain(() -> {
                     if (error != null) {
-                        player.sendMessage(Text.color("&cCouldn't take you there: " + rootMessage(error)));
+                        plugin.messages().send(player, "visit.failed", "error", rootMessage(error));
                     } else if (!Boolean.TRUE.equals(ok)) {
-                        player.sendMessage(Text.color("&c" + targetName + " doesn't have an island."));
+                        plugin.messages().send(player, "visit.no-target-island", "player", targetName);
                     } else {
-                        player.sendMessage(Text.color("&aVisiting &e" + targetName + "&a's island."));
+                        plugin.messages().send(player, "visit.visiting", "player", targetName);
                     }
                 }));
     }
 
     private void handleDelete(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.color("&cOnly players can delete an island."));
+            plugin.messages().send(sender, "general.players-only");
             return;
         }
         if (args.length < 2 || !args[1].equalsIgnoreCase("confirm")) {
-            player.sendMessage(Text.color("&c&lWarning: &7this permanently deletes your island and everything on it."));
-            player.sendMessage(Text.color("&7Type &e/is delete confirm &7to proceed."));
+            plugin.messages().sendPlain(player, "delete.warning");
+            plugin.messages().sendPlain(player, "delete.confirm-hint");
             return;
         }
-        player.sendMessage(Text.color("&7Deleting your island..."));
+        plugin.messages().send(player, "delete.deleting");
         plugin.islands().deleteOwnIsland(player).whenComplete((ok, error) ->
                 onMain(() -> {
                     if (error != null) {
-                        player.sendMessage(Text.color("&cCouldn't delete your island: " + rootMessage(error)));
+                        plugin.messages().send(player, "delete.failed", "error", rootMessage(error));
                     } else if (!Boolean.TRUE.equals(ok)) {
-                        player.sendMessage(Text.color("&cYou don't own an island to delete."));
+                        plugin.messages().send(player, "delete.not-owner");
                     } else {
-                        player.sendMessage(Text.color("&aYour island has been deleted."));
+                        plugin.messages().send(player, "delete.deleted");
                     }
                 }));
     }
 
+    // ── admin / spike diagnostics (temporary, inline strings) ────────────────────
+
     private void handleAdmin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("royalskyblock.admin")) {
-            sender.sendMessage(Text.color("&cYou don't have permission to do that."));
+            plugin.messages().send(sender, "general.no-permission");
             return;
         }
         String action = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "";
@@ -175,11 +179,6 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&8» &e/is admin ecoslot <1|2> &7— SPIKE: swap live eco data between two profile slots"));
     }
 
-    /**
-     * Diagnostic: create, load, persist and delete a throwaway slime world to prove the ASP backend
-     * works end-to-end. Console-runnable (no player needed), so it verifies island world plumbing
-     * before anyone logs in.
-     */
     private void handleTestWorld(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
@@ -203,11 +202,6 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 }));
     }
 
-    /**
-     * SPIKE: prove per-profile eco progression. Swaps the player's live eco data between two shadow
-     * "profile" slots via {@link com.mystipixel.royalskyblock.hooks.EcoProfileBridge}. Gain XP on
-     * slot 1, swap to 2 (fresh), swap back to 1 (restored) → per-profile progression is proven.
-     */
     private void handleEcoSlot(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             sender.sendMessage(Text.color("&cPlayers only."));
@@ -229,28 +223,27 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             player.sendMessage(Text.color("&7You're already on eco slot &e" + target + "&7."));
             return;
         }
-        java.util.UUID fromSlot = slotProfileId(current);
-        java.util.UUID toSlot = slotProfileId(target);
-        plugin.eco().swap(player.getUniqueId(), fromSlot, toSlot);
+        plugin.eco().swap(player.getUniqueId(), slotProfileId(current), slotProfileId(target));
         plugin.setEcoSlot(player.getUniqueId(), target);
         player.sendMessage(Text.color("&aSwapped eco data: slot &e" + current + " &a→ &e" + target
                 + "&a. Check your skills/pets/collections — they should reflect slot " + target + "."));
     }
 
-    /** Deterministic pseudo-"profile" id for a spike slot number. */
-    private static java.util.UUID slotProfileId(int slot) {
-        return java.util.UUID.nameUUIDFromBytes(("rsb-eco-slot:" + slot).getBytes());
+    private static UUID slotProfileId(int slot) {
+        return UUID.nameUUIDFromBytes(("rsb-eco-slot:" + slot).getBytes());
     }
 
+    // ── help / tab-complete ──────────────────────────────────────────────────────
+
     private void sendHelp(CommandSender sender) {
-        sender.sendMessage(Text.color("&6&lRoyalSkyblock"));
-        sender.sendMessage(Text.color("&7Scalable per-island Skyblock."));
-        sender.sendMessage(Text.color("&8» &e/is create &7— start your island"));
-        sender.sendMessage(Text.color("&8» &e/is home &7— go to your island"));
-        sender.sendMessage(Text.color("&8» &e/is visit <player> &7— visit an island"));
-        sender.sendMessage(Text.color("&8» &e/is delete confirm &7— delete your island"));
+        plugin.messages().sendPlain(sender, "help.header");
+        plugin.messages().sendPlain(sender, "help.subtitle");
+        plugin.messages().sendPlain(sender, "help.create");
+        plugin.messages().sendPlain(sender, "help.home");
+        plugin.messages().sendPlain(sender, "help.visit");
+        plugin.messages().sendPlain(sender, "help.delete");
         if (sender.hasPermission("royalskyblock.admin")) {
-            sender.sendMessage(Text.color("&8» &e/is reload &7— reload config"));
+            plugin.messages().sendPlain(sender, "help.reload");
         }
     }
 
