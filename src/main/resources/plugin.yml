@@ -1,0 +1,42 @@
+name: RoyalSkyblock
+version: ${version}
+main: com.mystipixel.royalskyblock.RoyalSkyblockPlugin
+api-version: '1.21'
+author: Mystipixel
+description: Scalable per-island Skyblock built on Advanced Slime Paper.
+# JDBC drivers + connection pool are downloaded at runtime by Paper's library loader.
+libraries:
+  - org.xerial:sqlite-jdbc:3.46.1.3
+  - com.zaxxer:HikariCP:5.1.0
+  - com.mysql:mysql-connector-j:8.4.0
+# ASP provides its world API as part of the server fork, so it is not listed as a (soft)depend.
+softdepend:
+  - Vault
+  - eco
+  - EcoItems
+  - PlaceholderAPI
+  - RoyalBank
+commands:
+  island:
+    description: RoyalSkyblock island command.
+    usage: /island [create|home|go|visit|invite|kick|leave|sethome|setwarp|level|top|upgrade|settings|reload|admin]
+    aliases: [is, sb, skyblock]
+permissions:
+  royalskyblock.use:
+    description: Base access to island commands.
+    default: true
+  royalskyblock.create:
+    default: true
+  royalskyblock.home:
+    default: true
+  royalskyblock.visit:
+    default: true
+  royalskyblock.invite:
+    default: true
+  royalskyblock.upgrade:
+    default: true
+  royalskyblock.settings:
+    default: true
+  royalskyblock.admin:
+    description: Administrative island management.
+    default: op
