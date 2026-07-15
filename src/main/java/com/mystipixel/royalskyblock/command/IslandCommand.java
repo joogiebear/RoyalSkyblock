@@ -167,7 +167,12 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleTestWorld(sender);
             return;
         }
+        if (action.equals("ecoslot")) {
+            handleEcoSlot(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— run an ASP world round-trip diagnostic"));
+        sender.sendMessage(Text.color("&8» &e/is admin ecoslot <1|2> &7— SPIKE: swap live eco data between two profile slots"));
     }
 
     /**
@@ -196,6 +201,45 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                         sender.sendMessage(Text.color("&a[diag] deleted '" + name + "' — ASP round-trip succeeded. ✔"));
                     }
                 }));
+    }
+
+    /**
+     * SPIKE: prove per-profile eco progression. Swaps the player's live eco data between two shadow
+     * "profile" slots via {@link com.mystipixel.royalskyblock.hooks.EcoProfileBridge}. Gain XP on
+     * slot 1, swap to 2 (fresh), swap back to 1 (restored) → per-profile progression is proven.
+     */
+    private void handleEcoSlot(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Text.color("&cPlayers only."));
+            return;
+        }
+        if (plugin.eco() == null || !plugin.eco().isPresent()) {
+            sender.sendMessage(Text.color("&ceco isn't installed — nothing to swap."));
+            return;
+        }
+        int target;
+        try {
+            target = Integer.parseInt(args[2]);
+        } catch (Exception e) {
+            sender.sendMessage(Text.color("&cUsage: &e/is admin ecoslot <1|2>"));
+            return;
+        }
+        int current = plugin.ecoSlot(player.getUniqueId());
+        if (current == target) {
+            player.sendMessage(Text.color("&7You're already on eco slot &e" + target + "&7."));
+            return;
+        }
+        java.util.UUID fromSlot = slotProfileId(current);
+        java.util.UUID toSlot = slotProfileId(target);
+        plugin.eco().swap(player.getUniqueId(), fromSlot, toSlot);
+        plugin.setEcoSlot(player.getUniqueId(), target);
+        player.sendMessage(Text.color("&aSwapped eco data: slot &e" + current + " &a→ &e" + target
+                + "&a. Check your skills/pets/collections — they should reflect slot " + target + "."));
+    }
+
+    /** Deterministic pseudo-"profile" id for a spike slot number. */
+    private static java.util.UUID slotProfileId(int slot) {
+        return java.util.UUID.nameUUIDFromBytes(("rsb-eco-slot:" + slot).getBytes());
     }
 
     private void sendHelp(CommandSender sender) {

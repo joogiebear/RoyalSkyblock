@@ -2,9 +2,14 @@ package com.mystipixel.royalskyblock;
 
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.data.IslandDatabase;
+import com.mystipixel.royalskyblock.hooks.EcoProfileBridge;
 import com.mystipixel.royalskyblock.island.IslandManager;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
+
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import com.mystipixel.royalskyblock.world.NoOpIslandWorldService;
 import com.mystipixel.royalskyblock.world.asp.AspIslandWorldService;
 import org.bukkit.command.PluginCommand;
@@ -24,6 +29,11 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private IslandDatabase database;
     private IslandWorldService worldService;
     private IslandManager islandManager;
+    private EcoProfileBridge ecoBridge;
+
+    /** SPIKE: which eco test-slot each player is currently on (defaults to 1). Removed once the real
+     *  profile system lands. */
+    private final Map<UUID, Integer> ecoSlot = new ConcurrentHashMap<>();
 
     /** True once the ASP world backend initialised. When false, island world ops are unavailable. */
     private volatile boolean worldBackendReady;
@@ -46,6 +56,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
         this.worldService = aspAvailable() ? new AspIslandWorldService(this) : new NoOpIslandWorldService();
         this.islandManager = new IslandManager(this, database, worldService);
+        this.ecoBridge = new EcoProfileBridge();
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
         // enabled but flag island world ops as unavailable so commands can explain clearly.
@@ -127,5 +138,17 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public boolean isWorldBackendReady() {
         return worldBackendReady;
+    }
+
+    public EcoProfileBridge eco() {
+        return ecoBridge;
+    }
+
+    public int ecoSlot(UUID player) {
+        return ecoSlot.getOrDefault(player, 1);
+    }
+
+    public void setEcoSlot(UUID player, int slot) {
+        ecoSlot.put(player, slot);
     }
 }
