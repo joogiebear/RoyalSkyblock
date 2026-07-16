@@ -25,7 +25,8 @@ import java.util.UUID;
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
-            "menu", "create", "home", "go", "visit", "profile", "sethome", "setwarp",
+            "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
+            "kick", "leave", "members", "sethome", "setwarp",
             "level", "top", "upgrade", "settings", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
@@ -48,6 +49,12 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "home", "go" -> handleHome(sender);
             case "visit" -> handleVisit(sender, args);
             case "profile", "profiles" -> handleProfile(sender, args);
+            case "invite" -> handleInvite(sender, args);
+            case "accept" -> handleAccept(sender);
+            case "deny", "decline" -> handleDeny(sender);
+            case "kick" -> handleKick(sender, args);
+            case "leave" -> handleLeave(sender);
+            case "members" -> handleMembers(sender);
             case "delete" -> handleDelete(sender, args);
             case "admin" -> handleAdmin(sender, args);
             default -> sender.sendMessage(Text.color("&e/is " + args[0] + " &7isn't wired up yet — coming soon."));
@@ -292,6 +299,113 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         return null;
     }
 
+    // ── coop invites ──────────────────────────────────────────────────────────────
+
+    private void handleInvite(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (!player.hasPermission("royalskyblock.invite")) {
+            plugin.messages().send(player, "general.no-permission");
+            return;
+        }
+        if (args.length < 2) {
+            plugin.messages().send(player, "coop.invite-usage");
+            return;
+        }
+        Player target = plugin.getServer().getPlayerExact(args[1]);
+        if (target == null) {
+            plugin.messages().send(player, "coop.invite-error", "error", "That player isn't online.");
+            return;
+        }
+        String error = plugin.profiles().invite(player, target);
+        if (error != null) {
+            plugin.messages().send(player, "coop.invite-error", "error", error);
+            return;
+        }
+        plugin.messages().send(player, "coop.invite-sent", "player", target.getName());
+        plugin.messages().send(target, "coop.invite-received", "player", player.getName());
+    }
+
+    private void handleAccept(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        Profile joined = plugin.profiles().acceptInvite(player);
+        if (joined == null) {
+            plugin.messages().send(player, "coop.no-invite");
+        } else {
+            plugin.messages().send(player, "coop.accepted", "profile", joined.name());
+        }
+    }
+
+    private void handleDeny(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (plugin.profiles().denyInvite(player)) {
+            plugin.messages().send(player, "coop.denied");
+        } else {
+            plugin.messages().send(player, "coop.no-invite");
+        }
+    }
+
+    private void handleKick(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (args.length < 2) {
+            plugin.messages().send(player, "coop.kick-usage");
+            return;
+        }
+        Player target = plugin.getServer().getPlayerExact(args[1]);
+        String error = plugin.profiles().kick(player, args[1]);
+        if (error != null) {
+            plugin.messages().send(player, "coop.kick-error", "error", error);
+            return;
+        }
+        plugin.messages().send(player, "coop.kicked", "player", args[1]);
+        if (target != null) {
+            plugin.messages().send(target, "coop.you-were-kicked");
+        }
+    }
+
+    private void handleLeave(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        String error = plugin.profiles().leave(player);
+        if (error != null) {
+            plugin.messages().send(player, "coop.leave-error", "error", error);
+        } else {
+            plugin.messages().send(player, "coop.left");
+        }
+    }
+
+    private void handleMembers(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        Profile active = plugin.profiles().getActiveProfile(player);
+        if (active == null) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        int max = plugin.getConfig().getInt("coop.max-members", 4);
+        plugin.messages().sendPlain(player, "coop.members-header",
+                "count", String.valueOf(active.memberCount()), "max", String.valueOf(max));
+        for (var member : active.members()) {
+            plugin.messages().sendPlain(player, "coop.members-line",
+                    "player", member.name(), "role", member.role().name().toLowerCase(Locale.ROOT));
+        }
+    }
+
     // ── admin / spike diagnostics ────────────────────────────────────────────────
 
     private void handleAdmin(CommandSender sender, String[] args) {
@@ -366,6 +480,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.messages().sendPlain(sender, "help.home");
         plugin.messages().sendPlain(sender, "help.visit");
         plugin.messages().sendPlain(sender, "help.profile");
+        plugin.messages().sendPlain(sender, "help.invite");
         plugin.messages().sendPlain(sender, "help.delete");
         if (sender.hasPermission("royalskyblock.admin")) {
             plugin.messages().sendPlain(sender, "help.reload");
@@ -413,10 +528,22 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             }
             return filter(names, args[2], sender);
         }
-        if (args.length == 2 && sub.equals("visit")) {
+        if (args.length == 2 && (sub.equals("visit") || sub.equals("invite"))) {
             List<String> names = new ArrayList<>();
             for (Player online : plugin.getServer().getOnlinePlayers()) {
                 names.add(online.getName());
+            }
+            return filter(names, args[1], sender);
+        }
+        if (args.length == 2 && sub.equals("kick") && sender instanceof Player player) {
+            List<String> names = new ArrayList<>();
+            Profile active = plugin.profiles().getActiveProfile(player);
+            if (active != null) {
+                for (var m : active.members()) {
+                    if (!m.uuid().equals(player.getUniqueId())) {
+                        names.add(m.name());
+                    }
+                }
             }
             return filter(names, args[1], sender);
         }

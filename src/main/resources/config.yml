@@ -108,6 +108,13 @@ profiles:
   # How many profiles a player may have.
   max-profiles: 3
 
+# ── Coop (shared-island profiles) ─────────────────────────────────────────────
+coop:
+  # Max members on a Coop profile, including the owner.
+  max-members: 4
+  # How long a coop invite stays valid before it expires.
+  invite-timeout-seconds: 60
+
 # ── Spawn / hub (where players go when they leave or lose an island) ──────────
 # When a player's island is deleted (and later: when they leave one, or an island
 # unloads out from under them), they are sent here. Point `world` at whatever world

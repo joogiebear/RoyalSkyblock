@@ -61,6 +61,23 @@ profile:
   unknown-gamemode: "&cUnknown gamemode. Choose: &esolo&c, &ecoop&c, or &eironman&c."
   blocked-command: "&cThat command is disabled on your &e%gamemode% &cprofile."
 
+coop:
+  invite-usage: "&cUsage: &e/is invite <player>"
+  invite-sent: "&aInvited &e%player% &ato your coop island."
+  invite-received: "&e%player% &7invited you to their coop island. &aType &e/is accept &ato join &7(or &e/is deny&7)."
+  invite-error: "&c%error%"
+  no-invite: "&cYou don't have a pending coop invite."
+  accepted: "&aYou joined &e%profile%&a! Switch to it with &e/is profile switch %profile%&a."
+  denied: "&7Coop invite declined."
+  kick-usage: "&cUsage: &e/is kick <player>"
+  kicked: "&aRemoved &e%player% &afrom the profile."
+  kick-error: "&c%error%"
+  you-were-kicked: "&cYou were removed from the coop profile."
+  left: "&aYou left the coop profile."
+  leave-error: "&c%error%"
+  members-header: "&6&lMembers &7(%count%/%max%)"
+  members-line: "&8» &e%player% &7- %role%"
+
 help:
   header: "&6&lRoyalSkyblock"
   subtitle: "&7Scalable per-island Skyblock."
@@ -69,5 +86,6 @@ help:
   home: "&8» &e/is home &7— go to your island"
   visit: "&8» &e/is visit <player> &7— visit an island"
   profile: "&8» &e/is profile &7— manage your profiles"
+  invite: "&8» &e/is invite <player> &7— invite to your coop island"
   delete: "&8» &e/is delete confirm &7— delete your island"
   reload: "&8» &e/is reload &7— reload config"

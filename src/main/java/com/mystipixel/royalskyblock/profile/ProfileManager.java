@@ -4,6 +4,7 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
+import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 
@@ -32,6 +33,14 @@ public final class ProfileManager {
 
     private final Map<UUID, UUID> activeProfile = new ConcurrentHashMap<>();  // player -> active profile
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
+    private final Map<UUID, Invite> pendingInvites = new ConcurrentHashMap<>(); // invited player -> invite
+
+    /** A pending coop invite: which profile, who sent it, and when it expires. */
+    private record Invite(UUID profileId, String inviterName, long expiresAt) {
+        boolean expired() {
+            return System.currentTimeMillis() > expiresAt;
+        }
+    }
 
     public ProfileManager(RoyalSkyblockPlugin plugin, Storage storage, PlayerStateService state) {
         this.plugin = plugin;
@@ -56,12 +65,22 @@ public final class ProfileManager {
         return loaded;
     }
 
-    public List<Profile> getProfiles(UUID owner) {
-        List<Profile> profiles = storage.getProfilesByOwner(owner);
-        for (Profile p : profiles) {
+    /** All profiles a player can access: the ones they own, plus coop profiles they're a member of. */
+    public List<Profile> getProfiles(UUID player) {
+        java.util.LinkedHashMap<UUID, Profile> byId = new java.util.LinkedHashMap<>();
+        for (Profile p : storage.getProfilesByOwner(player)) {
+            byId.put(p.id(), p);
             profileCache.put(p.id(), p);
         }
-        return profiles;
+        for (UUID pid : storage.getProfileIdsByMember(player)) {
+            if (!byId.containsKey(pid)) {
+                Profile p = getProfile(pid);
+                if (p != null) {
+                    byId.put(pid, p);
+                }
+            }
+        }
+        return new java.util.ArrayList<>(byId.values());
     }
 
     public @Nullable UUID getActiveProfileId(UUID player) {
@@ -247,6 +266,125 @@ public final class ProfileManager {
         return worldDelete
                 .thenRun(() -> storage.deleteProfile(targetId))
                 .thenApply(ignored -> true);
+    }
+
+    // ── coop invites ──────────────────────────────────────────────────────────────
+
+    /** Invite a player to the inviter's active Coop profile. Returns an error message, or null on success. */
+    public String invite(Player inviter, Player target) {
+        Profile active = getActiveProfile(inviter);
+        if (active == null) {
+            return "You have no active profile.";
+        }
+        if (active.gamemode() != Gamemode.COOP) {
+            return "Only Coop profiles can have members — create one with /is profile create coop.";
+        }
+        IslandRole role = active.roleOf(inviter.getUniqueId());
+        if (role != IslandRole.OWNER && role != IslandRole.CO_OWNER) {
+            return "Only the profile owner can invite members.";
+        }
+        if (target.getUniqueId().equals(inviter.getUniqueId())) {
+            return "You can't invite yourself.";
+        }
+        if (active.isMember(target.getUniqueId())) {
+            return target.getName() + " is already on this profile.";
+        }
+        int max = plugin.getConfig().getInt("coop.max-members", 4);
+        if (active.memberCount() >= max) {
+            return "This profile is full (" + max + " members).";
+        }
+        long timeout = plugin.getConfig().getLong("coop.invite-timeout-seconds", 60) * 1000L;
+        pendingInvites.put(target.getUniqueId(), new Invite(active.id(), inviter.getName(), System.currentTimeMillis() + timeout));
+        return null;
+    }
+
+    /** Accept a pending coop invite. Returns the joined profile, or null if there's no valid invite. */
+    public Profile acceptInvite(Player target) {
+        Invite invite = pendingInvites.remove(target.getUniqueId());
+        if (invite == null || invite.expired()) {
+            return null;
+        }
+        Profile profile = getProfile(invite.profileId());
+        if (profile == null) {
+            return null;
+        }
+        if (!profile.isMember(target.getUniqueId())) {
+            profile.putMember(new ProfileMember(target.getUniqueId(), target.getName(),
+                    IslandRole.MEMBER, Instant.now().toEpochMilli()));
+            storage.saveProfile(profile);
+            profileCache.put(profile.id(), profile);
+        }
+        return profile;
+    }
+
+    public boolean denyInvite(Player target) {
+        return pendingInvites.remove(target.getUniqueId()) != null;
+    }
+
+    public boolean hasInvite(Player target) {
+        Invite invite = pendingInvites.get(target.getUniqueId());
+        return invite != null && !invite.expired();
+    }
+
+    /** Kick a member from the actor's active Coop profile. Returns an error message, or null on success. */
+    public String kick(Player actor, String targetName) {
+        Profile active = getActiveProfile(actor);
+        if (active == null || active.gamemode() != Gamemode.COOP) {
+            return "You're not on a Coop profile.";
+        }
+        IslandRole role = active.roleOf(actor.getUniqueId());
+        if (role != IslandRole.OWNER && role != IslandRole.CO_OWNER) {
+            return "Only the profile owner can kick members.";
+        }
+        ProfileMember target = active.members().stream()
+                .filter(m -> m.name().equalsIgnoreCase(targetName)).findFirst().orElse(null);
+        if (target == null) {
+            return "No member named " + targetName + ".";
+        }
+        if (target.role() == IslandRole.OWNER) {
+            return "You can't kick the owner.";
+        }
+        if (target.uuid().equals(actor.getUniqueId())) {
+            return "You can't kick yourself — use /is leave.";
+        }
+        active.removeMember(target.uuid());
+        storage.saveProfile(active);
+        profileCache.put(active.id(), active);
+        moveOffProfileIfActive(target.uuid(), active.id());
+        return null;
+    }
+
+    /** Leave the player's active Coop profile (non-owner only). Returns an error message, or null on success. */
+    public String leave(Player player) {
+        Profile active = getActiveProfile(player);
+        if (active == null || active.gamemode() != Gamemode.COOP) {
+            return "You're not on a Coop profile.";
+        }
+        if (active.roleOf(player.getUniqueId()) == IslandRole.OWNER) {
+            return "The owner can't leave — delete the profile instead (/is profile delete).";
+        }
+        if (!active.isMember(player.getUniqueId())) {
+            return "You're not a member of this profile.";
+        }
+        active.removeMember(player.getUniqueId());
+        storage.saveProfile(active);
+        profileCache.put(active.id(), active);
+        moveOffProfileIfActive(player.getUniqueId(), active.id());
+        return null;
+    }
+
+    /** If the player is online and currently on {@code profileId}, move them to one of their own profiles. */
+    private void moveOffProfileIfActive(UUID player, UUID profileId) {
+        Player online = Bukkit.getPlayer(player);
+        if (online == null || !profileId.equals(getActiveProfileId(player))) {
+            return;
+        }
+        List<Profile> owned = storage.getProfilesByOwner(player);
+        if (!owned.isEmpty()) {
+            switchProfile(online, owned.get(0).id());
+        } else {
+            plugin.islands().sendToSpawn(online);
+        }
     }
 
     public String describe(Profile profile) {

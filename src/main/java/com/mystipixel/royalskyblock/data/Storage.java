@@ -138,11 +138,14 @@ public final class Storage {
                         + "joined_at " + big + " NOT NULL, PRIMARY KEY (profile_id, uuid))",
                 "CREATE TABLE IF NOT EXISTS player_state ("
                         + "uuid " + txt36 + " PRIMARY KEY, active_profile " + txt36 + ")",
+                // Keyed by (profile, player) so each coop member keeps their own inventory/progression
+                // on a shared-island profile.
                 "CREATE TABLE IF NOT EXISTS profile_data ("
-                        + "profile_id " + txt36 + " PRIMARY KEY, inventory " + blob + ", ender_chest " + blob + ", "
+                        + "profile_id " + txt36 + " NOT NULL, player_uuid " + txt36 + " NOT NULL, "
+                        + "inventory " + blob + ", ender_chest " + blob + ", "
                         + "exp_level " + integer + " NOT NULL DEFAULT 0, exp_progress " + flt + " NOT NULL DEFAULT 0, "
                         + "health " + dbl + " NOT NULL DEFAULT 20, food " + integer + " NOT NULL DEFAULT 20, "
-                        + "saturation " + flt + " NOT NULL DEFAULT 5)"
+                        + "saturation " + flt + " NOT NULL DEFAULT 5, PRIMARY KEY (profile_id, player_uuid))"
         };
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
             for (String q : ddl) {
@@ -436,11 +439,12 @@ public final class Storage {
 
     // ── profile data (saved state) ────────────────────────────────────────────────
 
-    public @Nullable ProfileData getProfileData(UUID profileId) {
+    public @Nullable ProfileData getProfileData(UUID profileId, UUID playerUuid) {
         String sql = "SELECT inventory, ender_chest, exp_level, exp_progress, health, food, saturation "
-                + "FROM profile_data WHERE profile_id = ?";
+                + "FROM profile_data WHERE profile_id = ? AND player_uuid = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, profileId.toString());
+            st.setString(2, playerUuid.toString());
             try (ResultSet rs = st.executeQuery()) {
                 if (!rs.next()) {
                     return null;
@@ -450,32 +454,33 @@ public final class Storage {
                         rs.getInt("food"), rs.getFloat("saturation"));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profile data " + profileId + ": " + e.getMessage());
+            plugin.getLogger().severe("Could not load profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
             return null;
         }
     }
 
-    public boolean saveProfileData(UUID profileId, ProfileData data) {
+    public boolean saveProfileData(UUID profileId, UUID playerUuid, ProfileData data) {
         String sql = mysql()
-                ? "INSERT INTO profile_data (profile_id, inventory, ender_chest, exp_level, exp_progress, health, food, saturation) "
-                + "VALUES (?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE inventory=VALUES(inventory), ender_chest=VALUES(ender_chest), "
+                ? "INSERT INTO profile_data (profile_id, player_uuid, inventory, ender_chest, exp_level, exp_progress, health, food, saturation) "
+                + "VALUES (?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE inventory=VALUES(inventory), ender_chest=VALUES(ender_chest), "
                 + "exp_level=VALUES(exp_level), exp_progress=VALUES(exp_progress), health=VALUES(health), food=VALUES(food), saturation=VALUES(saturation)"
-                : "INSERT INTO profile_data (profile_id, inventory, ender_chest, exp_level, exp_progress, health, food, saturation) "
-                + "VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(profile_id) DO UPDATE SET inventory=excluded.inventory, ender_chest=excluded.ender_chest, "
+                : "INSERT INTO profile_data (profile_id, player_uuid, inventory, ender_chest, exp_level, exp_progress, health, food, saturation) "
+                + "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(profile_id, player_uuid) DO UPDATE SET inventory=excluded.inventory, ender_chest=excluded.ender_chest, "
                 + "exp_level=excluded.exp_level, exp_progress=excluded.exp_progress, health=excluded.health, food=excluded.food, saturation=excluded.saturation";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, profileId.toString());
-            st.setBytes(2, data.inventory());
-            st.setBytes(3, data.enderChest());
-            st.setInt(4, data.expLevel());
-            st.setFloat(5, data.expProgress());
-            st.setDouble(6, data.health());
-            st.setInt(7, data.food());
-            st.setFloat(8, data.saturation());
+            st.setString(2, playerUuid.toString());
+            st.setBytes(3, data.inventory());
+            st.setBytes(4, data.enderChest());
+            st.setInt(5, data.expLevel());
+            st.setFloat(6, data.expProgress());
+            st.setDouble(7, data.health());
+            st.setInt(8, data.food());
+            st.setFloat(9, data.saturation());
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save profile data " + profileId + ": " + e.getMessage());
+            plugin.getLogger().severe("Could not save profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
             return false;
         }
     }

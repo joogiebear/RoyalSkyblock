@@ -43,7 +43,7 @@ public final class PlayerStateService {
                 player.getHealth(),
                 player.getFoodLevel(),
                 player.getSaturation());
-        storage.saveProfileData(profileId, data);
+        storage.saveProfileData(profileId, player.getUniqueId(), data);
         plugin.eco().save(player.getUniqueId(), profileId);
     }
 
@@ -52,7 +52,7 @@ public final class PlayerStateService {
         if (profileId == null) {
             return;
         }
-        ProfileData data = storage.getProfileData(profileId);
+        ProfileData data = storage.getProfileData(profileId, player.getUniqueId());
         if (data == null) {
             data = ProfileData.fresh();
         }
