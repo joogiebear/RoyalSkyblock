@@ -8,7 +8,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Marks an inventory as a RoyalSkyblock menu (so the click listener owns it) and carries the menu id
@@ -19,7 +19,8 @@ public final class MenuHolder implements InventoryHolder {
 
     private final String menuId;
     private Inventory inventory;
-    private final Map<Integer, Consumer<Player>> actions = new HashMap<>();
+    // slot -> action(player, rightClick)
+    private final Map<Integer, BiConsumer<Player, Boolean>> actions = new HashMap<>();
 
     public MenuHolder(String menuId) {
         this.menuId = menuId;
@@ -33,11 +34,11 @@ public final class MenuHolder implements InventoryHolder {
         this.inventory = inventory;
     }
 
-    void putAction(int slot, Consumer<Player> action) {
+    void putAction(int slot, BiConsumer<Player, Boolean> action) {
         actions.put(slot, action);
     }
 
-    @Nullable Consumer<Player> action(int slot) {
+    @Nullable BiConsumer<Player, Boolean> action(int slot) {
         return actions.get(slot);
     }
 

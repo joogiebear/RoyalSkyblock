@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 /**
  * Loads, renders, and drives the {@code gui/*.yml} menus in the shared EcoMenus dialect. Buttons run
@@ -46,8 +46,9 @@ public final class GuiManager implements Listener {
     public static final String PROFILES = "profiles";
     public static final String CREATE_PROFILE = "create-profile";
     public static final String SETTINGS = "settings";
+    public static final String UPGRADES = "upgrades";
 
-    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS};
+    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -99,6 +100,10 @@ public final class GuiManager implements Listener {
             fillSettings(player, template, inv, holder);
             return;
         }
+        if (menuId.equals(UPGRADES)) {
+            fillUpgrades(player, template, inv, holder);
+            return;
+        }
         if (!menuId.equals(PROFILES)) {
             return;
         }
@@ -109,7 +114,7 @@ public final class GuiManager implements Listener {
             Profile profile = profiles.get(i);
             int slot = slots.get(i);
             inv.setItem(slot, profileIcon(profile, active));
-            holder.putAction(slot, viewer -> {
+            holder.putAction(slot, (viewer, right) -> {
                 viewer.closeInventory();
                 plugin.profiles().switchProfile(viewer, profile.id());
             });
@@ -158,13 +163,131 @@ public final class GuiManager implements Listener {
             int slot = slots.get(i);
             inv.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit));
             if (canEdit) {
-                holder.putAction(slot, viewer -> {
+                holder.putAction(slot, (viewer, right) -> {
                     island.setSetting(setting, !island.isEnabled(setting));
                     Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
                     open(viewer, SETTINGS);
                 });
             }
         }
+    }
+
+    private void fillUpgrades(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        if (island == null) {
+            return;
+        }
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        IslandRole role = profile == null ? IslandRole.VISITOR : profile.roleOf(player.getUniqueId());
+        boolean canEdit = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
+
+        List<Integer> slots = template.contentSlots();
+        int i = 0;
+        for (com.mystipixel.royalskyblock.upgrade.UpgradeDef def : plugin.upgrades().all()) {
+            if (i >= slots.size()) {
+                break;
+            }
+            int slot = slots.get(i++);
+            inv.setItem(slot, upgradeIcon(def, island));
+            if (canEdit) {
+                holder.putAction(slot, (viewer, right) -> {
+                    handleUpgradeClick(viewer, def, right);
+                    open(viewer, UPGRADES);
+                });
+            }
+        }
+    }
+
+    private void handleUpgradeClick(Player viewer, com.mystipixel.royalskyblock.upgrade.UpgradeDef def, boolean skip) {
+        UUID activeId = plugin.profiles().getActiveProfileId(viewer.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        if (island == null) {
+            return;
+        }
+        var result = skip ? plugin.upgrades().skip(viewer, island, def)
+                : plugin.upgrades().start(viewer, island, def);
+        switch (result) {
+            case STARTED -> {
+                var next = def.tier(island.upgradeTier(def.key()) + 1);
+                plugin.messages().send(viewer, "upgrade.started", "upgrade", def.displayName(),
+                        "time", next != null ? formatDuration(next.timeSeconds()) : "?");
+            }
+            case COMPLETED -> plugin.messages().send(viewer, "upgrade.completed",
+                    "upgrade", def.displayName(), "tier", String.valueOf(island.upgradeTier(def.key())));
+            case MAXED -> plugin.messages().send(viewer, "upgrade.maxed", "upgrade", def.displayName());
+            case IN_PROGRESS -> plugin.messages().send(viewer, "upgrade.in-progress", "upgrade", def.displayName(),
+                    "time", pendingTimeLeft(island, def));
+            case NOT_IN_PROGRESS -> plugin.messages().send(viewer, "upgrade.not-in-progress");
+            case CANT_AFFORD -> plugin.messages().send(viewer, "upgrade.cant-afford");
+        }
+    }
+
+    private String pendingTimeLeft(Island island, com.mystipixel.royalskyblock.upgrade.UpgradeDef def) {
+        var pending = plugin.upgrades().pendingFor(island, def);
+        return pending == null ? "0s" : formatDuration(pending.secondsLeft(System.currentTimeMillis()));
+    }
+
+    private ItemStack upgradeIcon(com.mystipixel.royalskyblock.upgrade.UpgradeDef def, Island island) {
+        Material material = Material.matchMaterial(def.icon().toUpperCase(Locale.ROOT));
+        if (material == null || !material.isItem()) {
+            material = Material.ANVIL;
+        }
+        int current = island.upgradeTier(def.key());
+        var pending = plugin.upgrades().pendingFor(island, def);
+
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic(def.displayName() + " &7(Tier " + current + "/" + def.maxTier() + ")"));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7" + def.description()));
+            lore.add(noItalic(""));
+            if (pending != null) {
+                lore.add(noItalic("&e⏳ Upgrading to tier " + pending.targetTier()
+                        + " &7— " + formatDuration(pending.secondsLeft(System.currentTimeMillis())) + " left"));
+                var t = def.tier(pending.targetTier());
+                if (t != null && !t.skipCost().isFree()) {
+                    lore.add(noItalic("&7Skip now: &e" + plugin.currency().format(t.skipCost())));
+                    lore.add(noItalic(""));
+                    lore.add(noItalic("&eRight-click to skip the wait."));
+                }
+            } else {
+                var next = def.nextTier(current);
+                if (next == null) {
+                    lore.add(noItalic("&a✔ Maxed out."));
+                } else {
+                    lore.add(noItalic("&7Next: tier " + next.tier() + " &8(value " + fmt(next.value()) + ")"));
+                    lore.add(noItalic("&7Cost: &e" + plugin.currency().format(next.cost())
+                            + (next.isInstant() ? "" : " &7+ " + formatDuration(next.timeSeconds()) + " wait")));
+                    if (!next.skipCost().isFree()) {
+                        lore.add(noItalic("&7Skip cost: &e" + plugin.currency().format(next.skipCost())));
+                    }
+                    lore.add(noItalic(""));
+                    lore.add(noItalic("&eClick to upgrade" + (next.skipCost().isFree() ? "" : " &7(right-click after to skip)")));
+                }
+            }
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private static String fmt(double v) {
+        return v == Math.floor(v) ? String.valueOf((long) v) : String.valueOf(v);
+    }
+
+    private static String formatDuration(long seconds) {
+        if (seconds <= 0) {
+            return "instant";
+        }
+        long d = seconds / 86_400, h = (seconds % 86_400) / 3_600, m = (seconds % 3_600) / 60, s = seconds % 60;
+        StringBuilder sb = new StringBuilder();
+        if (d > 0) sb.append(d).append("d ");
+        if (h > 0) sb.append(h).append("h ");
+        if (m > 0) sb.append(m).append("m ");
+        if (s > 0 && d == 0) sb.append(s).append("s");
+        return sb.toString().trim();
     }
 
     private ItemStack settingIcon(IslandSetting setting, boolean on, boolean canEdit) {
@@ -215,9 +338,10 @@ public final class GuiManager implements Listener {
         if (template == null || raw < 0 || raw >= template.size()) {
             return;
         }
-        Consumer<Player> dynamic = holder.action(raw);
+        BiConsumer<Player, Boolean> dynamic = holder.action(raw);
         if (dynamic != null) {
-            runNextTick(() -> dynamic.accept(player));
+            boolean rightClick = event.isRightClick();
+            runNextTick(() -> dynamic.accept(player, rightClick));
             return;
         }
         MenuSlot slot = template.slotAt(raw);

@@ -84,15 +84,15 @@ slots:
   - item: anvil name:"&6&lIsland Upgrades"
     lore:
       - "&7Expand your island's size,"
-      - "&7members, and more."
+      - "&7guest limit, and coop slots."
       - ""
-      - "&8Coming with upgrades."
+      - "&eClick to upgrade!"
     row: 4
     column: 5
     left-click:
-      - id: message
+      - id: open_menu
         args:
-          message: "&7Island upgrades are coming soon."
+          menu: upgrades
 
   - item: comparator name:"&7&lIsland Settings"
     lore:

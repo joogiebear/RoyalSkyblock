@@ -106,6 +106,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new FlowLimiterListener(this), this);
         getServer().getPluginManager().registerEvents(guiManager, this);
 
+        // Resume in-progress upgrade timers and complete any that elapsed while offline.
+        upgradeManager.loadPending();
+        getServer().getScheduler().runTaskTimer(this, () -> upgradeManager.tick(), 40L, 20L);
+
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");

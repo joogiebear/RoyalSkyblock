@@ -3,9 +3,13 @@ package com.mystipixel.royalskyblock.upgrade;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.currency.Cost;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.profile.Profile;
+import com.mystipixel.royalskyblock.profile.ProfileMember;
+import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -15,6 +19,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Loads {@code upgrades.yml} and applies upgrade effects to islands. Per-island tiers live on the
@@ -23,12 +29,117 @@ import java.util.Map;
  */
 public final class UpgradeManager {
 
+    /** Outcome of a start/skip purchase attempt. */
+    public enum PurchaseResult { STARTED, COMPLETED, MAXED, IN_PROGRESS, NOT_IN_PROGRESS, CANT_AFFORD }
+
     private final RoyalSkyblockPlugin plugin;
     private final Map<String, UpgradeDef> upgrades = new LinkedHashMap<>();
+    private final Map<String, PendingUpgrade> pending = new ConcurrentHashMap<>(); // islandId:key -> pending
 
     public UpgradeManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
         reload();
+    }
+
+    /** Load in-progress upgrades from storage (call after storage connects). */
+    public void loadPending() {
+        pending.clear();
+        for (PendingUpgrade p : plugin.storage().getAllPending()) {
+            pending.put(pkey(p.islandId(), p.upgradeKey()), p);
+        }
+    }
+
+    private static String pkey(UUID islandId, String upgradeKey) {
+        return islandId + ":" + upgradeKey;
+    }
+
+    public @Nullable PendingUpgrade pendingFor(Island island, UpgradeDef def) {
+        return pending.get(pkey(island.id(), def.key()));
+    }
+
+    // ── purchasing (pay cost + wait, or pay skip cost to finish now) ────────────────
+
+    /** Start the next tier: charge the base cost and begin the timer (or finish instantly). */
+    public PurchaseResult start(Player player, Island island, UpgradeDef def) {
+        int current = island.upgradeTier(def.key());
+        if (current >= def.maxTier()) {
+            return PurchaseResult.MAXED;
+        }
+        if (pendingFor(island, def) != null) {
+            return PurchaseResult.IN_PROGRESS;
+        }
+        UpgradeTier next = def.tier(current + 1);
+        if (next == null) {
+            return PurchaseResult.MAXED;
+        }
+        if (!plugin.currency().canAfford(player, next.cost()) || !plugin.currency().charge(player, next.cost())) {
+            return PurchaseResult.CANT_AFFORD;
+        }
+        if (next.isInstant()) {
+            setTier(island, def, current + 1);
+            return PurchaseResult.COMPLETED;
+        }
+        PendingUpgrade pu = new PendingUpgrade(island.id(), def.key(), current + 1,
+                System.currentTimeMillis() + next.timeSeconds() * 1000L);
+        pending.put(pkey(island.id(), def.key()), pu);
+        plugin.storage().savePending(pu);
+        return PurchaseResult.STARTED;
+    }
+
+    /** Pay the skip cost to finish an in-progress upgrade immediately. */
+    public PurchaseResult skip(Player player, Island island, UpgradeDef def) {
+        PendingUpgrade pu = pendingFor(island, def);
+        if (pu == null) {
+            return PurchaseResult.NOT_IN_PROGRESS;
+        }
+        UpgradeTier target = def.tier(pu.targetTier());
+        Cost skipCost = target != null ? target.skipCost() : new Cost("", 0);
+        if (!plugin.currency().canAfford(player, skipCost) || !plugin.currency().charge(player, skipCost)) {
+            return PurchaseResult.CANT_AFFORD;
+        }
+        completePending(island, def, pu);
+        return PurchaseResult.COMPLETED;
+    }
+
+    private void completePending(Island island, UpgradeDef def, PendingUpgrade pu) {
+        pending.remove(pkey(island.id(), def.key()));
+        plugin.storage().deletePending(island.id(), def.key());
+        setTier(island, def, pu.targetTier());
+        notifyMembers(island, def, pu.targetTier());
+    }
+
+    /** Called on a repeating task: finish any upgrades whose timer has elapsed. Main thread. */
+    public void tick() {
+        if (pending.isEmpty()) {
+            return;
+        }
+        long now = System.currentTimeMillis();
+        for (PendingUpgrade pu : new ArrayList<>(pending.values())) {
+            if (!pu.isDone(now)) {
+                continue;
+            }
+            UpgradeDef def = get(pu.upgradeKey());
+            Island island = plugin.islands().getIsland(pu.islandId());
+            if (def == null || island == null) {
+                pending.remove(pkey(pu.islandId(), pu.upgradeKey()));
+                plugin.storage().deletePending(pu.islandId(), pu.upgradeKey());
+                continue;
+            }
+            completePending(island, def, pu);
+        }
+    }
+
+    private void notifyMembers(Island island, UpgradeDef def, int tier) {
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        if (profile == null) {
+            return;
+        }
+        for (ProfileMember m : profile.members()) {
+            Player online = Bukkit.getPlayer(m.uuid());
+            if (online != null) {
+                plugin.messages().send(online, "upgrade.completed", "upgrade", def.displayName(), "tier", String.valueOf(tier));
+            }
+        }
     }
 
     public void reload() {

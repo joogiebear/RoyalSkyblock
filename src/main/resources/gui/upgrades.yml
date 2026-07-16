@@ -1,0 +1,27 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — island upgrades                                          │
+# │  The 0 slots are filled at runtime with one icon per upgrade. Left-click   │
+# │  to start (pay cost + wait), right-click to skip an in-progress one.        │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+title: "&6&lIsland Upgrades"
+rows: 3
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - gray_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "100000001"   # 0 = an upgrade icon (filled dynamically)
+        - "111111111"
+
+slots:
+  - item: arrow name:"&7« Back"
+    row: 3
+    column: 1
+    left-click:
+      - id: open_menu
+        args:
+          menu: main

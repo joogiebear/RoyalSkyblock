@@ -56,6 +56,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
             case "settings" -> handleSettings(sender);
+            case "upgrade", "upgrades" -> handleUpgrades(sender);
             case "sethome", "setspawn" -> handleSetSpawn(sender, false);
             case "setguestspawn" -> handleSetSpawn(sender, true);
             case "kickall" -> handleKickAll(sender);
@@ -414,6 +415,18 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         plugin.gui().open(player, GuiManager.SETTINGS);
+    }
+
+    private void handleUpgrades(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (!plugin.profiles().activeHasIsland(player)) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        plugin.gui().open(player, GuiManager.UPGRADES);
     }
 
     // ── coop invites ──────────────────────────────────────────────────────────────

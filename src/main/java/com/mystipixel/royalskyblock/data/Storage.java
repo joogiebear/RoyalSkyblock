@@ -143,6 +143,10 @@ public final class Storage {
                         + "uuid " + txt36 + " PRIMARY KEY, active_profile " + txt36 + ")",
                 // Keyed by (profile, player) so each coop member keeps their own inventory/progression
                 // on a shared-island profile.
+                "CREATE TABLE IF NOT EXISTS pending_upgrades ("
+                        + "island_id " + txt36 + " NOT NULL, upgrade_key " + txt32 + " NOT NULL, "
+                        + "target_tier " + integer + " NOT NULL, complete_at " + big + " NOT NULL, "
+                        + "PRIMARY KEY (island_id, upgrade_key))",
                 "CREATE TABLE IF NOT EXISTS profile_data ("
                         + "profile_id " + txt36 + " NOT NULL, player_uuid " + txt36 + " NOT NULL, "
                         + "inventory " + blob + ", ender_chest " + blob + ", "
@@ -426,6 +430,56 @@ public final class Storage {
         } catch (SQLException e) {
             plugin.getLogger().severe("Profile DB connection error (delete): " + e.getMessage());
             return false;
+        }
+    }
+
+    // ── pending upgrades (cooking timers) ─────────────────────────────────────────
+
+    public List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> getAllPending() {
+        List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> out = new ArrayList<>();
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement st = c.prepareStatement(
+                     "SELECT island_id, upgrade_key, target_tier, complete_at FROM pending_upgrades");
+             ResultSet rs = st.executeQuery()) {
+            while (rs.next()) {
+                out.add(new com.mystipixel.royalskyblock.upgrade.PendingUpgrade(
+                        UUID.fromString(rs.getString("island_id")), rs.getString("upgrade_key"),
+                        rs.getInt("target_tier"), rs.getLong("complete_at")));
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load pending upgrades: " + e.getMessage());
+        }
+        return out;
+    }
+
+    public boolean savePending(com.mystipixel.royalskyblock.upgrade.PendingUpgrade p) {
+        String sql = mysql()
+                ? "INSERT INTO pending_upgrades (island_id, upgrade_key, target_tier, complete_at) VALUES (?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE target_tier=VALUES(target_tier), complete_at=VALUES(complete_at)"
+                : "INSERT INTO pending_upgrades (island_id, upgrade_key, target_tier, complete_at) VALUES (?,?,?,?) "
+                + "ON CONFLICT(island_id, upgrade_key) DO UPDATE SET target_tier=excluded.target_tier, complete_at=excluded.complete_at";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, p.islandId().toString());
+            st.setString(2, p.upgradeKey());
+            st.setInt(3, p.targetTier());
+            st.setLong(4, p.completeAt());
+            st.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not save pending upgrade: " + e.getMessage());
+            return false;
+        }
+    }
+
+    public void deletePending(UUID islandId, String upgradeKey) {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement st = c.prepareStatement(
+                     "DELETE FROM pending_upgrades WHERE island_id = ? AND upgrade_key = ?")) {
+            st.setString(1, islandId.toString());
+            st.setString(2, upgradeKey);
+            st.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not delete pending upgrade: " + e.getMessage());
         }
     }
 
