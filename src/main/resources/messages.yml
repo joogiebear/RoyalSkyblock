@@ -66,6 +66,7 @@ level:
   scanning: "&7Scanning your island — this runs in the background."
   done: "&aIsland level recalculated: &e%level%&a."
   cooldown: "&cThat was scanned recently — try again in &e%seconds%s&c."
+  up: "&6&l✦ &eYour island reached level &6%level%&e!"
 
 profile:
   header: "&6&lYour Profiles &7(%count%/%max%)"

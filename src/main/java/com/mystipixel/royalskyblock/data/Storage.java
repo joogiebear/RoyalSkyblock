@@ -130,7 +130,8 @@ public final class Storage {
                         + "home_pitch " + flt + " NOT NULL DEFAULT 0, "
                         + "settings " + (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT '', "
                         + "guest_home " + (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT '', "
-                        + "upgrades " + (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT '')",
+                        + "upgrades " + (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT '', "
+                        + "reward_level " + integer + " NOT NULL DEFAULT 0)",
                 "CREATE TABLE IF NOT EXISTS profiles ("
                         + "id " + txt36 + " PRIMARY KEY, owner " + txt36 + " NOT NULL, "
                         + "name " + txt32 + " NOT NULL, gamemode " + txt16 + " NOT NULL, "
@@ -166,6 +167,7 @@ public final class Storage {
         addColumnIfMissing("islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
         addColumnIfMissing("islands", "guest_home", (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT ''");
         addColumnIfMissing("islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing("islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
     }
 
     /** Best-effort ADD COLUMN; ignores the "already exists" error so it's safe to run every boot. */
@@ -194,7 +196,7 @@ public final class Storage {
 
     private @Nullable Island queryIsland(String where, String param) {
         String sql = "SELECT id, profile_id, world_name, created_at, radius, level, "
-                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades FROM islands " + where;
+                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level FROM islands " + where;
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, param);
             try (ResultSet rs = st.executeQuery()) {
@@ -217,6 +219,7 @@ public final class Storage {
         island.loadSettings(rs.getString("settings"));
         island.loadGuestHome(rs.getString("guest_home"));
         island.loadUpgrades(rs.getString("upgrades"));
+        island.setRewardLevel(rs.getInt("reward_level"));
         return island;
     }
 
@@ -224,7 +227,7 @@ public final class Storage {
     public List<Island> getAllIslands() {
         List<Island> out = new ArrayList<>();
         String sql = "SELECT id, profile_id, world_name, created_at, radius, level, "
-                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades FROM islands";
+                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level FROM islands";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql);
              ResultSet rs = st.executeQuery()) {
             while (rs.next()) {
@@ -238,14 +241,14 @@ public final class Storage {
 
     public boolean saveIsland(Island island) {
         String sql = mysql()
-                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
+                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
                 + "radius=VALUES(radius), level=VALUES(level), home_x=VALUES(home_x), home_y=VALUES(home_y), home_z=VALUES(home_z), "
-                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings), guest_home=VALUES(guest_home), upgrades=VALUES(upgrades)"
-                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
+                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings), guest_home=VALUES(guest_home), upgrades=VALUES(upgrades), reward_level=VALUES(reward_level)"
+                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
                 + "radius=excluded.radius, level=excluded.level, home_x=excluded.home_x, home_y=excluded.home_y, home_z=excluded.home_z, "
-                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings, guest_home=excluded.guest_home, upgrades=excluded.upgrades";
+                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings, guest_home=excluded.guest_home, upgrades=excluded.upgrades, reward_level=excluded.reward_level";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, island.id().toString());
             st.setString(2, island.profileId().toString());
@@ -261,6 +264,7 @@ public final class Storage {
             st.setString(12, island.serializeSettings());
             st.setString(13, island.serializeGuestHome());
             st.setString(14, island.serializeUpgrades());
+            st.setInt(15, island.rewardLevel());
             st.executeUpdate();
             return true;
         } catch (SQLException e) {

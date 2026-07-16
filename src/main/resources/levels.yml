@@ -24,6 +24,29 @@ scan:
   # Minimum seconds between recalculations of the same island (anti-spam / anti-lag).
   recalc-cooldown-seconds: 60
 
+# ── Automatic recalculation ─────────────────────────────────────────────────────
+# Periodically re-scan the islands players are standing on (never empty/unloaded
+# ones) so levels + the leaderboard stay fresh without anyone clicking Recalculate.
+auto-recalc:
+  # Minutes between background cycles. 0 = off. (Changing this needs a restart.)
+  interval-minutes: 10
+  # How many islands to recalc per cycle — caps the cost on a busy server.
+  max-per-cycle: 3
+
+# ── Level-up rewards ────────────────────────────────────────────────────────────
+# Console commands run ONCE, the first time an island reaches each level — hand out
+# coins/gems/items via your other plugins. Placeholders:
+#   %owner%  the island owner's name        %level%  the level reached
+# Each island remembers the highest level it's been paid for, so rewards never
+# double up, even across restarts. Leave a level out for no reward.
+rewards:
+  5:
+    - "ecobits give %owner% 100 gems"
+  10:
+    - "ecobits give %owner% 250 gems"
+  25:
+    - "ecobits give %owner% 750 gems"
+
 # ── Block values ────────────────────────────────────────────────────────────────
 # One line per block: MATERIAL: points. Grouped only for readability — order and
 # grouping don't matter to the plugin.

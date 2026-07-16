@@ -27,6 +27,8 @@ public final class Island {
 
     private int radius;
     private double level;
+    /** Highest integer level whose level-up rewards have already been paid out. */
+    private int rewardLevel;
 
     private double homeX, homeY, homeZ;
     private float homeYaw, homePitch;
@@ -83,6 +85,14 @@ public final class Island {
 
     public void setLevel(double level) {
         this.level = level;
+    }
+
+    public int rewardLevel() {
+        return rewardLevel;
+    }
+
+    public void setRewardLevel(int rewardLevel) {
+        this.rewardLevel = rewardLevel;
     }
 
     // ── upgrades ────────────────────────────────────────────────────────────────

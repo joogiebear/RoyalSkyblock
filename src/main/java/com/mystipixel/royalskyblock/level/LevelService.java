@@ -2,18 +2,22 @@ package com.mystipixel.royalskyblock.level;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.profile.Profile;
 import org.bukkit.Bukkit;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.entity.Player;
 import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -101,6 +105,7 @@ public final class LevelService {
                     island.setLevel(level);
                     breakdowns.put(island.id(), totals.counts);
                     lastScan.put(island.id(), nowMillis());
+                    grantLevelUps(island, level);                 // pay any newly-crossed level rewards
                     Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
                     scanning.remove(island.id());
                     result.complete(level);
@@ -114,6 +119,87 @@ public final class LevelService {
                     return null;
                 });
         return result;
+    }
+
+    // ── level-up rewards ─────────────────────────────────────────────────────────
+
+    /**
+     * Pay out rewards for every integer level newly crossed since the last payout, then bump the
+     * island's reward marker so nothing is ever paid twice. Runs on the main thread (console commands).
+     */
+    private void grantLevelUps(Island island, double newLevel) {
+        int from = island.rewardLevel();
+        int to = (int) Math.floor(newLevel);
+        if (to <= from) {
+            return;
+        }
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        String owner = profile == null ? "" : ownerName(profile);
+        for (int lvl = from + 1; lvl <= to; lvl++) {
+            List<String> commands = config.rewardsFor(lvl);
+            if (commands == null) {
+                continue;
+            }
+            for (String command : commands) {
+                String parsed = command.replace("%owner%", owner).replace("%level%", String.valueOf(lvl));
+                try {
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
+                } catch (Throwable t) {
+                    plugin.getLogger().warning("Level reward command failed ('" + parsed + "'): " + t.getMessage());
+                }
+            }
+        }
+        island.setRewardLevel(to);
+        notifyMembers(profile, to);
+    }
+
+    private void notifyMembers(Profile profile, int level) {
+        if (profile == null) {
+            return;
+        }
+        for (var member : profile.members()) {
+            Player online = Bukkit.getPlayer(member.uuid());
+            if (online != null) {
+                plugin.messages().send(online, "level.up", "level", String.valueOf(level));
+            }
+        }
+    }
+
+    private String ownerName(Profile profile) {
+        String name = Bukkit.getOfflinePlayer(profile.owner()).getName();
+        return name != null ? name : profile.name();
+    }
+
+    // ── auto-recalc ──────────────────────────────────────────────────────────────
+
+    /**
+     * Background refresh: recalc the islands players are currently standing on, up to
+     * {@code max-per-cycle}, skipping any on cooldown or already scanning. Islands nobody is on keep
+     * their stored level (recalc on demand via {@code /is level}). Cheap: only cached lookups.
+     */
+    public void autoRecalcActiveIslands() {
+        int max = config.autoRecalcMaxPerCycle();
+        Set<UUID> seen = new HashSet<>();
+        int done = 0;
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (done >= max) {
+                break;
+            }
+            UUID activeProfile = plugin.profiles().getActiveProfileId(player.getUniqueId());
+            if (activeProfile == null) {
+                continue;
+            }
+            Island island = plugin.islands().getIslandByProfile(activeProfile);
+            if (island == null || !seen.add(island.id())) {
+                continue;
+            }
+            if (Bukkit.getWorld(island.worldName()) == null
+                    || cooldownRemaining(island) > 0 || isScanning(island)) {
+                continue;
+            }
+            recalc(island);
+            done++;
+        }
     }
 
     // ── gathering: snapshot chunks a few per tick on the main thread ─────────────────

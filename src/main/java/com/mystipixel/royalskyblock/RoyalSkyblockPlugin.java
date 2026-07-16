@@ -114,6 +114,12 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getServer().getScheduler().runTaskTimer(this, () -> upgradeManager.tick(), 40L, 20L);
         // Live upgrade-menu countdowns (self-guards to no-op when nothing is cooking).
         getServer().getScheduler().runTaskTimer(this, () -> guiManager.tickOpenMenus(), 20L, 20L);
+        // Background island-level refresh for occupied islands (0 = off; change needs a restart).
+        long autoRecalcMinutes = levelService.config().autoRecalcMinutes();
+        if (autoRecalcMinutes > 0) {
+            long period = autoRecalcMinutes * 60L * 20L;
+            getServer().getScheduler().runTaskTimer(this, () -> levelService.autoRecalcActiveIslands(), period, period);
+        }
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
