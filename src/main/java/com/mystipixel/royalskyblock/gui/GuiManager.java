@@ -47,8 +47,9 @@ public final class GuiManager implements Listener {
     public static final String CREATE_PROFILE = "create-profile";
     public static final String SETTINGS = "settings";
     public static final String UPGRADES = "upgrades";
+    public static final String VISIT = "visit";
 
-    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES};
+    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES, VISIT};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -102,6 +103,10 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(UPGRADES)) {
             fillUpgrades(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(VISIT)) {
+            fillVisit(player, template, inv, holder);
             return;
         }
         if (!menuId.equals(PROFILES)) {
@@ -347,6 +352,88 @@ public final class GuiManager implements Listener {
         return item;
     }
 
+    private void fillVisit(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        Profile viewer = plugin.profiles().getProfile(plugin.profiles().getActiveProfileId(player.getUniqueId()));
+        if (viewer == null) {
+            return;
+        }
+        com.mystipixel.royalskyblock.profile.Gamemode mode = viewer.gamemode();
+        List<Integer> slots = template.contentSlots();
+        int i = 0;
+        for (Island island : plugin.storage().getAllIslands()) {
+            if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) || !island.isEnabled(IslandSetting.LISTED)) {
+                continue;
+            }
+            Profile prof = plugin.profiles().getProfile(island.profileId());
+            if (prof == null || prof.gamemode() != mode || prof.isMember(player.getUniqueId())) {
+                continue; // gamemode must match; don't list your own
+            }
+            if (i >= slots.size()) {
+                break;
+            }
+            int slot = slots.get(i++);
+            String ownerName = ownerName(prof);
+            inv.setItem(slot, islandBrowserIcon(island, prof, ownerName));
+            holder.putAction(slot, (v, right) -> {
+                v.closeInventory();
+                visitFromBrowser(v, island, prof, ownerName);
+            });
+        }
+    }
+
+    private void visitFromBrowser(Player viewer, Island island, Profile prof, String ownerName) {
+        org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
+        if (world != null && !viewer.hasPermission("royalskyblock.bypass")) {
+            int visitors = 0;
+            for (Player p : world.getPlayers()) {
+                if (!prof.isMember(p.getUniqueId())) {
+                    visitors++;
+                }
+            }
+            if (visitors >= plugin.upgrades().guestLimit(island)) {
+                plugin.messages().send(viewer, "visit.full", "player", ownerName);
+                return;
+            }
+        }
+        plugin.islands().teleportVisitor(viewer, island).whenComplete((ok, error) ->
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (error != null) {
+                        plugin.messages().send(viewer, "visit.failed", "error", error.getMessage());
+                    } else {
+                        plugin.messages().send(viewer, "visit.visiting", "player", ownerName);
+                    }
+                }));
+    }
+
+    private ItemStack islandBrowserIcon(Island island, Profile prof, String ownerName) {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
+            try {
+                skull.setOwningPlayer(Bukkit.getOfflinePlayer(prof.owner()));
+            } catch (Throwable ignored) {
+                // head lookup failed — leave default
+            }
+        }
+        if (meta != null) {
+            meta.displayName(noItalic("&a" + ownerName + "&7's Island"));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Gamemode: &f" + prof.gamemode().name().toLowerCase(Locale.ROOT)));
+            lore.add(noItalic("&7Island level: &f" + (int) island.level()));
+            lore.add(noItalic("&7Members: &f" + prof.memberCount()));
+            lore.add(noItalic(""));
+            lore.add(noItalic("&eClick to visit!"));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private String ownerName(Profile prof) {
+        String name = Bukkit.getOfflinePlayer(prof.owner()).getName();
+        return name != null ? name : prof.name();
+    }
+
     private static net.kyori.adventure.text.Component noItalic(String legacy) {
         return Text.color(legacy).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
     }
@@ -378,6 +465,7 @@ public final class GuiManager implements Listener {
         BiConsumer<Player, Boolean> dynamic = holder.action(raw);
         if (dynamic != null) {
             boolean rightClick = event.isRightClick();
+            playClick(player);
             runNextTick(() -> dynamic.accept(player, rightClick));
             return;
         }
@@ -387,6 +475,9 @@ public final class GuiManager implements Listener {
         }
         List<MenuEffect> effects = event.isRightClick() && !slot.rightClick().isEmpty()
                 ? slot.rightClick() : slot.leftClick();
+        if (!effects.isEmpty()) {
+            playClick(player);
+        }
         for (MenuEffect effect : effects) {
             execute(player, effect);
         }
@@ -410,12 +501,37 @@ public final class GuiManager implements Listener {
             case "console_command" -> runNextTick(() -> Bukkit.dispatchCommand(
                     Bukkit.getConsoleSender(), apply(effect.argString("command", ""), placeholders(player))));
             case "message" -> player.sendMessage(Text.color(apply(effect.argString("message", ""), placeholders(player))));
+            case "play_sound" -> {
+                String sound = effect.argString("sound", "ui.button.click").replace('_', '.');
+                try {
+                    player.playSound(player.getLocation(), sound,
+                            (float) doubleArg(effect, "volume", 0.6), (float) doubleArg(effect, "pitch", 1.2));
+                } catch (Throwable ignored) {
+                    // bad sound key — ignore
+                }
+            }
             default -> plugin.getLogger().warning("Unknown menu effect '" + effect.id() + "'.");
         }
     }
 
     private void runNextTick(Runnable runnable) {
         Bukkit.getScheduler().runTask(plugin, runnable);
+    }
+
+    private void playClick(Player player) {
+        try {
+            player.playSound(player.getLocation(), "ui.button.click", 0.6f, 1.2f);
+        } catch (Throwable ignored) {
+            // sound unavailable — never let it break a click
+        }
+    }
+
+    private static double doubleArg(MenuEffect effect, String key, double def) {
+        try {
+            return Double.parseDouble(effect.argString(key, String.valueOf(def)));
+        } catch (NumberFormatException e) {
+            return def;
+        }
     }
 
     private static String apply(String input, Map<String, String> placeholders) {

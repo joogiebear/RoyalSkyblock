@@ -1,0 +1,37 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — visit browser                                            │
+# │  The 0 slots are filled at runtime with visitable islands: only those with │
+# │  Visitors + Listing enabled and matching your profile's gamemode. Click an │
+# │  island head to visit it.                                                  │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+title: "&6&lVisit an Island"
+rows: 6
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "100000001"
+        - "100000001"
+        - "100000001"
+        - "111111111"
+        - "111111111"
+
+slots:
+  - item: arrow name:"&fBack"
+    row: 6
+    column: 4
+    left-click:
+      - id: open_menu
+        args:
+          menu: main
+
+  - item: barrier name:"&cClose"
+    row: 6
+    column: 5
+    left-click:
+      - id: close_inventory

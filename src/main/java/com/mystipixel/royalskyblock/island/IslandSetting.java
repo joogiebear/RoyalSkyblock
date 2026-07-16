@@ -10,7 +10,11 @@ public enum IslandSetting {
 
     /** Whether non-members may visit this island ({@code /is visit}). Off = private/invite-only. */
     VISITORS_ALLOWED("visitors-allowed", true, "&bVisitors", "oak_door",
-            "Allow players who aren't members to visit your island.");
+            "Allow players who aren't members to visit your island."),
+
+    /** Whether this island appears in the public Visit browser. */
+    LISTED("listed", true, "&aVisit Listing", "book",
+            "Show this island in the public /visit browser.");
 
     private final String key;
     private final boolean defaultEnabled;

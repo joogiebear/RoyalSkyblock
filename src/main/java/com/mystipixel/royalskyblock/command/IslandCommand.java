@@ -139,7 +139,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 2) {
-            plugin.messages().send(player, "visit.usage");
+            plugin.gui().open(player, GuiManager.VISIT); // no target -> open the browser
             return;
         }
         String targetName = args[1];

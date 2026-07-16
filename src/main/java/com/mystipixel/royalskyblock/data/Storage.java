@@ -198,25 +198,42 @@ public final class Storage {
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, param);
             try (ResultSet rs = st.executeQuery()) {
-                if (!rs.next()) {
-                    return null;
-                }
-                Island island = new Island(UUID.fromString(rs.getString("id")),
-                        UUID.fromString(rs.getString("profile_id")),
-                        rs.getString("world_name"), rs.getLong("created_at"));
-                island.setRadius(rs.getInt("radius"));
-                island.setLevel(rs.getDouble("level"));
-                island.setHome(rs.getDouble("home_x"), rs.getDouble("home_y"), rs.getDouble("home_z"),
-                        rs.getFloat("home_yaw"), rs.getFloat("home_pitch"));
-                island.loadSettings(rs.getString("settings"));
-                island.loadGuestHome(rs.getString("guest_home"));
-                island.loadUpgrades(rs.getString("upgrades"));
-                return island;
+                return rs.next() ? readIsland(rs) : null;
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not load island (" + where + "): " + e.getMessage());
             return null;
         }
+    }
+
+    private Island readIsland(ResultSet rs) throws SQLException {
+        Island island = new Island(UUID.fromString(rs.getString("id")),
+                UUID.fromString(rs.getString("profile_id")),
+                rs.getString("world_name"), rs.getLong("created_at"));
+        island.setRadius(rs.getInt("radius"));
+        island.setLevel(rs.getDouble("level"));
+        island.setHome(rs.getDouble("home_x"), rs.getDouble("home_y"), rs.getDouble("home_z"),
+                rs.getFloat("home_yaw"), rs.getFloat("home_pitch"));
+        island.loadSettings(rs.getString("settings"));
+        island.loadGuestHome(rs.getString("guest_home"));
+        island.loadUpgrades(rs.getString("upgrades"));
+        return island;
+    }
+
+    /** All islands (for the visit browser). Filtering happens in the caller. */
+    public List<Island> getAllIslands() {
+        List<Island> out = new ArrayList<>();
+        String sql = "SELECT id, profile_id, world_name, created_at, radius, level, "
+                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades FROM islands";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql);
+             ResultSet rs = st.executeQuery()) {
+            while (rs.next()) {
+                out.add(readIsland(rs));
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load islands: " + e.getMessage());
+        }
+        return out;
     }
 
     public boolean saveIsland(Island island) {

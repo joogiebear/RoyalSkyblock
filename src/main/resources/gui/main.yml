@@ -59,13 +59,13 @@ slots:
     lore:
       - "&7Browse and visit other islands."
       - ""
-      - "&8Coming soon."
+      - "&eClick to browse!"
     row: 2
     column: 7
     left-click:
-      - id: message
+      - id: open_menu
         args:
-          message: "&7Island visiting from a menu is coming soon — for now use &e/is visit <player>&7."
+          menu: visit
 
   # ── progression (wired as their systems land) ──
   - item: nether_star name:"&d&lProfiles"
