@@ -13,7 +13,11 @@ import java.util.Locale;
 /**
  * Enforces gamemode command rules (e.g. Ironman blocking {@code /ah}, {@code /bazaar}) by cancelling
  * blocked commands for the player's active profile. Fully decoupled — the economy plugins need no
- * changes; RoyalSkyblock just intercepts the command. {@code royalskyblock.bypass} skips the gate.
+ * changes; RoyalSkyblock just intercepts the command.
+ *
+ * <p>Uses a dedicated {@code royalskyblock.gamemode.bypass} node (default false) — NOT the build-
+ * protection bypass — so that gamemode rules apply to everyone (ops included) on their own profile
+ * unless explicitly granted the bypass.
  */
 public final class CommandGateListener implements Listener {
 
@@ -26,7 +30,7 @@ public final class CommandGateListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
         Player player = event.getPlayer();
-        if (player.hasPermission("royalskyblock.bypass")) {
+        if (player.hasPermission("royalskyblock.gamemode.bypass")) {
             return;
         }
         Profile profile = plugin.profiles().getActiveProfile(player);

@@ -45,3 +45,6 @@ permissions:
   royalskyblock.bypass:
     description: Bypass island build protection anywhere.
     default: op
+  royalskyblock.gamemode.bypass:
+    description: Bypass gamemode command rules (e.g. Ironman blocked commands). Not granted to ops by default.
+    default: false
