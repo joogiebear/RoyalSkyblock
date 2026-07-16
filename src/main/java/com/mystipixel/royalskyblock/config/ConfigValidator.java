@@ -39,6 +39,11 @@ public final class ConfigValidator {
             warnings.add("world.slime-data-source '" + worldSrc + "' is invalid — use 'file', 'mysql', or 'mongo'.");
         }
 
+        String borderColor = cfg.getString("island.border.color", "blue").toLowerCase(Locale.ROOT);
+        if (!Set.of("off", "blue", "red", "green").contains(borderColor)) {
+            warnings.add("island.border.color '" + borderColor + "' is invalid — use off, blue, red, or green.");
+        }
+
         String spawnWorld = cfg.getString("spawn.world", "world");
         if (Bukkit.getWorld(spawnWorld) == null) {
             warnings.add("spawn.world '" + spawnWorld + "' is not a loaded world — players who leave or delete an "

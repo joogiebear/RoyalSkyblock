@@ -120,9 +120,14 @@ island:
         - "BONE_MEAL:4"
 
   # A visible world border at the island edge (radius above). Keeps players on their island.
+  # The island border scales with island size and is enforced PER-PLAYER, so players with
+  # royalskyblock.bypass (admins) pass through it while everyone else is kept on-island.
   border:
     enabled: true
-    warning-blocks: 2           # red vignette this many blocks before the edge
+    # Border colour: blue | red | green | off. (Minecraft derives border colour from motion, so these
+    # are faked with an imperceptible perpetual lerp. 'off' shows no border.)
+    color: blue
+    warning-blocks: 2           # red screen vignette this many blocks before the edge
 
 # ── Profiles (Hypixel-style saves: each has its own island, inventory & progression) ─
 profiles:

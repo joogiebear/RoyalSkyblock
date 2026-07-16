@@ -269,18 +269,10 @@ public final class IslandManager {
     }
 
     private void applyBorder(World world, Island island) {
-        if (!plugin.getConfig().getBoolean("island.border.enabled", true)) {
-            return;
-        }
-        ConfigurationSection paste = section("island.paste");
-        double cx = (paste != null ? paste.getInt("x", 0) : 0) + 0.5;
-        double cz = (paste != null ? paste.getInt("z", 0) : 0) + 0.5;
-        org.bukkit.WorldBorder border = world.getWorldBorder();
-        border.setCenter(cx, cz);
-        border.setSize(Math.max(1.0, island.radius() * 2.0));
-        border.setWarningDistance(Math.max(0, plugin.getConfig().getInt("island.border.warning-blocks", 2)));
-        border.setDamageAmount(0.0);
-        border.setDamageBuffer(0.0);
+        // Borders are enforced per-player (so admins with royalskyblock.bypass can pass through); the
+        // world's own border is kept wide open so it never enforces anyone. See BorderService.
+        world.getWorldBorder().setSize(60_000_000.0);
+        plugin.borders().applyToWorld(world);
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────

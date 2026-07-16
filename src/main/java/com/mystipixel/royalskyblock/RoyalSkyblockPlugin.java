@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock;
 
 import com.mystipixel.royalskyblock.bank.BankLevelManager;
 import com.mystipixel.royalskyblock.bank.BankService;
+import com.mystipixel.royalskyblock.border.BorderService;
 import com.mystipixel.royalskyblock.command.BankCommand;
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.config.ConfigValidator;
@@ -58,6 +59,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private com.mystipixel.royalskyblock.perk.PerkService perkService;
     private BankLevelManager bankLevels;
     private BankService bankService;
+    private BorderService borderService;
     private VaultHook vaultHook; // wallet lookups for the bank "deposit all"
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
@@ -101,6 +103,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.vaultHook = resolveVault();
         this.bankLevels = new BankLevelManager(this);
         this.bankService = new BankService(this, bankLevels, vaultHook);
+        this.borderService = new BorderService(this);
         this.guiManager = new GuiManager(this);
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
@@ -121,6 +124,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new CommandGateListener(this), this);
         getServer().getPluginManager().registerEvents(new FlowLimiterListener(this), this);
         getServer().getPluginManager().registerEvents(guiManager, this);
+        getServer().getPluginManager().registerEvents(borderService, this);
 
         // Resume in-progress upgrade timers and complete any that elapsed while offline.
         upgradeManager.loadPending();
@@ -191,6 +195,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         levelService.reload();
         perkService.reload();
         bankLevels.reload();
+        borderService.reload();
+        borderService.refreshAll(); // re-apply borders live (colour/size/toggle changes)
         guiManager.reload();
         new ConfigValidator(this).validate();
     }
@@ -240,6 +246,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public BankService bank() {
         return bankService;
+    }
+
+    public BorderService borders() {
+        return borderService;
     }
 
     /** Whether a Vault economy is present and ready (bank & coin costs depend on it). */

@@ -233,12 +233,9 @@ public final class UpgradeManager {
         if (world == null) {
             return;
         }
-        ConfigurationSection paste = plugin.getConfig().getConfigurationSection("island.paste");
-        double cx = (paste != null ? paste.getInt("x", 0) : 0) + 0.5;
-        double cz = (paste != null ? paste.getInt("z", 0) : 0) + 0.5;
-        org.bukkit.WorldBorder border = world.getWorldBorder();
-        border.setCenter(cx, cz);
-        border.setSize(Math.max(1.0, island.radius() * 2.0));
+        // Size changed — refresh the per-player borders for everyone on the island (see BorderService).
+        world.getWorldBorder().setSize(60_000_000.0);
+        plugin.borders().applyToWorld(world);
     }
 
     // ── parsing ────────────────────────────────────────────────────────────────────

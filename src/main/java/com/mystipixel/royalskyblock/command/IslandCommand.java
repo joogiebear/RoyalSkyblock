@@ -723,6 +723,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&7Storage: &f" + storage));
         sender.sendMessage(Text.color("&7Perks: " + (plugin.perks().enabled()
                 ? "&a✔ on &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
+        sender.sendMessage(Text.color("&7Border: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
+                + " &8(per-player; admins bypass)"));
         sender.sendMessage(Text.color("&7Config health:"));
         String spawnWorld = plugin.getConfig().getString("spawn.world", "world");
         boolean spawnOk = plugin.getServer().getWorld(spawnWorld) != null;
