@@ -209,8 +209,8 @@ currencies:
 # you use as your hub — "hub", "spawn", "world", anything you run.
 spawn:
   world: world
-  # Send players to this spawn when they JOIN the server, unless they logged out on their own island
-  # (island-loggers stay on their island). Turn off if another plugin manages join spawns.
+  # Route players to this spawn on JOIN and on death (bedless respawns), unless they logged out on
+  # their own island. Beds / respawn anchors are respected. Turn off if another plugin manages spawns.
   teleport-on-join: true
   # Use that world's own spawn point. Set false to use the explicit coordinates below.
   use-world-spawn: true
