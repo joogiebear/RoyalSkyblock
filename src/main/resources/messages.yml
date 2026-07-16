@@ -4,6 +4,8 @@
 #  All player-facing text lives here. Colours use & codes; placeholders use the
 #  %token% form (e.g. %player%, %error%). The `prefix` is prepended to chat
 #  feedback; headers and help lines are sent without it. Reload with /is reload.
+#
+#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 prefix: "&6&lRoyalSkyblock &8» &r"

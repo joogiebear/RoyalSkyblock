@@ -21,12 +21,15 @@
 #    time       : the wait — 2d / 4h / 30m / 45s / 0   (0 = instant)
 #
 #  A cost / skip-cost is a currency + amount, where `currency` is a key from the
-#  `currencies:` section of config.yml (e.g. coins = vault, gems = command):
+#  `currencies:` section of config.yml. These upgrades use `coins` (your Vault
+#  economy) by default, so they work out of the box. Switch any `currency:` to
+#  `gems` (or another currency you define in config.yml) to charge that instead:
 #
 #      cost:
-#        currency: gems
+#        currency: coins
 #        amount: 175
 #
+#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 size:
@@ -39,91 +42,91 @@ size:
     1:
       value: 84
       cost:
-        currency: gems
+        currency: coins
         amount: 0
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 144
       time: 2d
     2:
       value: 88
       cost:
-        currency: gems
+        currency: coins
         amount: 175
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 288
       time: 4d
     3:
       value: 92
       cost:
-        currency: gems
+        currency: coins
         amount: 175
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 432
       time: 6d
     4:
       value: 96
       cost:
-        currency: gems
+        currency: coins
         amount: 175
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 576
       time: 8d
     5:
       value: 100
       cost:
-        currency: gems
+        currency: coins
         amount: 175
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 720
       time: 10d
     6:
       value: 104
       cost:
-        currency: gems
+        currency: coins
         amount: 175
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 720
       time: 10d
     7:
       value: 108
       cost:
-        currency: gems
+        currency: coins
         amount: 200
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 720
       time: 10d
     8:
       value: 112
       cost:
-        currency: gems
+        currency: coins
         amount: 200
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 720
       time: 10d
     9:
       value: 116
       cost:
-        currency: gems
+        currency: coins
         amount: 200
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 720
       time: 10d
     10:
       value: 120
       cost:
-        currency: gems
+        currency: coins
         amount: 200
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 720
       time: 10d
 
@@ -137,46 +140,46 @@ guest-limit:
     1:
       value: 1
       cost:
-        currency: gems
+        currency: coins
         amount: 0
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 288
       time: 2d
     2:
       value: 2
       cost:
-        currency: gems
+        currency: coins
         amount: 50
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 576
       time: 4d
     3:
       value: 3
       cost:
-        currency: gems
+        currency: coins
         amount: 50
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 864
       time: 6d
     4:
       value: 4
       cost:
-        currency: gems
+        currency: coins
         amount: 50
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 1152
       time: 8d
     5:
       value: 5
       cost:
-        currency: gems
+        currency: coins
         amount: 50
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 2304
       time: 16d
 
@@ -190,27 +193,27 @@ coop-slots:
     1:
       value: 1
       cost:
-        currency: gems
+        currency: coins
         amount: 600
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 0
       time: 0
     2:
       value: 2
       cost:
-        currency: gems
+        currency: coins
         amount: 600
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 0
       time: 0
     3:
       value: 3
       cost:
-        currency: gems
+        currency: coins
         amount: 600
       skip-cost:
-        currency: gems
+        currency: coins
         amount: 0
       time: 0

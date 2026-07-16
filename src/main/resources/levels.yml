@@ -9,6 +9,8 @@
 #  main-thread cost) and then tallies blocks off the main thread, so even a maxed
 #  island won't lag the server. Tune the `scan:` knobs below if you want it gentler
 #  or faster. Leaderboard (/is top) reads stored levels — it never scans live.
+#
+#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # How many block points equal one island level.
@@ -34,18 +36,19 @@ auto-recalc:
   max-per-cycle: 3
 
 # ── Level-up rewards ────────────────────────────────────────────────────────────
-# Console commands run ONCE, the first time an island reaches each level — hand out
-# coins/gems/items via your other plugins. Placeholders:
+# Console commands run ONCE, the first time an island reaches each level. Placeholders:
 #   %owner%  the island owner's name        %level%  the level reached
-# Each island remembers the highest level it's been paid for, so rewards never
-# double up, even across restarts. Leave a level out for no reward.
-rewards:
-  5:
-    - "ecobits give %owner% 100 gems"
-  10:
-    - "ecobits give %owner% 250 gems"
-  25:
-    - "ecobits give %owner% 750 gems"
+# Each island remembers the highest level it's been paid for, so rewards never double
+# up, even across restarts. Members are already told when the island levels up, so
+# rewards are OPTIONAL and OFF by default (no economy is assumed — nothing errors on a
+# fresh server). Add levels below to enable them. Examples for common setups:
+#   5:
+#     - "eco give %owner% 1000"                 # eco / most Vault economies
+#     - "ecobits give %owner% 100 gems"         # EcoBits gems
+#     - "give %owner% diamond 16"               # vanilla items
+#   10:
+#     - "eco give %owner% 5000"
+rewards: {}
 
 # ── Block values ────────────────────────────────────────────────────────────────
 # One line per block: MATERIAL: points. Grouped only for readability — order and

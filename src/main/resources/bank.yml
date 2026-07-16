@@ -10,6 +10,8 @@
 #  paid into the bank on a cooldown (settings.interest-cooldown-hours) and is the sum
 #  of its tranches, capped at max-interest. Upgrade items use "<namespace>:<id>:<amount>"
 #  (minecraft:… for vanilla, or an EcoItems id).
+#
+#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 settings:

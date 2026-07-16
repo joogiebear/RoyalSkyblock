@@ -5,6 +5,18 @@
 #  world, loaded on demand and unloaded when empty. Sections below are grouped by
 #  system; reload most values with /is reload (world/storage changes need a restart).
 # ═══════════════════════════════════════════════════════════════════════════════
+#
+#  CONFIG FILE MAP — RoyalSkyblock splits settings, text, and content:
+#    config.yml       this file — storage, world backend, island gen, currencies,
+#                     coop, spawn, flow limiter, teleport
+#    messages.yml     every player-facing string (& colours, %tokens%)
+#    bank.yml         the built-in bank: levels, interest, upgrade costs
+#    levels.yml       island-level block values, scan tuning, level-up rewards
+#    upgrades.yml     island upgrades (size / guest limit / coop slots)
+#    gamemodes/*.yml  Solo / Coop / Ironman rulesets
+#    gui/*.yml        one file per menu (rows, filler mask, slots by row/column)
+#    Reload ALL of the above with /is reload.
+# ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Island storage ───────────────────────────────────────────────────────────
 # Where island METADATA lives (owner, members, level, upgrades). This is the same
@@ -143,6 +155,11 @@ coop:
 #                     affordability check, and charge with a console command. %player% and %amount%
 #                     are substituted. Works with EcoBits gems, any currency plugin, even block/item
 #                     costs (via a command that removes them).
+#
+# 'coins' (Vault) is the DEFAULT that upgrades.yml uses, so upgrades work out of the box with just
+# Vault. 'gems' below is an OPTIONAL example command-currency (EcoBits) — it only works if you run
+# EcoBits (or you edit its commands/placeholder). To charge gems for an upgrade, set that upgrade's
+# `currency: gems` in upgrades.yml.
 currencies:
   coins:
     type: vault
