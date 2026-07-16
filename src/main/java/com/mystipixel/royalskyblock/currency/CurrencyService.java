@@ -119,6 +119,24 @@ public final class CurrencyService {
         }
     }
 
+    /** Whether a currency key is defined in the {@code currencies:} section. */
+    public boolean isDefined(String currency) {
+        return currencies.containsKey(currency.toLowerCase(Locale.ROOT));
+    }
+
+    /** Whether a defined currency is a Vault-economy currency. */
+    public boolean isVault(String currency) {
+        CurrencyDef def = currencies.get(currency.toLowerCase(Locale.ROOT));
+        return def != null && def.kind() == Kind.VAULT;
+    }
+
+    /** Whether a defined command-currency relies on a PlaceholderAPI balance check. */
+    public boolean needsPlaceholderApi(String currency) {
+        CurrencyDef def = currencies.get(currency.toLowerCase(Locale.ROOT));
+        return def != null && def.kind() == Kind.COMMAND
+                && def.balancePlaceholder() != null && !def.balancePlaceholder().isBlank();
+    }
+
     /** Human-readable, e.g. {@code "175 coins"}. */
     public String format(Cost cost) {
         CurrencyDef def = currencies.get(cost.currency().toLowerCase(Locale.ROOT));

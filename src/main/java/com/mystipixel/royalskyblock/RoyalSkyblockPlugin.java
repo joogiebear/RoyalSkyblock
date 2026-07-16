@@ -4,6 +4,7 @@ import com.mystipixel.royalskyblock.bank.BankLevelManager;
 import com.mystipixel.royalskyblock.bank.BankService;
 import com.mystipixel.royalskyblock.command.BankCommand;
 import com.mystipixel.royalskyblock.command.IslandCommand;
+import com.mystipixel.royalskyblock.config.ConfigValidator;
 import com.mystipixel.royalskyblock.currency.CurrencyService;
 import com.mystipixel.royalskyblock.hooks.VaultHook;
 import com.mystipixel.royalskyblock.data.Storage;
@@ -134,6 +135,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
+        new ConfigValidator(this).validate(); // warn about misconfig with actionable messages
         // The full status panel prints once the ASP backend finishes initialising (see above).
     }
 
@@ -182,6 +184,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         levelService.reload();
         bankLevels.reload();
         guiManager.reload();
+        new ConfigValidator(this).validate();
     }
 
     public UpgradeManager upgrades() {
