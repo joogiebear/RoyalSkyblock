@@ -51,11 +51,7 @@ world:
 
 # ── Islands ──────────────────────────────────────────────────────────────────
 island:
-  # The schematic pasted for a new island. Files live in plugins/RoyalSkyblock/schematics/.
-  # Players may pick among these on /is create if more than one is offered (see gui/create.yml).
-  default-schematic: default
-
-  # Where inside the island world the schematic's origin is pasted.
+  # Where inside the island world the schematic origin (or generated starter) is pasted.
   paste:
     x: 0
     y: 100
@@ -78,9 +74,13 @@ island:
   # Cooldown (seconds) between an island reset and the next allowed reset.
   reset-cooldown-seconds: 300
 
-  # The starter island that gets built for a new player. (Built-in generator for now;
-  # WorldEdit .schem support comes later.)
+  # The starter island that gets built for a new player.
   starter:
+    # A schematics/<name>.schem file (standard WorldEdit/Sponge format) pasted via WorldEdit or FAWE
+    # when installed. If neither is present, or the file is missing, the built-in generator below is
+    # used instead. Save one in-game with: /is admin schematic save <name>
+    schematic: default
+    # ── Built-in generator (fallback when there's no schematic) ──
     platform-radius: 3           # 3 => a 7x7 platform
     platform-block: GRASS_BLOCK  # top surface
     sub-block: DIRT              # two layers beneath the surface

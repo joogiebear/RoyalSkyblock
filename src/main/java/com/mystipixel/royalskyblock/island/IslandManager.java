@@ -118,7 +118,11 @@ public final class IslandManager {
 
         return worlds.createIsland(worldName)
                 .thenCompose(world -> onMain(() -> {
-                    StarterIslandBuilder.paste(world, px, py, pz, section("island.starter"), plugin.getLogger());
+                    // Prefer a WorldEdit/FAWE schematic; fall back to the code-generated starter.
+                    String schematic = plugin.getConfig().getString("island.starter.schematic", "default");
+                    if (!plugin.schematics().tryPasteSchematic(world, px, py, pz, schematic)) {
+                        StarterIslandBuilder.paste(world, px, py, pz, section("island.starter"), plugin.getLogger());
+                    }
 
                     double hx = px + (homeOff != null ? homeOff.getInt("x", 0) : 0) + 0.5;
                     double hy = py + (homeOff != null ? homeOff.getInt("y", 1) : 1);

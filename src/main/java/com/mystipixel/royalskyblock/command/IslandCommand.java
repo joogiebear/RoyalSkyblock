@@ -304,7 +304,35 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleTestWorld(sender);
             return;
         }
+        if (action.equals("schematic")) {
+            handleSchematic(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
+        sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
+    }
+
+    private void handleSchematic(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (args.length < 4 || !args[2].equalsIgnoreCase("save")) {
+            sender.sendMessage(Text.color("&cUsage: &e/is admin schematic save <name>"));
+            return;
+        }
+        if (!plugin.schematics().isAvailable()) {
+            sender.sendMessage(Text.color("&cWorldEdit or FAWE isn't installed — schematics are unavailable."));
+            return;
+        }
+        String name = args[3];
+        String error = plugin.schematics().saveSelection(player, name);
+        if (error == null) {
+            sender.sendMessage(Text.color("&aSaved &eschematics/" + name + ".schem&a. "
+                    + "Use it by setting &eisland.starter.schematic: " + name + " &ain config.yml."));
+        } else {
+            sender.sendMessage(Text.color("&c" + error));
+        }
     }
 
     private void handleTestWorld(CommandSender sender) {

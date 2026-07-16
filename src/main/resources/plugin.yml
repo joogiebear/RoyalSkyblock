@@ -16,6 +16,8 @@ softdepend:
   - EcoItems
   - PlaceholderAPI
   - RoyalBank
+  - WorldEdit
+  - FastAsyncWorldEdit
 commands:
   island:
     description: RoyalSkyblock island command.

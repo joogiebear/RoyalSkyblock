@@ -5,6 +5,9 @@ import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge;
 import com.mystipixel.royalskyblock.island.IslandManager;
+import com.mystipixel.royalskyblock.island.NoOpSchematics;
+import com.mystipixel.royalskyblock.island.SchematicService;
+import com.mystipixel.royalskyblock.island.WorldEditSchematics;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
@@ -36,6 +39,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private Storage storage;
     private IslandWorldService worldService;
     private IslandManager islandManager;
+    private SchematicService schematicService;
     private ProfileManager profileManager;
     private PlayerStateService stateService;
     private GamemodeManager gamemodeManager;
@@ -69,6 +73,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
         this.ecoBridge = new EcoProfileBridge();
         this.worldService = aspAvailable() ? new AspIslandWorldService(this) : new NoOpIslandWorldService();
+        this.schematicService = worldEditAvailable() ? new WorldEditSchematics(this) : new NoOpSchematics();
         this.islandManager = new IslandManager(this, storage, worldService);
         this.stateService = new PlayerStateService(this, storage);
         this.gamemodeManager = new GamemodeManager(this);
@@ -141,6 +146,20 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         }
     }
 
+    /** Whether WorldEdit/FAWE is on the classpath (so we can safely load the WE schematic impl). */
+    private boolean worldEditAvailable() {
+        if (!getServer().getPluginManager().isPluginEnabled("WorldEdit")
+                && !getServer().getPluginManager().isPluginEnabled("FastAsyncWorldEdit")) {
+            return false;
+        }
+        try {
+            Class.forName("com.sk89q.worldedit.WorldEdit", false, getClass().getClassLoader());
+            return true;
+        } catch (ClassNotFoundException noWorldEdit) {
+            return false;
+        }
+    }
+
     /** Whether the ASP world API is on the classpath (i.e. the server is the ASP fork). */
     private boolean aspAvailable() {
         try {
@@ -161,6 +180,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public IslandManager islands() {
         return islandManager;
+    }
+
+    public SchematicService schematics() {
+        return schematicService;
     }
 
     public IslandWorldService worlds() {
