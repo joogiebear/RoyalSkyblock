@@ -1,0 +1,107 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Manage Island
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Owner/co-owner tools: set where you and guests spawn, clear visitors, and open
+#  coop management. Each button runs the matching /is command (which re-checks
+#  permission and that you're on your island).
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
+
+title: "&6&lManage Island"
+rows: 6
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "111111111"
+        - "111111111"
+        - "111111111"
+        - "111111111"
+        - "111111111"
+
+slots:
+  # ── header ──
+  - item: comparator name:"&6&lManage Island"
+    lore:
+      - "&7Spawns, visitors, and coop."
+    row: 1
+    column: 5
+
+  # ── tools ──
+  - item: respawn_anchor name:"&a&lSet Island Spawn"
+    lore:
+      - "&7Set your island's home to"
+      - "&7where you're standing."
+      - ""
+      - "&eClick to set!"
+    row: 3
+    column: 2
+    left-click:
+      - id: player_command
+        args:
+          command: "is setspawn"
+
+  - item: oak_door name:"&b&lSet Guest Spawn"
+    lore:
+      - "&7Set where visitors arrive"
+      - "&7when they /visit you."
+      - ""
+      - "&eClick to set!"
+    row: 3
+    column: 4
+    left-click:
+      - id: player_command
+        args:
+          command: "is setguestspawn"
+
+  - item: iron_boots name:"&c&lKick All Visitors"
+    lore:
+      - "&7Send every non-member back"
+      - "&7to spawn."
+      - ""
+      - "&eClick to clear!"
+    row: 3
+    column: 6
+    left-click:
+      - id: player_command
+        args:
+          command: "is kickall"
+
+  - item: player_head name:"&d&lCoop Members"
+    lore:
+      - "&7View your coop roster,"
+      - "&7invite players, and remove members."
+      - ""
+      - "&eClick to manage!"
+    row: 3
+    column: 8
+    left-click:
+      - id: open_menu
+        args:
+          menu: coop
+
+  # ── footer ──
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
+    row: 6
+    column: 4
+    left-click:
+      - id: open_menu
+        args:
+          menu: main
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 6
+    column: 6
+    left-click:
+      - id: close

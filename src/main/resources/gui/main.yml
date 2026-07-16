@@ -72,7 +72,7 @@ slots:
         args:
           menu: visit
 
-  # ── progression ──
+  # ── progression & management ──
   - item: nether_star name:"&d&lProfiles"
     lore:
       - "&7Switch between your profiles"
@@ -80,7 +80,7 @@ slots:
       - ""
       - "&eClick to manage!"
     row: 4
-    column: 3
+    column: 2
     left-click:
       - id: open_menu
         args:
@@ -93,7 +93,7 @@ slots:
       - ""
       - "&eClick to upgrade!"
     row: 4
-    column: 5
+    column: 4
     left-click:
       - id: open_menu
         args:
@@ -105,11 +105,24 @@ slots:
       - ""
       - "&eClick to configure!"
     row: 4
-    column: 7
+    column: 6
     left-click:
       - id: open_menu
         args:
           menu: settings
+
+  - item: chest name:"&b&lManage Island"
+    lore:
+      - "&7Set spawns, clear visitors,"
+      - "&7and manage your coop."
+      - ""
+      - "&eClick to manage!"
+    row: 4
+    column: 8
+    left-click:
+      - id: open_menu
+        args:
+          menu: manage
 
   # ── footer ──
   - item: barrier name:"&c&lClose"

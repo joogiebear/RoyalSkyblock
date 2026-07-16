@@ -48,8 +48,12 @@ public final class GuiManager implements Listener {
     public static final String SETTINGS = "settings";
     public static final String UPGRADES = "upgrades";
     public static final String VISIT = "visit";
+    public static final String MANAGE = "manage";
+    public static final String COOP = "coop";
+    public static final String COOP_INVITE = "coop-invite";
 
-    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES, VISIT};
+    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
+            VISIT, MANAGE, COOP, COOP_INVITE};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -107,6 +111,14 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(VISIT)) {
             fillVisit(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(COOP)) {
+            fillCoop(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(COOP_INVITE)) {
+            fillCoopInvite(player, template, inv, holder);
             return;
         }
         if (!menuId.equals(PROFILES)) {
@@ -420,6 +432,137 @@ public final class GuiManager implements Listener {
     private String ownerName(Profile prof) {
         String name = Bukkit.getOfflinePlayer(prof.owner()).getName();
         return name != null ? name : prof.name();
+    }
+
+    // ── coop management ──────────────────────────────────────────────────────────
+
+    /** Fill the coop roster: owner first, then co-owners/members. Owner/co-owner click a member to kick. */
+    private void fillCoop(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        Profile profile = plugin.profiles().getActiveProfile(player);
+        if (profile == null) {
+            return;
+        }
+        IslandRole myRole = profile.roleOf(player.getUniqueId());
+        boolean canManage = myRole == IslandRole.OWNER || myRole == IslandRole.CO_OWNER;
+
+        List<com.mystipixel.royalskyblock.profile.ProfileMember> members = new ArrayList<>(profile.members());
+        members.sort((a, b) -> Integer.compare(roleRank(a.role()), roleRank(b.role())));
+
+        List<Integer> slots = template.contentSlots();
+        for (int i = 0; i < members.size() && i < slots.size(); i++) {
+            com.mystipixel.royalskyblock.profile.ProfileMember member = members.get(i);
+            int slot = slots.get(i);
+            boolean kickable = canManage
+                    && member.role() != IslandRole.OWNER
+                    && !member.uuid().equals(player.getUniqueId());
+            inv.setItem(slot, memberIcon(member, kickable));
+            if (kickable) {
+                holder.putAction(slot, (viewer, right) -> {
+                    Player target = Bukkit.getPlayerExact(member.name());
+                    String error = plugin.profiles().kick(viewer, member.name());
+                    if (error != null) {
+                        plugin.messages().send(viewer, "coop.kick-error", "error", error);
+                    } else {
+                        plugin.messages().send(viewer, "coop.kicked", "player", member.name());
+                        if (target != null) {
+                            plugin.messages().send(target, "coop.you-were-kicked");
+                        }
+                    }
+                    open(viewer, COOP);
+                });
+            }
+        }
+    }
+
+    /** Fill the invite picker: every online player not already on the roster; click to invite. */
+    private void fillCoopInvite(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        Profile profile = plugin.profiles().getActiveProfile(player);
+        List<Integer> slots = template.contentSlots();
+        int i = 0;
+        for (Player online : Bukkit.getOnlinePlayers()) {
+            if (online.equals(player) || (profile != null && profile.isMember(online.getUniqueId()))) {
+                continue;
+            }
+            if (i >= slots.size()) {
+                break;
+            }
+            int slot = slots.get(i++);
+            inv.setItem(slot, inviteCandidateIcon(online));
+            holder.putAction(slot, (viewer, right) -> {
+                Player target = Bukkit.getPlayerExact(online.getName());
+                if (target == null) {
+                    plugin.messages().send(viewer, "coop.invite-error", "error", "That player isn't online.");
+                    open(viewer, COOP_INVITE);
+                    return;
+                }
+                String error = plugin.profiles().invite(viewer, target);
+                if (error != null) {
+                    plugin.messages().send(viewer, "coop.invite-error", "error", error);
+                } else {
+                    plugin.messages().send(viewer, "coop.invite-sent", "player", target.getName());
+                    plugin.messages().send(target, "coop.invite-received", "player", viewer.getName());
+                }
+                open(viewer, COOP);
+            });
+        }
+    }
+
+    /** OWNER first, then CO_OWNER, then MEMBER, then anything else — for a tidy roster order. */
+    private static int roleRank(IslandRole role) {
+        return switch (role) {
+            case OWNER -> 0;
+            case CO_OWNER -> 1;
+            case MEMBER -> 2;
+            default -> 3;
+        };
+    }
+
+    private ItemStack memberIcon(com.mystipixel.royalskyblock.profile.ProfileMember member, boolean kickable) {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
+            try {
+                skull.setOwningPlayer(Bukkit.getOfflinePlayer(member.uuid()));
+            } catch (Throwable ignored) {
+                // head lookup failed — leave default
+            }
+        }
+        if (meta != null) {
+            meta.displayName(noItalic("&a" + member.name()));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Role: &f" + member.role().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
+            boolean online = Bukkit.getPlayerExact(member.name()) != null;
+            lore.add(noItalic("&7Status: " + (online ? "&aonline" : "&8offline")));
+            if (kickable) {
+                lore.add(noItalic(""));
+                lore.add(noItalic("&cClick to remove from the island."));
+            }
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack inviteCandidateIcon(Player target) {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
+            try {
+                skull.setOwningPlayer(target);
+            } catch (Throwable ignored) {
+                // head lookup failed — leave default
+            }
+        }
+        if (meta != null) {
+            meta.displayName(noItalic("&a" + target.getName()));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Invite to your coop island."));
+            lore.add(noItalic(""));
+            lore.add(noItalic("&eClick to invite!"));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private static net.kyori.adventure.text.Component noItalic(String legacy) {

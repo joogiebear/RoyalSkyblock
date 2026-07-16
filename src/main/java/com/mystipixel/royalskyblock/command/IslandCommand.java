@@ -26,7 +26,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
             "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
-            "kick", "leave", "members", "settings", "setspawn", "sethome", "setguestspawn", "kickall",
+            "kick", "leave", "members", "manage", "settings", "setspawn", "sethome", "setguestspawn", "kickall",
             "level", "top", "upgrade", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
@@ -55,6 +55,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "kick" -> handleKick(sender, args);
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
+            case "manage" -> handleManage(sender);
             case "settings" -> handleSettings(sender);
             case "upgrade", "upgrades" -> handleUpgrades(sender);
             case "sethome", "setspawn" -> handleSetSpawn(sender, false);
@@ -441,7 +442,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         if (args.length < 2) {
-            plugin.messages().send(player, "coop.invite-usage");
+            plugin.gui().open(player, GuiManager.COOP_INVITE); // no target -> open the picker
             return;
         }
         Player target = plugin.getServer().getPlayerExact(args[1]);
@@ -522,18 +523,23 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             plugin.messages().send(sender, "general.players-only");
             return;
         }
-        Profile active = plugin.profiles().getActiveProfile(player);
-        if (active == null) {
+        if (plugin.profiles().getActiveProfile(player) == null) {
             plugin.messages().send(player, "home.no-island");
             return;
         }
-        int max = plugin.getConfig().getInt("coop.max-members", 4);
-        plugin.messages().sendPlain(player, "coop.members-header",
-                "count", String.valueOf(active.memberCount()), "max", String.valueOf(max));
-        for (var member : active.members()) {
-            plugin.messages().sendPlain(player, "coop.members-line",
-                    "player", member.name(), "role", member.role().name().toLowerCase(Locale.ROOT));
+        plugin.gui().open(player, GuiManager.COOP);
+    }
+
+    private void handleManage(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
         }
+        if (!plugin.profiles().activeHasIsland(player)) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        plugin.gui().open(player, GuiManager.MANAGE);
     }
 
     // ── admin / spike diagnostics ────────────────────────────────────────────────
