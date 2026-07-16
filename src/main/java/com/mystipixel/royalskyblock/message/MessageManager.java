@@ -1,9 +1,13 @@
 package com.mystipixel.royalskyblock.message;
 
 import com.mystipixel.royalskyblock.util.Text;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
@@ -54,6 +58,22 @@ public final class MessageManager {
     /** Send without the prefix — for headers, help lines, and multi-line blocks. */
     public void sendPlain(CommandSender sender, String key, String... placeholders) {
         sender.sendMessage(Text.color(raw(key, placeholders)));
+    }
+
+    /**
+     * Send a coop invite with clickable {@code [Accept]}/{@code [Deny]} buttons appended, so the target
+     * never has to type a command. Button labels come from {@code coop.invite-accept-button} / {@code -deny-button}.
+     */
+    public void sendInvite(Player target, String inviterName) {
+        Component base = Text.color(prefix() + raw("coop.invite-received", "player", inviterName));
+        Component accept = Text.color(raw("coop.invite-accept-button"))
+                .clickEvent(ClickEvent.runCommand("/is accept"))
+                .hoverEvent(HoverEvent.showText(Text.color("&aClick to accept")));
+        Component deny = Text.color(raw("coop.invite-deny-button"))
+                .clickEvent(ClickEvent.runCommand("/is deny"))
+                .hoverEvent(HoverEvent.showText(Text.color("&cClick to decline")));
+        target.sendMessage(base.append(Component.space()).append(accept)
+                .append(Component.space()).append(deny));
     }
 
     private String apply(String value, String... placeholders) {

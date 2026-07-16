@@ -301,23 +301,51 @@ public final class ProfileManager {
         return null;
     }
 
-    /** Accept a pending coop invite. Returns the joined profile, or null if there's no valid invite. */
-    public Profile acceptInvite(Player target) {
+    /** Outcome of an accept attempt: the joined profile on success, else a reason code. */
+    public record AcceptResult(@Nullable Profile profile, @Nullable String error) {
+    }
+
+    /** Accept a pending coop invite. Re-checks the member cap at accept time (it may have filled since). */
+    public AcceptResult acceptInvite(Player target) {
         Invite invite = pendingInvites.remove(target.getUniqueId());
-        if (invite == null || invite.expired()) {
-            return null;
+        if (invite == null) {
+            return new AcceptResult(null, "none");
+        }
+        if (invite.expired()) {
+            return new AcceptResult(null, "expired");
         }
         Profile profile = getProfile(invite.profileId());
         if (profile == null) {
-            return null;
+            return new AcceptResult(null, "none");
         }
-        if (!profile.isMember(target.getUniqueId())) {
-            profile.putMember(new ProfileMember(target.getUniqueId(), target.getName(),
-                    IslandRole.MEMBER, Instant.now().toEpochMilli()));
-            storage.saveProfile(profile);
-            profileCache.put(profile.id(), profile);
+        if (profile.isMember(target.getUniqueId())) {
+            return new AcceptResult(profile, null); // already joined
         }
-        return profile;
+        Island island = plugin.islands().getIslandByProfile(profile.id());
+        int max = island != null ? plugin.upgrades().coopMemberCap(island)
+                : plugin.getConfig().getInt("coop.max-members", 4);
+        if (profile.memberCount() >= max) {
+            return new AcceptResult(null, "full");
+        }
+        profile.putMember(new ProfileMember(target.getUniqueId(), target.getName(),
+                IslandRole.MEMBER, Instant.now().toEpochMilli()));
+        storage.saveProfile(profile);
+        profileCache.put(profile.id(), profile);
+        notifyJoin(profile, target);
+        return new AcceptResult(profile, null);
+    }
+
+    /** Tell the online members of a profile that someone just joined. */
+    private void notifyJoin(Profile profile, Player joiner) {
+        for (ProfileMember m : profile.members()) {
+            if (m.uuid().equals(joiner.getUniqueId())) {
+                continue;
+            }
+            Player online = Bukkit.getPlayer(m.uuid());
+            if (online != null) {
+                plugin.messages().send(online, "coop.member-joined", "player", joiner.getName());
+            }
+        }
     }
 
     public boolean denyInvite(Player target) {
@@ -357,6 +385,7 @@ public final class ProfileManager {
         storage.saveProfile(active);
         profileCache.put(active.id(), active);
         moveOffProfileIfActive(target.uuid(), active.id());
+        storage.deleteProfileData(active.id(), target.uuid()); // don't leave their coop state orphaned
         return null;
     }
 
@@ -376,6 +405,7 @@ public final class ProfileManager {
         storage.saveProfile(active);
         profileCache.put(active.id(), active);
         moveOffProfileIfActive(player.getUniqueId(), active.id());
+        storage.deleteProfileData(active.id(), player.getUniqueId()); // clear their state on this coop
         return null;
     }
 

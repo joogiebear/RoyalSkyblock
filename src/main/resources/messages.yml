@@ -89,7 +89,12 @@ profile:
 coop:
   invite-usage: "&cUsage: &e/is invite <player>"
   invite-sent: "&aInvited &e%player% &ato your coop island."
-  invite-received: "&e%player% &7invited you to their coop island. &aType &e/is accept &ato join &7(or &e/is deny&7)."
+  invite-received: "&e%player% &7invited you to their coop island."
+  invite-accept-button: "&a&l[✔ Accept]"
+  invite-deny-button: "&c&l[✘ Deny]"
+  invite-expired: "&cThat invite has expired — ask them to invite you again."
+  invite-full: "&cThat coop island is full now."
+  member-joined: "&a%player% &7joined the island!"
   invite-error: "&c%error%"
   no-invite: "&cYou don't have a pending coop invite."
   accepted: "&aYou joined &e%profile%&a! Switch to it with &e/is profile switch %profile%&a."

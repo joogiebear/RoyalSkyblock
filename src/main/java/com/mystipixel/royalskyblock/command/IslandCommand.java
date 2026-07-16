@@ -462,7 +462,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         plugin.messages().send(player, "coop.invite-sent", "player", target.getName());
-        plugin.messages().send(target, "coop.invite-received", "player", player.getName());
+        plugin.messages().sendInvite(target, player.getName());
     }
 
     private void handleAccept(CommandSender sender) {
@@ -470,11 +470,15 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             plugin.messages().send(sender, "general.players-only");
             return;
         }
-        Profile joined = plugin.profiles().acceptInvite(player);
-        if (joined == null) {
-            plugin.messages().send(player, "coop.no-invite");
-        } else {
-            plugin.messages().send(player, "coop.accepted", "profile", joined.name());
+        var result = plugin.profiles().acceptInvite(player);
+        if (result.profile() != null) {
+            plugin.messages().send(player, "coop.accepted", "profile", result.profile().name());
+            return;
+        }
+        switch (result.error() == null ? "none" : result.error()) {
+            case "expired" -> plugin.messages().send(player, "coop.invite-expired");
+            case "full" -> plugin.messages().send(player, "coop.invite-full");
+            default -> plugin.messages().send(player, "coop.no-invite");
         }
     }
 

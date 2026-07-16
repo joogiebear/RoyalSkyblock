@@ -469,6 +469,9 @@ public final class GuiManager implements Listener {
         IslandRole myRole = profile.roleOf(player.getUniqueId());
         boolean canManage = myRole == IslandRole.OWNER || myRole == IslandRole.CO_OWNER;
 
+        int max = coopMax(profile);
+        inv.setItem(4, coopInfoIcon(profile, max)); // header (row 1, col 5)
+
         List<com.mystipixel.royalskyblock.profile.ProfileMember> members = new ArrayList<>(profile.members());
         members.sort((a, b) -> Integer.compare(roleRank(a.role()), roleRank(b.role())));
 
@@ -599,7 +602,7 @@ public final class GuiManager implements Listener {
                     plugin.messages().send(viewer, "coop.invite-error", "error", error);
                 } else {
                     plugin.messages().send(viewer, "coop.invite-sent", "player", target.getName());
-                    plugin.messages().send(target, "coop.invite-received", "player", viewer.getName());
+                    plugin.messages().sendInvite(target, viewer.getName());
                 }
                 open(viewer, COOP);
             });
@@ -614,6 +617,28 @@ public final class GuiManager implements Listener {
             case MEMBER -> 2;
             default -> 3;
         };
+    }
+
+    private int coopMax(Profile profile) {
+        Island island = plugin.islands().getIslandByProfile(profile.id());
+        return island != null ? plugin.upgrades().coopMemberCap(island)
+                : plugin.getConfig().getInt("coop.max-members", 4);
+    }
+
+    private ItemStack coopInfoIcon(Profile profile, int max) {
+        ItemStack item = new ItemStack(Material.CYAN_BED);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic("&6&l" + profile.name() + " &7Coop"));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Owner: &f" + ownerName(profile)));
+            lore.add(noItalic("&7Members: &f" + profile.memberCount() + "&7/&f" + max));
+            lore.add(noItalic(""));
+            lore.add(noItalic("&7Click a member to manage them."));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
     }
 
     private ItemStack memberIcon(com.mystipixel.royalskyblock.profile.ProfileMember member, boolean kickable) {

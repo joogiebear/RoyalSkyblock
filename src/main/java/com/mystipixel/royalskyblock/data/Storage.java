@@ -583,6 +583,19 @@ public final class Storage {
         }
     }
 
+    /** Remove a player's saved state for one profile — used when they leave/are kicked from a coop. */
+    public void deleteProfileData(UUID profileId, UUID playerUuid) {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement st = c.prepareStatement(
+                     "DELETE FROM profile_data WHERE profile_id = ? AND player_uuid = ?")) {
+            st.setString(1, profileId.toString());
+            st.setString(2, playerUuid.toString());
+            st.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().warning("Could not delete profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+        }
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────────
 
     private boolean executeUpdate(String sql, String param) {
