@@ -358,7 +358,8 @@ public final class GuiManager implements Listener {
                 if (next == null) {
                     lore.add(noItalic("&a✔ Maxed out."));
                 } else {
-                    lore.add(noItalic("&7Next: tier " + next.tier() + " &8(value " + fmt(next.value()) + ")"));
+                    lore.add(noItalic("&7Next: tier " + next.tier() + " &8("
+                            + effectLabel(def.effect(), next.value()) + ")"));
                     lore.add(noItalic("&7Cost: &e" + plugin.currency().format(next.cost())
                             + (next.isInstant() ? "" : " &7+ " + formatDuration(next.timeSeconds()) + " wait")));
                     if (!next.skipCost().isFree()) {
@@ -376,6 +377,16 @@ public final class GuiManager implements Listener {
 
     private static String fmt(double v) {
         return v == Math.floor(v) ? String.valueOf((long) v) : String.valueOf(v);
+    }
+
+    /** Human label for an upgrade tier's effect value, e.g. a radius shows as its NxN island size. */
+    private static String effectLabel(com.mystipixel.royalskyblock.upgrade.UpgradeEffect effect, double value) {
+        int v = (int) value;
+        return switch (effect) {
+            case RADIUS -> (v * 2 + 1) + "x" + (v * 2 + 1); // border half-size -> full NxN (incl. centre)
+            case GUEST_SLOTS -> "+" + v + " guest" + (v == 1 ? "" : "s");
+            case COOP_SLOTS -> "+" + v + " coop slot" + (v == 1 ? "" : "s");
+        };
     }
 
     private static String formatDuration(long seconds) {
