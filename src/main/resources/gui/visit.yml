@@ -1,9 +1,14 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — visit browser                                            │
-# │  The 0 slots are filled at runtime with visitable islands: only those with │
-# │  Visitors + Listing enabled and matching your profile's gamemode. Click an │
-# │  island head to visit it.                                                  │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Visit an Island
+# ═══════════════════════════════════════════════════════════════════════════════
+#  The 0 slots fill at runtime with visitable islands — only those with Visitors +
+#  Listing enabled and matching your profile's gamemode. Click an island head to
+#  visit it.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&6&lVisit an Island"
 rows: 6
@@ -22,7 +27,10 @@ pages:
         - "111111111"
 
 slots:
-  - item: arrow name:"&fBack"
+  # ── footer ──
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
     row: 6
     column: 4
     left-click:
@@ -30,8 +38,10 @@ slots:
         args:
           menu: main
 
-  - item: barrier name:"&cClose"
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
     row: 6
-    column: 5
+    column: 6
     left-click:
-      - id: close_inventory
+      - id: close

@@ -1,8 +1,13 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — new profile: pick a gamemode                              │
-# │  Each button runs `is profile create <mode>`, which creates the profile,   │
-# │  its island, and switches you to it.                                       │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  New Profile
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Pick a gamemode. Each button runs `is profile create <mode>`, which creates the
+#  profile and its island, then switches you to it.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&6&lNew Profile"
 rows: 3
@@ -11,13 +16,14 @@ pages:
   - page: 1
     mask:
       items:
-        - gray_stained_glass_pane
+        - black_stained_glass_pane
       pattern:
         - "111111111"
         - "111111111"
         - "111111111"
 
 slots:
+  # ── gamemodes ──
   - item: grass_block name:"&a&lSOLO"
     lore:
       - "&7Classic Skyblock — trade, sell,"
@@ -44,7 +50,7 @@ slots:
         args:
           command: "is profile create coop"
 
-  - item: iron_block name:"&7&lIRONMAN"
+  - item: iron_block name:"&f&lIRONMAN"
     lore:
       - "&7Fully self-sufficient — no auction"
       - "&7house, bazaar, or trading."
@@ -57,10 +63,21 @@ slots:
         args:
           command: "is profile create ironman"
 
+  # ── footer ──
   - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to your profiles."
     row: 3
-    column: 1
+    column: 4
     left-click:
       - id: open_menu
         args:
           menu: profiles
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 3
+    column: 6
+    left-click:
+      - id: close

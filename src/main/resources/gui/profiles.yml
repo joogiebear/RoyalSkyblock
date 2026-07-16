@@ -1,8 +1,13 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — profile switcher                                          │
-# │  The 0 slots in the mask are filled at runtime with one icon per profile;  │
-# │  clicking an icon switches to that profile.                                │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Profiles
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Switch between your profiles. The 0 slots fill at runtime with one icon per
+#  profile (Solo / Coop / Ironman); click an icon to switch to it.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&6&lYour Profiles"
 rows: 5
@@ -11,18 +16,21 @@ pages:
   - page: 1
     mask:
       items:
-        - gray_stained_glass_pane
+        - black_stained_glass_pane
       pattern:
         - "111111111"
         - "111111111"
-        - "100000001"   # 0 = a profile icon slot (filled dynamically)
+        - "100000001"   # 0 = a profile icon (filled dynamically)
         - "111111111"
         - "111111111"
 
 slots:
+  # ── footer ──
   - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
     row: 5
-    column: 1
+    column: 4
     left-click:
       - id: open_menu
         args:
@@ -32,9 +40,19 @@ slots:
     lore:
       - "&7Start a fresh profile — its own"
       - "&7island, inventory, and progression."
+      - ""
+      - "&eClick to create!"
     row: 5
     column: 5
     left-click:
       - id: open_menu
         args:
           menu: create-profile
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 5
+    column: 6
+    left-click:
+      - id: close

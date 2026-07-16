@@ -1,19 +1,24 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — main menu  (/is menu)                                     │
-# │  EcoMenus dialect: title, rows, a mask (1 = filler, 0 = dynamic slot), and │
-# │  a slots list. Each slot sits at a 1-based row + column, with an inline    │
-# │  `item` (material / ecoitems:id / player_head) and left/right-click effects.│
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Main Menu   (/is menu)
+# ═══════════════════════════════════════════════════════════════════════════════
+#  The Skyblock hub — every other menu opens from here.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+#    (a click sound plays automatically — no need to add one per button)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&6&lYour Skyblock"
-rows: 5
+rows: 6
 
 pages:
   - page: 1
     mask:
       items:
-        - gray_stained_glass_pane   # filler painted on every 1 below
+        - black_stained_glass_pane
       pattern:
+        - "111111111"
         - "111111111"
         - "111111111"
         - "111111111"
@@ -67,7 +72,7 @@ slots:
         args:
           menu: visit
 
-  # ── progression (wired as their systems land) ──
+  # ── progression ──
   - item: nether_star name:"&d&lProfiles"
     lore:
       - "&7Switch between your profiles"
@@ -94,7 +99,7 @@ slots:
         args:
           menu: upgrades
 
-  - item: comparator name:"&7&lIsland Settings"
+  - item: comparator name:"&e&lIsland Settings"
     lore:
       - "&7Privacy and visitor rules."
       - ""
@@ -108,7 +113,9 @@ slots:
 
   # ── footer ──
   - item: barrier name:"&c&lClose"
-    row: 5
+    lore:
+      - "&7Close this menu."
+    row: 6
     column: 5
     left-click:
       - id: close
@@ -118,7 +125,7 @@ slots:
       - "&7Permanently delete your island."
       - ""
       - "&cThis cannot be undone."
-    row: 5
+    row: 6
     column: 9
     left-click:
       - id: open_menu

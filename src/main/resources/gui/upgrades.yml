@@ -1,12 +1,15 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — island upgrades                                          │
-# │                                                                            │
-# │  A slot with `content: <upgrade-key>` is rendered with that upgrade's live │
-# │  icon (current/next tier, cost, skip cost, timer) — place them at whatever │
-# │  row/column you like. Left-click an upgrade to start it, right-click to     │
-# │  skip an in-progress one. Keys come from upgrades.yml (size / guest-limit / │
-# │  coop-slots).                                                              │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Island Upgrades
+# ═══════════════════════════════════════════════════════════════════════════════
+#  A slot with `content: <upgrade-key>` renders that upgrade's live icon (current /
+#  next tier, cost, skip cost, timer) — pin them at any row/column. Left-click an
+#  upgrade to start it, right-click to skip an in-progress one. Keys come from
+#  upgrades.yml (size / guest-limit / coop-slots).
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&6&lIsland Upgrades"
 rows: 6
@@ -36,8 +39,10 @@ slots:
     row: 3
     column: 7
 
-  # ── navigation ──
-  - item: arrow name:"&fBack"
+  # ── footer ──
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
     row: 6
     column: 4
     left-click:
@@ -45,8 +50,10 @@ slots:
         args:
           menu: main
 
-  - item: barrier name:"&cClose"
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
     row: 6
-    column: 5
+    column: 6
     left-click:
-      - id: close_inventory
+      - id: close

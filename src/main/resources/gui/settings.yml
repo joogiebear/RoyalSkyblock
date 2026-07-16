@@ -1,8 +1,13 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — island settings                                          │
-# │  The 0 slots are filled at runtime with one toggle per island setting;     │
-# │  clicking one flips it (owner/co-owner only).                              │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Island Settings
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Privacy and visitor rules. The 0 slots fill at runtime with one toggle per
+#  island setting; clicking one flips it (owner / co-owner only).
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&6&lIsland Settings"
 rows: 3
@@ -11,17 +16,28 @@ pages:
   - page: 1
     mask:
       items:
-        - gray_stained_glass_pane
+        - black_stained_glass_pane
       pattern:
         - "111111111"
         - "100000001"   # 0 = a setting toggle (filled dynamically)
         - "111111111"
 
 slots:
+  # ── footer ──
   - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
     row: 3
-    column: 1
+    column: 4
     left-click:
       - id: open_menu
         args:
           menu: main
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 3
+    column: 6
+    left-click:
+      - id: close

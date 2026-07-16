@@ -1,6 +1,13 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — delete confirmation  (opened from the main menu)          │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Delete Island?
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Last-chance confirmation, opened from the main menu's Delete button.
+#  Confirm wipes the island; Cancel returns to the main menu.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&4&lDelete your island?"
 rows: 3
@@ -20,6 +27,8 @@ slots:
     lore:
       - "&7Permanently delete your island"
       - "&7and everything on it."
+      - ""
+      - "&eClick to confirm."
     row: 2
     column: 3
     left-click:
@@ -37,6 +46,8 @@ slots:
   - item: red_wool name:"&c&lCancel"
     lore:
       - "&7Keep my island."
+      - ""
+      - "&eClick to go back."
     row: 2
     column: 7
     left-click:
