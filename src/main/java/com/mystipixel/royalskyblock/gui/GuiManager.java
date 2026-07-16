@@ -52,11 +52,12 @@ public final class GuiManager implements Listener {
     public static final String MANAGE = "manage";
     public static final String COOP = "coop";
     public static final String COOP_INVITE = "coop-invite";
+    public static final String COOP_MEMBER = "coop-member";
     public static final String LEVEL = "level";
     public static final String TOP = "top";
 
     private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
-            VISIT, MANAGE, COOP, COOP_INVITE, LEVEL, TOP};
+            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, LEVEL, TOP};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -81,6 +82,14 @@ public final class GuiManager implements Listener {
 
     /** Open a menu for a player, rendering items with their placeholders. */
     public void open(Player player, String menuId) {
+        open(player, menuId, null);
+    }
+
+    /**
+     * Open a menu, optionally carrying a {@code context} (e.g. the coop member a per-member menu acts
+     * on) that the dynamic fill can read back off the holder.
+     */
+    public void open(Player player, String menuId, String context) {
         MenuTemplate template = byId.get(menuId);
         if (template == null) {
             plugin.getLogger().warning("Tried to open unknown menu '" + menuId + "'.");
@@ -88,7 +97,7 @@ public final class GuiManager implements Listener {
         }
         Map<String, String> placeholders = placeholders(player);
 
-        MenuHolder holder = new MenuHolder(menuId);
+        MenuHolder holder = new MenuHolder(menuId, context);
         Inventory inv = Bukkit.createInventory(holder, template.size(),
                 Text.color(apply(template.title(), placeholders)));
         holder.setInventory(inv);
@@ -122,6 +131,10 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(COOP_INVITE)) {
             fillCoopInvite(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(COOP_MEMBER)) {
+            fillCoopMember(player, template, inv, holder);
             return;
         }
         if (menuId.equals(LEVEL)) {
@@ -463,25 +476,100 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < members.size() && i < slots.size(); i++) {
             com.mystipixel.royalskyblock.profile.ProfileMember member = members.get(i);
             int slot = slots.get(i);
-            boolean kickable = canManage
+            // Owner/co-owner can manage anyone but themselves and the owner; clicking opens the member menu.
+            boolean manageable = canManage
                     && member.role() != IslandRole.OWNER
                     && !member.uuid().equals(player.getUniqueId());
-            inv.setItem(slot, memberIcon(member, kickable));
-            if (kickable) {
-                holder.putAction(slot, (viewer, right) -> {
-                    Player target = Bukkit.getPlayerExact(member.name());
-                    String error = plugin.profiles().kick(viewer, member.name());
-                    if (error != null) {
-                        plugin.messages().send(viewer, "coop.kick-error", "error", error);
-                    } else {
-                        plugin.messages().send(viewer, "coop.kicked", "player", member.name());
-                        if (target != null) {
-                            plugin.messages().send(target, "coop.you-were-kicked");
-                        }
-                    }
-                    open(viewer, COOP);
-                });
+            inv.setItem(slot, memberIcon(member, manageable));
+            if (manageable) {
+                holder.putAction(slot, (viewer, right) -> open(viewer, COOP_MEMBER, member.name()));
             }
+        }
+    }
+
+    /** Per-member management: promote/demote, transfer ownership, kick. Target name is the holder context. */
+    private void fillCoopMember(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        String targetName = holder.context();
+        Profile active = plugin.profiles().getActiveProfile(player);
+        if (targetName == null || active == null) {
+            return;
+        }
+        com.mystipixel.royalskyblock.profile.ProfileMember target = active.members().stream()
+                .filter(m -> m.name().equalsIgnoreCase(targetName)).findFirst().orElse(null);
+        if (target == null) {
+            return; // member left/kicked since the menu was opened
+        }
+        boolean isOwner = active.roleOf(player.getUniqueId()) == IslandRole.OWNER;
+        int rows = template.size() / 9;
+
+        // header: the member's head (row 1, col 5)
+        inv.setItem(4, memberIcon(target, false));
+
+        // action row (row 2 on a 3-row menu)
+        int actionRow = rows >= 3 ? 9 : 0;
+
+        // promote / demote (owner only)
+        if (isOwner && target.role() == IslandRole.MEMBER) {
+            inv.setItem(actionRow + 2, infoIcon(Material.LIME_DYE, "&a&lPromote to Co-Owner",
+                    List.of("&7Let " + target.name() + " invite, kick,", "&7and manage the island.",
+                            "", "&eClick to promote!")));
+            holder.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
+                    plugin.profiles().promote(viewer, target.name()), "coop.promoted", target.name(), "coop.you-promoted"));
+        } else if (isOwner && target.role() == IslandRole.CO_OWNER) {
+            inv.setItem(actionRow + 2, infoIcon(Material.GRAY_DYE, "&e&lDemote to Member",
+                    List.of("&7Return " + target.name() + " to a", "&7regular member.",
+                            "", "&eClick to demote!")));
+            holder.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
+                    plugin.profiles().demote(viewer, target.name()), "coop.demoted", target.name(), "coop.you-demoted"));
+        }
+
+        // transfer ownership (owner only) — right-click to confirm
+        if (isOwner) {
+            inv.setItem(actionRow + 4, infoIcon(Material.GOLDEN_HELMET, "&6&lTransfer Ownership",
+                    List.of("&7Make " + target.name() + " the owner.",
+                            "&cYou'll become a co-owner.", "",
+                            "&7Left-click: details", "&eRight-click: confirm transfer")));
+            holder.putAction(actionRow + 4, (viewer, right) -> {
+                if (!right) {
+                    plugin.messages().send(viewer, "coop.transfer-hint", "player", target.name());
+                    return;
+                }
+                runRoleAction(viewer, plugin.profiles().transferOwnership(viewer, target.name()),
+                        "coop.transferred", target.name(), "coop.you-owner");
+            });
+        }
+
+        // kick
+        inv.setItem(actionRow + 6, infoIcon(Material.BARRIER, "&c&lRemove from Island",
+                List.of("&7Kick " + target.name() + " from", "&7the coop.", "", "&eClick to remove!")));
+        holder.putAction(actionRow + 6, (viewer, right) -> {
+            Player online = Bukkit.getPlayerExact(target.name());
+            String error = plugin.profiles().kick(viewer, target.name());
+            if (error != null) {
+                plugin.messages().send(viewer, "coop.kick-error", "error", error);
+                open(viewer, COOP_MEMBER, target.name());
+            } else {
+                plugin.messages().send(viewer, "coop.kicked", "player", target.name());
+                if (online != null) {
+                    plugin.messages().send(online, "coop.you-were-kicked");
+                }
+                open(viewer, COOP);
+            }
+        });
+    }
+
+    /** Run a role change, message actor + (online) target, and re-open the right menu. */
+    private void runRoleAction(Player viewer, String error, String successKey, String targetName, String targetKey) {
+        if (error != null) {
+            plugin.messages().send(viewer, "coop.role-error", "error", error);
+            open(viewer, COOP_MEMBER, targetName);
+        } else {
+            plugin.messages().send(viewer, successKey, "player", targetName);
+            Player online = Bukkit.getPlayerExact(targetName);
+            if (online != null && targetKey != null) {
+                plugin.messages().send(online, targetKey);
+            }
+            open(viewer, COOP);
         }
     }
 

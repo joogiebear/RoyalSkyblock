@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class Profile {
 
     private final UUID id;
-    private final UUID owner;
+    private UUID owner;
     private String name;
     private Gamemode gamemode;
     private final long createdAt;
@@ -39,6 +39,11 @@ public final class Profile {
 
     public UUID owner() {
         return owner;
+    }
+
+    /** Reassign the profile owner (coop ownership transfer). Roles are updated separately by the caller. */
+    public void setOwner(UUID owner) {
+        this.owner = owner;
     }
 
     public String name() {

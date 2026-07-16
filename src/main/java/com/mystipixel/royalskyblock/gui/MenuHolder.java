@@ -18,16 +18,26 @@ import java.util.function.BiConsumer;
 public final class MenuHolder implements InventoryHolder {
 
     private final String menuId;
+    private final String context;   // optional target for per-subject menus (e.g. a coop member name)
     private Inventory inventory;
     // slot -> action(player, rightClick)
     private final Map<Integer, BiConsumer<Player, Boolean>> actions = new HashMap<>();
 
     public MenuHolder(String menuId) {
+        this(menuId, null);
+    }
+
+    public MenuHolder(String menuId, @Nullable String context) {
         this.menuId = menuId;
+        this.context = context;
     }
 
     public String menuId() {
         return menuId;
+    }
+
+    public @Nullable String context() {
+        return context;
     }
 
     void setInventory(Inventory inventory) {

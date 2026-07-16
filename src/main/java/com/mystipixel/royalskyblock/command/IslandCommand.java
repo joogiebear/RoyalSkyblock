@@ -26,7 +26,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
             "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
-            "kick", "leave", "members", "manage", "settings", "setspawn", "sethome", "setguestspawn", "kickall",
+            "kick", "leave", "members", "manage", "transfer", "promote", "demote", "settings",
+            "setspawn", "sethome", "setguestspawn", "kickall",
             "level", "top", "upgrade", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
@@ -53,6 +54,9 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "accept" -> handleAccept(sender);
             case "deny", "decline" -> handleDeny(sender);
             case "kick" -> handleKick(sender, args);
+            case "transfer" -> handleTransfer(sender, args);
+            case "promote" -> handlePromote(sender, args);
+            case "demote" -> handleDemote(sender, args);
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
             case "manage" -> handleManage(sender);
@@ -507,6 +511,58 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
+    private void handleTransfer(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (args.length < 2) {
+            plugin.gui().open(player, GuiManager.COOP); // no target -> open the roster to pick
+            return;
+        }
+        coopRoleCommand(player, args[1], plugin.profiles().transferOwnership(player, args[1]),
+                "coop.transferred", "coop.you-owner");
+    }
+
+    private void handlePromote(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (args.length < 2) {
+            plugin.gui().open(player, GuiManager.COOP);
+            return;
+        }
+        coopRoleCommand(player, args[1], plugin.profiles().promote(player, args[1]),
+                "coop.promoted", "coop.you-promoted");
+    }
+
+    private void handleDemote(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (args.length < 2) {
+            plugin.gui().open(player, GuiManager.COOP);
+            return;
+        }
+        coopRoleCommand(player, args[1], plugin.profiles().demote(player, args[1]),
+                "coop.demoted", "coop.you-demoted");
+    }
+
+    /** Shared: report a coop role change to the actor, and notify the online target. */
+    private void coopRoleCommand(Player actor, String targetName, String error, String successKey, String targetKey) {
+        if (error != null) {
+            plugin.messages().send(actor, "coop.role-error", "error", error);
+            return;
+        }
+        plugin.messages().send(actor, successKey, "player", targetName);
+        Player online = plugin.getServer().getPlayerExact(targetName);
+        if (online != null && targetKey != null) {
+            plugin.messages().send(online, targetKey);
+        }
+    }
+
     private void handleLeave(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
@@ -820,7 +876,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             }
             return filter(names, args[1], sender);
         }
-        if (args.length == 2 && sub.equals("kick") && sender instanceof Player player) {
+        if (args.length == 2 && (sub.equals("kick") || sub.equals("transfer") || sub.equals("promote")
+                || sub.equals("demote")) && sender instanceof Player player) {
             List<String> names = new ArrayList<>();
             Profile active = plugin.profiles().getActiveProfile(player);
             if (active != null) {

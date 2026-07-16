@@ -1,0 +1,44 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Manage Member
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Opened by clicking a member in the Coop Members menu. The member's head and the
+#  Promote/Demote · Transfer Ownership · Remove buttons are placed by code (they
+#  depend on the target's rank and yours); this file is just the frame + nav.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
+
+title: "&6&lManage Member"
+rows: 3
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "111111111"
+        - "111111111"
+
+slots:
+  # ── footer (member head + action buttons are placed by code) ──
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the roster."
+    row: 3
+    column: 4
+    left-click:
+      - id: open_menu
+        args:
+          menu: coop
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 3
+    column: 6
+    left-click:
+      - id: close

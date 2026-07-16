@@ -347,6 +347,9 @@ public final class ProfileManager {
         if (target.role() == IslandRole.OWNER) {
             return "You can't kick the owner.";
         }
+        if (role == IslandRole.CO_OWNER && target.role() == IslandRole.CO_OWNER) {
+            return "Only the owner can remove a co-owner.";
+        }
         if (target.uuid().equals(actor.getUniqueId())) {
             return "You can't kick yourself — use /is leave.";
         }
@@ -364,7 +367,7 @@ public final class ProfileManager {
             return "You're not on a Coop profile.";
         }
         if (active.roleOf(player.getUniqueId()) == IslandRole.OWNER) {
-            return "The owner can't leave — delete the profile instead (/is profile delete).";
+            return "The owner can't leave — transfer ownership first (/is transfer) or delete the profile.";
         }
         if (!active.isMember(player.getUniqueId())) {
             return "You're not a member of this profile.";
@@ -374,6 +377,78 @@ public final class ProfileManager {
         profileCache.put(active.id(), active);
         moveOffProfileIfActive(player.getUniqueId(), active.id());
         return null;
+    }
+
+    // ── coop roles / ownership ─────────────────────────────────────────────────────
+
+    /** Promote a member to co-owner. Owner only. Returns an error message, or null on success. */
+    public String promote(Player actor, String targetName) {
+        return changeRole(actor, targetName, IslandRole.MEMBER, IslandRole.CO_OWNER,
+                targetName + " is already a co-owner.");
+    }
+
+    /** Demote a co-owner back to member. Owner only. Returns an error message, or null on success. */
+    public String demote(Player actor, String targetName) {
+        return changeRole(actor, targetName, IslandRole.CO_OWNER, IslandRole.MEMBER,
+                targetName + " isn't a co-owner.");
+    }
+
+    private String changeRole(Player actor, String targetName, IslandRole from, IslandRole to, String wrongState) {
+        Profile active = getActiveProfile(actor);
+        if (active == null || active.gamemode() != Gamemode.COOP) {
+            return "You're not on a Coop profile.";
+        }
+        if (active.roleOf(actor.getUniqueId()) != IslandRole.OWNER) {
+            return "Only the owner can change member ranks.";
+        }
+        ProfileMember target = memberByName(active, targetName);
+        if (target == null) {
+            return "No member named " + targetName + ".";
+        }
+        if (target.uuid().equals(actor.getUniqueId())) {
+            return "You can't change your own rank.";
+        }
+        if (target.role() != from) {
+            return wrongState;
+        }
+        active.putMember(new ProfileMember(target.uuid(), target.name(), to, target.joinedAt()));
+        storage.saveProfile(active);
+        profileCache.put(active.id(), active);
+        return null;
+    }
+
+    /**
+     * Transfer ownership of the actor's active Coop profile to another member: the target becomes OWNER
+     * and the current owner steps down to co-owner. Current owner only. Returns an error, or null on ok.
+     */
+    public String transferOwnership(Player actor, String targetName) {
+        Profile active = getActiveProfile(actor);
+        if (active == null || active.gamemode() != Gamemode.COOP) {
+            return "You're not on a Coop profile.";
+        }
+        if (active.roleOf(actor.getUniqueId()) != IslandRole.OWNER || !active.owner().equals(actor.getUniqueId())) {
+            return "Only the owner can transfer ownership.";
+        }
+        ProfileMember target = memberByName(active, targetName);
+        if (target == null) {
+            return "No member named " + targetName + ".";
+        }
+        if (target.uuid().equals(actor.getUniqueId())) {
+            return "You already own this profile.";
+        }
+        ProfileMember self = active.member(actor.getUniqueId());
+        long selfJoined = self != null ? self.joinedAt() : Instant.now().toEpochMilli();
+        active.putMember(new ProfileMember(target.uuid(), target.name(), IslandRole.OWNER, target.joinedAt()));
+        active.putMember(new ProfileMember(actor.getUniqueId(), actor.getName(), IslandRole.CO_OWNER, selfJoined));
+        active.setOwner(target.uuid());
+        storage.saveProfile(active);
+        profileCache.put(active.id(), active);
+        return null;
+    }
+
+    private ProfileMember memberByName(Profile profile, String name) {
+        return profile.members().stream()
+                .filter(m -> m.name().equalsIgnoreCase(name)).findFirst().orElse(null);
     }
 
     /** If the player is online and currently on {@code profileId}, move them to one of their own profiles. */

@@ -102,6 +102,14 @@ coop:
   leave-error: "&c%error%"
   members-header: "&6&lMembers &7(%count%/%max%)"
   members-line: "&8» &e%player% &7- %role%"
+  promoted: "&aPromoted &e%player% &ato co-owner."
+  demoted: "&e%player% &7is now a regular member."
+  transferred: "&aOwnership transferred to &e%player%&a. You're now a co-owner."
+  transfer-hint: "&7Right-click again to confirm transferring ownership to &e%player%&7."
+  role-error: "&c%error%"
+  you-promoted: "&aYou were promoted to &eco-owner&a of the island!"
+  you-demoted: "&eYou were set back to a regular member."
+  you-owner: "&6&l✦ &eYou are now the &6owner &eof the island!"
 
 help:
   header: "&6&lRoyalSkyblock"
