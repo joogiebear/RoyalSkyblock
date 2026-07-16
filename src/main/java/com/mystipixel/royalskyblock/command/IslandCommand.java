@@ -55,6 +55,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "kick" -> handleKick(sender, args);
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
+            case "settings" -> handleSettings(sender);
             case "delete" -> handleDelete(sender, args);
             case "admin" -> handleAdmin(sender, args);
             default -> sender.sendMessage(Text.color("&e/is " + args[0] + " &7isn't wired up yet — coming soon."));
@@ -148,6 +149,15 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         if (island == null) {
             plugin.messages().send(player, "visit.no-target-island", "player", targetName);
             return;
+        }
+        // Privacy: a private island only admits its own profile members.
+        if (!island.isEnabled(com.mystipixel.royalskyblock.island.IslandSetting.VISITORS_ALLOWED)
+                && !player.hasPermission("royalskyblock.bypass")) {
+            Profile prof = plugin.profiles().getProfile(island.profileId());
+            if (prof == null || !prof.isMember(player.getUniqueId())) {
+                plugin.messages().send(player, "visit.private", "player", targetName);
+                return;
+            }
         }
         plugin.islands().teleportToIsland(player, island).whenComplete((ok, error) -> onMain(() -> {
             if (error != null) {
@@ -297,6 +307,22 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             // not an index
         }
         return null;
+    }
+
+    private void handleSettings(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (!player.hasPermission("royalskyblock.settings")) {
+            plugin.messages().send(player, "general.no-permission");
+            return;
+        }
+        if (!plugin.profiles().activeHasIsland(player)) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        plugin.gui().open(player, GuiManager.SETTINGS);
     }
 
     // ── coop invites ──────────────────────────────────────────────────────────────

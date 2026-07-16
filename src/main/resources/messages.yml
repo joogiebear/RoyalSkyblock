@@ -29,6 +29,7 @@ visit:
   usage: "&cUsage: &e/is visit <player>"
   no-target-island: "&c%player% doesn't have an island."
   visiting: "&aVisiting &e%player%&a's island."
+  private: "&e%player%&c's island is private — only members can visit."
   failed: "&cCouldn't take you there: &7%error%"
 
 delete:

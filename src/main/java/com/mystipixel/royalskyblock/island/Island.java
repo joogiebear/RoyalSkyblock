@@ -34,6 +34,9 @@ public final class Island {
     /** Upgrade tier per upgrade key (e.g. "size" -> 3). Populated in the upgrades phase. */
     private final Map<String, Integer> upgrades = new ConcurrentHashMap<>();
 
+    /** Explicitly-set setting overrides (key -> enabled). Unset settings use their default. */
+    private final Map<String, Boolean> settings = new ConcurrentHashMap<>();
+
     public Island(UUID id, UUID profileId, String worldName, long createdAt) {
         this.id = id;
         this.profileId = profileId;
@@ -89,6 +92,42 @@ public final class Island {
 
     public Map<String, Integer> upgrades() {
         return new HashMap<>(upgrades);
+    }
+
+    // ── settings ──────────────────────────────────────────────────────────────────
+
+    public boolean isEnabled(IslandSetting setting) {
+        return settings.getOrDefault(setting.key(), setting.defaultEnabled());
+    }
+
+    public void setSetting(IslandSetting setting, boolean enabled) {
+        settings.put(setting.key(), enabled);
+    }
+
+    /** Serialize overrides as {@code key=1,key=0} for the {@code settings} column. */
+    public String serializeSettings() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Boolean> e : settings.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(e.getKey()).append('=').append(e.getValue() ? '1' : '0');
+        }
+        return sb.toString();
+    }
+
+    /** Load overrides from the serialized {@code settings} column value. */
+    public void loadSettings(String serialized) {
+        settings.clear();
+        if (serialized == null || serialized.isBlank()) {
+            return;
+        }
+        for (String pair : serialized.split(",")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) {
+                settings.put(pair.substring(0, eq).trim(), pair.substring(eq + 1).trim().equals("1"));
+            }
+        }
     }
 
     // ── home ────────────────────────────────────────────────────────────────────

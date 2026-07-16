@@ -127,7 +127,8 @@ public final class Storage {
                         + "radius " + integer + " NOT NULL DEFAULT 50, level " + dbl + " NOT NULL DEFAULT 0, "
                         + "home_x " + dbl + " NOT NULL DEFAULT 0, home_y " + dbl + " NOT NULL DEFAULT 0, "
                         + "home_z " + dbl + " NOT NULL DEFAULT 0, home_yaw " + flt + " NOT NULL DEFAULT 0, "
-                        + "home_pitch " + flt + " NOT NULL DEFAULT 0)",
+                        + "home_pitch " + flt + " NOT NULL DEFAULT 0, "
+                        + "settings " + (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT '')",
                 "CREATE TABLE IF NOT EXISTS profiles ("
                         + "id " + txt36 + " PRIMARY KEY, owner " + txt36 + " NOT NULL, "
                         + "name " + txt32 + " NOT NULL, gamemode " + txt16 + " NOT NULL, "
@@ -155,6 +156,18 @@ public final class Storage {
             s.executeUpdate(indexSql("idx_profiles_owner", "profiles", "owner"));
             s.executeUpdate(indexSql("idx_profile_members_uuid", "profile_members", "uuid"));
         }
+        // migrations for tables that predate a column
+        addColumnIfMissing("islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
+    }
+
+    /** Best-effort ADD COLUMN; ignores the "already exists" error so it's safe to run every boot. */
+    private void addColumnIfMissing(String table, String column, String definition) {
+        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
+            s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+            plugin.getLogger().info("Migrated " + table + ": added column " + column + ".");
+        } catch (SQLException ignored) {
+            // column already exists — nothing to do
+        }
     }
 
     private String indexSql(String name, String table, String column) {
@@ -173,7 +186,7 @@ public final class Storage {
 
     private @Nullable Island queryIsland(String where, String param) {
         String sql = "SELECT id, profile_id, world_name, created_at, radius, level, "
-                + "home_x, home_y, home_z, home_yaw, home_pitch FROM islands " + where;
+                + "home_x, home_y, home_z, home_yaw, home_pitch, settings FROM islands " + where;
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, param);
             try (ResultSet rs = st.executeQuery()) {
@@ -187,6 +200,7 @@ public final class Storage {
                 island.setLevel(rs.getDouble("level"));
                 island.setHome(rs.getDouble("home_x"), rs.getDouble("home_y"), rs.getDouble("home_z"),
                         rs.getFloat("home_yaw"), rs.getFloat("home_pitch"));
+                island.loadSettings(rs.getString("settings"));
                 return island;
             }
         } catch (SQLException e) {
@@ -197,14 +211,14 @@ public final class Storage {
 
     public boolean saveIsland(Island island) {
         String sql = mysql()
-                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
+                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
                 + "radius=VALUES(radius), level=VALUES(level), home_x=VALUES(home_x), home_y=VALUES(home_y), home_z=VALUES(home_z), "
-                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch)"
-                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
+                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings)"
+                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
                 + "radius=excluded.radius, level=excluded.level, home_x=excluded.home_x, home_y=excluded.home_y, home_z=excluded.home_z, "
-                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch";
+                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, island.id().toString());
             st.setString(2, island.profileId().toString());
@@ -217,6 +231,7 @@ public final class Storage {
             st.setDouble(9, island.homeZ());
             st.setFloat(10, island.homeYaw());
             st.setFloat(11, island.homePitch());
+            st.setString(12, island.serializeSettings());
             st.executeUpdate();
             return true;
         } catch (SQLException e) {

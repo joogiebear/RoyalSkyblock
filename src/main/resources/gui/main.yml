@@ -96,15 +96,15 @@ slots:
 
   - item: comparator name:"&7&lIsland Settings"
     lore:
-      - "&7Privacy, visitors, and coop."
+      - "&7Privacy and visitor rules."
       - ""
-      - "&8Coming soon."
+      - "&eClick to configure!"
     row: 4
     column: 7
     left-click:
-      - id: message
+      - id: open_menu
         args:
-          message: "&7Island settings are coming soon."
+          menu: settings
 
   # ── footer ──
   - item: barrier name:"&c&lClose"

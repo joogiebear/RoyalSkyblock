@@ -5,6 +5,9 @@ import com.mystipixel.royalskyblock.gui.menu.MenuEffect;
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot;
 import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
 import com.mystipixel.royalskyblock.hooks.EcoHook;
+import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.island.IslandRole;
+import com.mystipixel.royalskyblock.island.IslandSetting;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.Bukkit;
@@ -42,8 +45,9 @@ public final class GuiManager implements Listener {
     public static final String CONFIRM_DELETE = "confirm-delete";
     public static final String PROFILES = "profiles";
     public static final String CREATE_PROFILE = "create-profile";
+    public static final String SETTINGS = "settings";
 
-    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE};
+    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -89,8 +93,12 @@ public final class GuiManager implements Listener {
         player.openInventory(inv);
     }
 
-    /** Fill data-driven menus (currently the profile list) into their mask content slots. */
+    /** Fill data-driven menus (profile list, settings toggles) into their mask content slots. */
     private void fillDynamic(String menuId, Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        if (menuId.equals(SETTINGS)) {
+            fillSettings(player, template, inv, holder);
+            return;
+        }
         if (!menuId.equals(PROFILES)) {
             return;
         }
@@ -127,6 +135,52 @@ public final class GuiManager implements Listener {
             lore.add(noItalic("&7Island: " + (hasIsland ? "&ayes" : "&cno")));
             lore.add(noItalic(""));
             lore.add(noItalic(isActive ? "&8You're on this profile." : "&eClick to switch!"));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private void fillSettings(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        if (island == null) {
+            return;
+        }
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        IslandRole role = profile == null ? IslandRole.VISITOR : profile.roleOf(player.getUniqueId());
+        boolean canEdit = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
+
+        List<Integer> slots = template.contentSlots();
+        IslandSetting[] all = IslandSetting.values();
+        for (int i = 0; i < all.length && i < slots.size(); i++) {
+            IslandSetting setting = all[i];
+            int slot = slots.get(i);
+            inv.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit));
+            if (canEdit) {
+                holder.putAction(slot, viewer -> {
+                    island.setSetting(setting, !island.isEnabled(setting));
+                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+                    open(viewer, SETTINGS);
+                });
+            }
+        }
+    }
+
+    private ItemStack settingIcon(IslandSetting setting, boolean on, boolean canEdit) {
+        Material material = Material.matchMaterial(setting.icon().toUpperCase(Locale.ROOT));
+        if (material == null || !material.isItem()) {
+            material = Material.PAPER;
+        }
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic(setting.displayName() + (on ? " &a&lON" : " &c&lOFF")));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7" + setting.description()));
+            lore.add(noItalic(""));
+            lore.add(noItalic(canEdit ? (on ? "&eClick to disable" : "&eClick to enable")
+                    : "&8Only the owner can change this."));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
