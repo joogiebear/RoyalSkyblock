@@ -682,9 +682,53 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleUpgradeAdmin(sender, args);
             return;
         }
+        if (action.equals("status")) {
+            handleAdminStatus(sender);
+            return;
+        }
+        sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
         sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
+    }
+
+    /** In-game version of the boot status panel: which dependencies are active + config health. */
+    private void handleAdminStatus(CommandSender sender) {
+        String worldSrc = plugin.getConfig().getString("world.slime-data-source", "file");
+        String storage = plugin.getConfig().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
+        sender.sendMessage(Text.color("&6&l✦ RoyalSkyblock &7— status"));
+        sender.sendMessage(Text.color(dep("Islands (ASP)", plugin.isWorldBackendReady(),
+                "source: " + worldSrc, "install Advanced Slime Paper")));
+        sender.sendMessage(Text.color(dep("Economy (Vault)", plugin.economyReady(),
+                "", "not found — bank & coin costs off")));
+        sender.sendMessage(Text.color(dep("Bank", plugin.bank().available(),
+                plugin.bank().levels().levelCount() + " levels", "needs Vault + bank.yml levels")));
+        sender.sendMessage(Text.color(dep("Schematics", plugin.schematics().isAvailable(),
+                "WorldEdit/FAWE", "built-in generator")));
+        sender.sendMessage(Text.color(dep("Progression (eco)", plugin.eco().isPresent(),
+                "per-profile", "not per-profile")));
+        sender.sendMessage(Text.color("&7Storage: &f" + storage));
+        sender.sendMessage(Text.color("&7Config health:"));
+        String spawnWorld = plugin.getConfig().getString("spawn.world", "world");
+        boolean spawnOk = plugin.getServer().getWorld(spawnWorld) != null;
+        sender.sendMessage(Text.color(check(spawnOk, "spawn world '" + spawnWorld + "' loaded",
+                "spawn world '" + spawnWorld + "' NOT found — set spawn.world in config.yml")));
+        int upTracks = plugin.upgrades().all().size();
+        sender.sendMessage(Text.color(check(upTracks > 0, upTracks + " upgrade track(s) loaded",
+                "no upgrades loaded — check upgrades.yml")));
+        sender.sendMessage(Text.color(check(!plugin.bank().levels().isEmpty(),
+                plugin.bank().levels().levelCount() + " bank level(s) loaded", "no bank levels — check bank.yml")));
+    }
+
+    private static String dep(String name, boolean ok, String okDetail, String failDetail) {
+        if (ok) {
+            return "&7" + name + ": &a✔ ready" + (okDetail.isEmpty() ? "" : " &7(" + okDetail + ")");
+        }
+        return "&7" + name + ": &c✘ " + failDetail;
+    }
+
+    private static String check(boolean ok, String okMsg, String failMsg) {
+        return ok ? "  &a✔ &7" + okMsg : "  &c✘ &f" + failMsg;
     }
 
     private void handleSchematic(CommandSender sender, String[] args) {
@@ -907,6 +951,19 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 }
             }
             return filter(names, args[1], sender);
+        }
+        if (args.length == 2 && sub.equals("admin") && sender.hasPermission("royalskyblock.admin")) {
+            return filter(List.of("status", "testworld", "schematic", "upgrade", "chesttest"), args[1], sender);
+        }
+        if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("schematic")) {
+            return filter(List.of("save"), args[2], sender);
+        }
+        if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("upgrade")) {
+            List<String> keys = new ArrayList<>();
+            for (var def : plugin.upgrades().all()) {
+                keys.add(def.key());
+            }
+            return filter(keys, args[2], sender);
         }
         return List.of();
     }

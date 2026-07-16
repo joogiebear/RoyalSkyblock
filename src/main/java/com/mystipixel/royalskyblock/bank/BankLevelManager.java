@@ -170,6 +170,10 @@ public final class BankLevelManager {
         return levels.isEmpty();
     }
 
+    public int levelCount() {
+        return levels.size();
+    }
+
     public BankLevel effectiveLevel(int level) {
         return getLevel(level)
                 .or(() -> getLevel(getStartingLevel()))

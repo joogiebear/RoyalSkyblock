@@ -227,6 +227,11 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         return bankService;
     }
 
+    /** Whether a Vault economy is present and ready (bank & coin costs depend on it). */
+    public boolean economyReady() {
+        return vaultHook != null && vaultHook.isReady();
+    }
+
     /** The player's Vault wallet balance (0 if no economy). Used by the coop-bank "deposit all" button. */
     public double purseBalance(org.bukkit.entity.Player player) {
         return vaultHook != null ? vaultHook.balance(player) : 0.0;
