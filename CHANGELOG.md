@@ -1,46 +1,59 @@
-# RoyalSkyblock — Changelog
+## 2026.29.0 — 2026-07-16
 
-Versioning is CalVer (`YYYY.WW.patch`). Dates are when the build was cut.
+### ✨ Features
+- add a cozy starter hut to the built-in generator (`9f45457`)
+- /is admin border command + debug toggle (`4fa4f1d`)
+- show island size as NxN in the upgrades menu (`fa4e4c6`)
+- per-player island border — scales with size, colour, admin-bypass (`e8a474b`)
+- optional level-gated perks (off by default) (`63f626f`)
+- Phase 4 — graceful degradation & config validation (`22786f7`)
+- Phase 3 — in-game admin experience (`e229cf5`)
+- native self-contained bank — no RoyalBank required (`f8256e5`)
+- per-profile personal banks + full coop bank + bank hub (`51e9c62`)
+- shared coop bank via RoyalBank (Vault fallback) (`d64b25a`)
+- ownership transfer + co-owner promote/demote (`67b17de`)
+- level-up rewards + background auto-recalc (`0c79c43`)
+- island levels — block scan, /is level, /is top (`a52cd1e`)
+- coop management + island management menus (`46bc1f9`)
+- pin dynamic entries to exact slots + clean upgrades configs (`be40a93`)
+- visit browser + click sounds (`b0fca82`)
+- wait-or-skip purchasing + upgrades GUI (U-3, U-4) (`f932b2d`)
+- upgrade framework + effects (size/guest-limit/coop-slots) (`f8ff4df`)
+- richer code-generated starter island (`357a0e8`)
+- configurable currency layer for upgrade costs (`a2bb3ee`)
+- admin bucket bypass window (`5075f3a`)
+- spawn commands + anti-crash liquid flow limiter (`67dfc12`)
+- per-island settings + visitor privacy (`eed99a8`)
+- invite/accept/kick/leave for shared-island Coop profiles (`387a7ef`)
+- WorldEdit/FAWE schematic support + code-gen fallback (`c03a1da`)
+- profile switcher + gamemode picker menus (`4ec407b`)
+- Hypixel-style profile backbone (islands now belong to profiles) (`9eb55a5`)
+- port the suite EcoMenus engine + island main menu (`f332f6f`)
+- configurable starter island + per-island world border (`696a203`)
+- eco per-profile data bridge (spike) (`5740340`)
+- build protection + /is visit (`c7e76fc`)
+- RoyalSkyblock Phase 1 foundation — per-island SlimeWorld backend (`5610e62`)
 
-## 2026.29.0 — Beta 1
+### 🐛 Fixes
+- world-border max is 59,999,968 not 60,000,000 (`95765a1`)
+- starter chest items now actually populate (`16a75c3`)
+- gate uses dedicated royalskyblock.gamemode.bypass (default false) (`9cbc716`)
+- connection-pool deadlock on profile load (`de59e94`)
 
-First public beta. RoyalSkyblock is a **self-contained** per-island Skyblock plugin — it needs no other
-Royal plugin, and runs on whatever Vault economy your server already has.
+### ⚡ Performance
+- live GUI countdown, guarded to near-zero idle cost (`0ec9f29`)
 
-### Requirements
-- **Advanced Slime Paper** server (the ASP fork, not vanilla Paper) — required for islands.
-- **Java 21+**.
-- **Vault + an economy** — for the bank and coin costs (any Vault economy works).
-- Optional: **eco/EcoItems** (per-profile progression), **PlaceholderAPI** (command currencies),
-  **WorldEdit/FAWE** (`.schem` starter islands).
+### ♻️ Refactors
+- organize menus into category folders (`a6f378a`)
+- externalize player-facing text to messages.yml (`ec6932a`)
 
-The console prints a status panel on boot; `/is admin status` shows the same in-game.
+### 📝 Documentation
+- document currency versatility + more examples (`fbd32a2`)
+- Phase 5 — message audit + beta changelog (`136e265`)
+- Phase 1 — truth & first-run orientation (`0aa4e0c`)
 
-### Features
-- **Per-island worlds** on ASP — loaded on demand, unloaded when empty; SQLite or MySQL metadata.
-- **Profiles** — Solo / Coop / Ironman, each a self-contained save with its own island, inventory, and
-  (with eco) per-profile progression. Ironman blocks trading commands.
-- **Coop** — invite (clickable accept/deny), roster GUI, promote/demote co-owners, ownership transfer,
-  kick/leave; shared island, separate inventories.
-- **Built-in bank** — personal (per-profile) and coop (shared): deposit/withdraw, levels + upgrades,
-  interest, transaction ledger. `/bank`. No RoyalBank required.
-- **Island levels** — block-value scanning (throttled, off-thread), `/is level`, leaderboard `/is top`,
-  optional level-up rewards, background auto-recalc.
-- **Island upgrades** — size / guest limit / coop slots, wait-or-skip timers, configurable currency.
-- **Visiting** — a browser of listed islands, gamemode-segregated, with privacy settings.
-- **Clean configurable menus** — every screen is a `gui/<category>/*.yml` file (rows, filler mask,
-  slots by row/column). Nothing is text-command-only.
+### 🔧 Other
+- Phase 2 — config coherence & sane defaults (`237767b`)
+- accept cap re-check, clickable invites, join notices, cleanup (`9920699`)
+- invite error names your current profile + gamemode (`a3138ed`)
 
-### Admin quality-of-life
-- Boot status panel + `/is admin status` (dependency + config health).
-- Config validation on load/reload — warns, with the fix, about common mistakes (bad spawn world,
-  missing economy, undefined upgrade currency, empty levels, …).
-- Sane zero-edit defaults: works on a blank ASP+Vault server; upgrades cost Vault `coins` out of the box.
-
-### Notes / known scope
-- ASP is a hard requirement (this is the trade-off for per-island worlds); without it the plugin enables
-  but island create/teleport are off.
-- If migrating from a separate RoyalBank setup, bank balances aren't auto-imported (different database).
-- MySQL is supported for both metadata and slime worlds (recommended for networks).
-
-See `README.md` for the full config-file map, commands, and permissions.
