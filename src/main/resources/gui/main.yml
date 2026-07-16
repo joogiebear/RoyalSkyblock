@@ -42,7 +42,7 @@ slots:
       - ""
       - "&eClick to create!"
     row: 2
-    column: 3
+    column: 2
     left-click:
       - id: player_command
         args:
@@ -54,7 +54,7 @@ slots:
       - ""
       - "&eClick to travel!"
     row: 2
-    column: 5
+    column: 4
     left-click:
       - id: player_command
         args:
@@ -66,11 +66,24 @@ slots:
       - ""
       - "&eClick to browse!"
     row: 2
-    column: 7
+    column: 6
     left-click:
       - id: open_menu
         args:
           menu: visit
+
+  - item: nether_star name:"&6&lIsland Level"
+    lore:
+      - "&7View your island level and"
+      - "&7the server leaderboard."
+      - ""
+      - "&eClick to view!"
+    row: 2
+    column: 8
+    left-click:
+      - id: open_menu
+        args:
+          menu: level
 
   # ── progression & management ──
   - item: nether_star name:"&d&lProfiles"

@@ -9,6 +9,7 @@ import com.mystipixel.royalskyblock.island.IslandManager;
 import com.mystipixel.royalskyblock.island.NoOpSchematics;
 import com.mystipixel.royalskyblock.island.SchematicService;
 import com.mystipixel.royalskyblock.island.WorldEditSchematics;
+import com.mystipixel.royalskyblock.level.LevelService;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
@@ -48,6 +49,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private GamemodeManager gamemodeManager;
     private CurrencyService currencyService;
     private UpgradeManager upgradeManager;
+    private LevelService levelService;
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
     private GuiManager guiManager;
@@ -84,6 +86,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.gamemodeManager = new GamemodeManager(this);
         this.currencyService = new CurrencyService(this);
         this.upgradeManager = new UpgradeManager(this);
+        this.levelService = new LevelService(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.guiManager = new GuiManager(this);
 
@@ -138,11 +141,16 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         gamemodeManager.reload();
         currencyService.reload();
         upgradeManager.reload();
+        levelService.reload();
         guiManager.reload();
     }
 
     public UpgradeManager upgrades() {
         return upgradeManager;
+    }
+
+    public LevelService levels() {
+        return levelService;
     }
 
     public GamemodeManager gamemodes() {

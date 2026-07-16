@@ -1,0 +1,78 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Island Levels
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Your island's level is its total block points ÷ points-per-level. Only the
+#  blocks listed under `blocks:` count — everything else (dirt, air, cobble) is
+#  free weight. Add or retune values freely; reload with /is reload.
+#
+#  Performance: a scan snapshots the island's chunks a few at a time (spreading the
+#  main-thread cost) and then tallies blocks off the main thread, so even a maxed
+#  island won't lag the server. Tune the `scan:` knobs below if you want it gentler
+#  or faster. Leaderboard (/is top) reads stored levels — it never scans live.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# How many block points equal one island level.
+points-per-level: 100
+
+scan:
+  # Vertical band to scan. Islands sit around y=100; a narrow band = a faster scan.
+  min-y: 40
+  max-y: 200
+  # Chunks snapshotted per server tick while gathering. Lower = gentler on the main
+  # thread but a slightly longer scan. 4 is a safe default.
+  chunks-per-tick: 4
+  # Minimum seconds between recalculations of the same island (anti-spam / anti-lag).
+  recalc-cooldown-seconds: 60
+
+# ── Block values ────────────────────────────────────────────────────────────────
+# One line per block: MATERIAL: points. Grouped only for readability — order and
+# grouping don't matter to the plugin.
+blocks:
+
+  # Mineral & storage blocks
+  diamond_block: 100
+  emerald_block: 120
+  netherite_block: 500
+  gold_block: 60
+  iron_block: 40
+  redstone_block: 12
+  lapis_block: 12
+  coal_block: 8
+  copper_block: 8
+  amethyst_block: 25
+
+  # Ores (in the ground)
+  diamond_ore: 40
+  deepslate_diamond_ore: 45
+  emerald_ore: 50
+  deepslate_emerald_ore: 55
+  gold_ore: 20
+  deepslate_gold_ore: 22
+  iron_ore: 12
+  deepslate_iron_ore: 14
+  ancient_debris: 120
+
+  # Valuables & decoration
+  beacon: 300
+  netherite_scrap: 0
+  enchanting_table: 40
+  ender_chest: 25
+  bookshelf: 6
+  glowstone: 4
+  sea_lantern: 6
+  shroomlight: 6
+
+  # Farm & nature (cheap, but reward big builds)
+  hay_block: 2
+  bee_nest: 15
+  beehive: 10
+  oak_log: 1
+  spruce_log: 1
+  birch_log: 1
+  jungle_log: 1
+  acacia_log: 1
+  dark_oak_log: 1
+  mangrove_log: 1
+  cherry_log: 1
+  pumpkin: 1
+  melon: 1

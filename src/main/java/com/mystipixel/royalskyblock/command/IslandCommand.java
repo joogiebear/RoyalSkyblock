@@ -56,6 +56,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
             case "manage" -> handleManage(sender);
+            case "level" -> handleLevel(sender, args);
+            case "top" -> handleTop(sender);
             case "settings" -> handleSettings(sender);
             case "upgrade", "upgrades" -> handleUpgrades(sender);
             case "sethome", "setspawn" -> handleSetSpawn(sender, false);
@@ -542,6 +544,46 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.MANAGE);
     }
 
+    /** {@code /is level} opens the level menu; {@code /is level recalc} triggers a fresh scan. */
+    private void handleLevel(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        Island island = islandOf(player);
+        if (island == null) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        if (args.length >= 2 && args[1].equalsIgnoreCase("recalc")) {
+            if (plugin.getServer().getWorld(island.worldName()) == null) {
+                plugin.messages().send(player, "island.world-not-loaded");
+                return;
+            }
+            long cooldown = plugin.levels().cooldownRemaining(island);
+            if (cooldown > 0) {
+                plugin.messages().send(player, "level.cooldown", "seconds", String.valueOf(cooldown));
+                return;
+            }
+            plugin.messages().send(player, "level.scanning");
+            plugin.levels().recalc(island).whenComplete((level, error) -> onMain(() -> {
+                plugin.messages().send(player, "level.done", "level",
+                        String.valueOf(level == null ? (int) island.level() : level.intValue()));
+                plugin.gui().open(player, GuiManager.LEVEL);
+            }));
+            return;
+        }
+        plugin.gui().open(player, GuiManager.LEVEL);
+    }
+
+    private void handleTop(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        plugin.gui().open(player, GuiManager.TOP);
+    }
+
     // ── admin / spike diagnostics ────────────────────────────────────────────────
 
     private void handleAdmin(CommandSender sender, String[] args) {
@@ -752,6 +794,9 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         String sub = args[0].toLowerCase(Locale.ROOT);
         if (args.length == 2 && sub.equals("delete")) {
             return List.of("confirm");
+        }
+        if (args.length == 2 && sub.equals("level")) {
+            return filter(List.of("recalc"), args[1], sender);
         }
         if (args.length == 2 && (sub.equals("profile") || sub.equals("profiles"))) {
             return filter(List.of("list", "create", "switch", "delete"), args[1], sender);

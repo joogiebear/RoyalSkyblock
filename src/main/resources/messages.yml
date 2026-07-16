@@ -62,6 +62,11 @@ upgrade:
   cant-afford: "&cYou can't afford that."
   no-permission-manage: "&cOnly the island owner can buy upgrades."
 
+level:
+  scanning: "&7Scanning your island — this runs in the background."
+  done: "&aIsland level recalculated: &e%level%&a."
+  cooldown: "&cThat was scanned recently — try again in &e%seconds%s&c."
+
 profile:
   header: "&6&lYour Profiles &7(%count%/%max%)"
   line: "&8» &e%name% &7(%gamemode%)%active% &8- &7island: %has_island%"

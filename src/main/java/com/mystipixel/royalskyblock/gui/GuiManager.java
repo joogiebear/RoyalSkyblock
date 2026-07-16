@@ -8,6 +8,7 @@ import com.mystipixel.royalskyblock.hooks.EcoHook;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.island.IslandSetting;
+import com.mystipixel.royalskyblock.level.LevelConfig;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.Bukkit;
@@ -51,9 +52,11 @@ public final class GuiManager implements Listener {
     public static final String MANAGE = "manage";
     public static final String COOP = "coop";
     public static final String COOP_INVITE = "coop-invite";
+    public static final String LEVEL = "level";
+    public static final String TOP = "top";
 
     private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
-            VISIT, MANAGE, COOP, COOP_INVITE};
+            VISIT, MANAGE, COOP, COOP_INVITE, LEVEL, TOP};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -119,6 +122,14 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(COOP_INVITE)) {
             fillCoopInvite(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(LEVEL)) {
+            fillLevel(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(TOP)) {
+            fillTop(player, template, inv, holder);
             return;
         }
         if (!menuId.equals(PROFILES)) {
@@ -565,6 +576,122 @@ public final class GuiManager implements Listener {
         return item;
     }
 
+    // ── island levels ────────────────────────────────────────────────────────────
+
+    /** Fill the level menu with the biggest point contributors from the island's last scan. */
+    private void fillLevel(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        if (island == null) {
+            return;
+        }
+        LevelConfig cfg = plugin.levels().config();
+        Map<Material, Long> breakdown = plugin.levels().breakdown(island);
+        List<Integer> slots = template.contentSlots();
+        if (slots.isEmpty()) {
+            return;
+        }
+        if (breakdown.isEmpty()) {
+            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No scan yet",
+                    List.of("&7Hit Recalculate to tally", "&7your island's blocks.")));
+            return;
+        }
+        List<Map.Entry<Material, Long>> entries = new ArrayList<>(breakdown.entrySet());
+        entries.sort((a, b) -> Long.compare(b.getValue() * cfg.value(b.getKey()),
+                a.getValue() * cfg.value(a.getKey())));
+        for (int i = 0; i < entries.size() && i < slots.size(); i++) {
+            Map.Entry<Material, Long> e = entries.get(i);
+            inv.setItem(slots.get(i), levelBlockIcon(e.getKey(), e.getValue(), cfg.value(e.getKey())));
+        }
+    }
+
+    private ItemStack levelBlockIcon(Material material, long count, long unit) {
+        ItemStack item = new ItemStack(material.isItem() ? material : Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic("&a" + prettyName(material)));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Count: &f" + count));
+            lore.add(noItalic("&7Each: &e" + unit + " &7pts"));
+            lore.add(noItalic("&7Total: &e" + (count * unit) + " &7pts"));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** Fill the leaderboard with islands ranked by stored level (never scans live). */
+    private void fillTop(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
+        all.sort((a, b) -> Double.compare(b.level(), a.level()));
+        List<Integer> slots = template.contentSlots();
+        int rank = 0;
+        for (Island island : all) {
+            if (rank >= slots.size()) {
+                break;
+            }
+            Profile prof = plugin.profiles().getProfile(island.profileId());
+            if (prof == null) {
+                continue;
+            }
+            int slot = slots.get(rank++);
+            inv.setItem(slot, leaderboardIcon(rank, island, prof, ownerName(prof)));
+        }
+    }
+
+    private ItemStack leaderboardIcon(int rank, Island island, Profile prof, String ownerName) {
+        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
+        ItemMeta meta = item.getItemMeta();
+        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
+            try {
+                skull.setOwningPlayer(Bukkit.getOfflinePlayer(prof.owner()));
+            } catch (Throwable ignored) {
+                // head lookup failed — leave default
+            }
+        }
+        if (meta != null) {
+            meta.displayName(noItalic("&e&l#" + rank + " &a" + ownerName));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Level: &e" + (int) island.level()));
+            lore.add(noItalic("&7Gamemode: &f" + prof.gamemode().name().toLowerCase(Locale.ROOT)));
+            lore.add(noItalic("&7Members: &f" + prof.memberCount()));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private ItemStack infoIcon(Material material, String name, List<String> loreLines) {
+        ItemStack item = new ItemStack(material.isItem() ? material : Material.PAPER);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic(name));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            for (String line : loreLines) {
+                lore.add(noItalic(line));
+            }
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    /** "DIAMOND_BLOCK" -> "Diamond Block". */
+    private static String prettyName(Material material) {
+        String[] words = material.name().toLowerCase(Locale.ROOT).split("_");
+        StringBuilder sb = new StringBuilder();
+        for (String word : words) {
+            if (word.isEmpty()) {
+                continue;
+            }
+            if (sb.length() > 0) {
+                sb.append(' ');
+            }
+            sb.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
+        }
+        return sb.toString();
+    }
+
     private static net.kyori.adventure.text.Component noItalic(String legacy) {
         return Text.color(legacy).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
     }
@@ -574,6 +701,9 @@ public final class GuiManager implements Listener {
         Map<String, String> map = new LinkedHashMap<>();
         map.put("player", player.getName());
         map.put("has_island", String.valueOf(plugin.profiles().activeHasIsland(player)));
+        UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        map.put("island_level", island == null ? "0" : String.valueOf((int) island.level()));
         return map;
     }
 

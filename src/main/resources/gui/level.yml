@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Island Level
+# ═══════════════════════════════════════════════════════════════════════════════
+#  %island_level% is your current level. The 0 slots fill at runtime with the
+#  blocks contributing the most points (from your last scan). Recalculate runs a
+#  fresh scan (throttled so it won't lag); Leaderboard opens the /is top rankings.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
+
+title: "&6&lIsland Level"
+rows: 6
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "100000001"   # 0 = a top-contributing block (filled dynamically)
+        - "100000001"
+        - "100000001"
+        - "111111111"
+        - "111111111"
+
+slots:
+  # ── header ──
+  - item: nether_star name:"&6&lIsland Level &8» &e%island_level%"
+    lore:
+      - "&7Your island's level is its total"
+      - "&7block points ÷ points per level."
+      - ""
+      - "&7Below: your biggest contributors."
+    row: 1
+    column: 5
+
+  # ── footer ──
+  - item: clock name:"&a&lRecalculate"
+    lore:
+      - "&7Re-scan your island and update"
+      - "&7its level."
+      - ""
+      - "&eClick to recalculate!"
+    row: 6
+    column: 2
+    left-click:
+      - id: player_command
+        args:
+          command: "is level recalc"
+
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
+    row: 6
+    column: 4
+    left-click:
+      - id: open_menu
+        args:
+          menu: main
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 6
+    column: 6
+    left-click:
+      - id: close
+
+  - item: gold_ingot name:"&6&lLeaderboard"
+    lore:
+      - "&7See the top islands on the server."
+      - ""
+      - "&eClick to view!"
+    row: 6
+    column: 8
+    left-click:
+      - id: open_menu
+        args:
+          menu: top

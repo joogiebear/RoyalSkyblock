@@ -1,0 +1,66 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Island Leaderboard
+# ═══════════════════════════════════════════════════════════════════════════════
+#  The 0 slots fill at runtime with the highest-level islands (by stored level —
+#  this never scans live, so it's cheap to open). Ranked #1 first.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
+
+title: "&6&lIsland Leaderboard"
+rows: 6
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "100000001"   # 0 = a ranked island (filled dynamically)
+        - "100000001"
+        - "100000001"
+        - "111111111"
+        - "111111111"
+
+slots:
+  # ── header ──
+  - item: gold_block name:"&6&lIsland Leaderboard"
+    lore:
+      - "&7The top islands on the server,"
+      - "&7ranked by island level."
+    row: 1
+    column: 5
+
+  # ── footer ──
+  - item: nether_star name:"&a&lMy Island"
+    lore:
+      - "&7View your own island level."
+      - ""
+      - "&eClick to view!"
+    row: 6
+    column: 2
+    left-click:
+      - id: open_menu
+        args:
+          menu: level
+
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the main menu."
+    row: 6
+    column: 4
+    left-click:
+      - id: open_menu
+        args:
+          menu: main
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 6
+    column: 6
+    left-click:
+      - id: close
