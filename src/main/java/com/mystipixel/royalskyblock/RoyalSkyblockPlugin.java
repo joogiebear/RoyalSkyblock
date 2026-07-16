@@ -106,6 +106,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
+        getLogger().info("Schematic backend: " + (schematicService.isAvailable()
+                ? "WorldEdit/FAWE (.schem supported)" : "built-in generator (install WorldEdit/FAWE for .schem)"));
     }
 
     @Override
