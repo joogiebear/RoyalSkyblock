@@ -64,6 +64,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
     private GuiManager guiManager;
+    private com.mystipixel.royalskyblock.hooks.RoyalSkyblockExpansion rsbExpansion;
+    private boolean papiRegistered;
 
     /** SPIKE: which eco test-slot each player is currently on (defaults to 1). Removed once the real
      *  profile system lands. */
@@ -126,6 +128,22 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(guiManager, this);
         getServer().getPluginManager().registerEvents(borderService, this);
 
+        // PlaceholderAPI expansion (%royalskyblock_...%) for TAB / scoreboards / chat. Soft — only
+        // registers if PlaceholderAPI is installed; the level leaderboard is refreshed off-thread.
+        if (getServer().getPluginManager().isPluginEnabled("PlaceholderAPI")) {
+            this.rsbExpansion = new com.mystipixel.royalskyblock.hooks.RoyalSkyblockExpansion(this);
+            if (rsbExpansion.register()) {
+                papiRegistered = true;
+                getServer().getScheduler().runTaskTimerAsynchronously(this, () -> {
+                    try {
+                        rsbExpansion.refreshLeaderboard();
+                    } catch (Exception ex) {
+                        getLogger().warning("Placeholder leaderboard refresh failed: " + ex.getMessage());
+                    }
+                }, 20L, 60L * 20L);
+            }
+        }
+
         // Resume in-progress upgrade timers and complete any that elapsed while offline.
         upgradeManager.loadPending();
         getServer().getScheduler().runTaskTimer(this, () -> upgradeManager.tick(), 40L, 20L);
@@ -167,6 +185,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getLogger().info(" Metadata storage : " + storage);
         getLogger().info(" Perks            : " + (perkService.enabled()
                 ? "ON (" + perkService.perkCount() + " perks)" : "off (optional — enable in perks.yml)"));
+        getLogger().info(" Placeholders     : " + (papiRegistered
+                ? "registered (%royalskyblock_...%)" : "PlaceholderAPI not found"));
         getLogger().info(" ---------------------------------------------------------------");
         getLogger().info(" Configure first  : spawn.world + currencies in config.yml");
         getLogger().info(" Commands: /is help  ·  Reload: /is reload  ·  See README.md");
