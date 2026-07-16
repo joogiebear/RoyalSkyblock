@@ -27,11 +27,11 @@ pages:
         - "111111111"
 
 slots:
-  # ── coop bank ──
-  - item: gold_ingot name:"&6&lCoop Bank"
+  # ── bank ──
+  - item: gold_ingot name:"&6&lBank"
     lore:
-      - "&7A shared balance for the coop."
-      - "&7Deposit and withdraw together."
+      - "&7Your personal bank and the"
+      - "&7shared coop bank."
       - ""
       - "&eClick to open!"
     row: 5
@@ -39,7 +39,7 @@ slots:
     left-click:
       - id: open_menu
         args:
-          menu: coop-bank
+          menu: bank-hub
 
   # ── footer ──
   - item: lime_dye name:"&a&lInvite Player"

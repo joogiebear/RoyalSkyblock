@@ -171,6 +171,12 @@ public final class Storage {
         addColumnIfMissing("islands", "guest_home", (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT ''");
         addColumnIfMissing("islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
         addColumnIfMissing("islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        // Per-profile personal bank snapshot (only used when RoyalBank is the backend).
+        addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
+        addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
+        addColumnIfMissing("profile_data", "bank_level", integer + " NOT NULL DEFAULT 1");
+        addColumnIfMissing("profile_data", "bank_last_interest", big + " NOT NULL DEFAULT 0");
+        addColumnIfMissing("profile_data", "bank_bonus", integer + " NOT NULL DEFAULT 0");
     }
 
     /** Best-effort ADD COLUMN; ignores the "already exists" error so it's safe to run every boot. */
@@ -599,6 +605,54 @@ public final class Storage {
             plugin.getLogger().severe("Could not load coop bank " + profileId + ": " + e.getMessage());
             return 0.0;
         }
+    }
+
+    // ── per-profile personal bank snapshot ─────────────────────────────────────────
+
+    public void saveBankSnapshot(UUID profileId, UUID player, com.mystipixel.royalskyblock.bank.BankSnapshotState s) {
+        String sql = mysql()
+                ? "INSERT INTO profile_data (profile_id, player_uuid, bank_saved, bank_balance, bank_level, bank_last_interest, bank_bonus) "
+                + "VALUES (?,?,1,?,?,?,?) ON DUPLICATE KEY UPDATE bank_saved=1, bank_balance=VALUES(bank_balance), "
+                + "bank_level=VALUES(bank_level), bank_last_interest=VALUES(bank_last_interest), bank_bonus=VALUES(bank_bonus)"
+                : "INSERT INTO profile_data (profile_id, player_uuid, bank_saved, bank_balance, bank_level, bank_last_interest, bank_bonus) "
+                + "VALUES (?,?,1,?,?,?,?) ON CONFLICT(profile_id, player_uuid) DO UPDATE SET bank_saved=1, bank_balance=excluded.bank_balance, "
+                + "bank_level=excluded.bank_level, bank_last_interest=excluded.bank_last_interest, bank_bonus=excluded.bank_bonus";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, profileId.toString());
+            st.setString(2, player.toString());
+            st.setDouble(3, s.balance());
+            st.setInt(4, s.level());
+            st.setLong(5, s.lastInterest());
+            st.setInt(6, s.bonus() ? 1 : 0);
+            st.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not save bank snapshot " + profileId + "/" + player + ": " + e.getMessage());
+        }
+    }
+
+    /** The stored per-profile bank snapshot, or {@code null} if this profile has never saved one. */
+    public com.mystipixel.royalskyblock.bank.@Nullable BankSnapshotState getBankSnapshot(UUID profileId, UUID player) {
+        String sql = "SELECT bank_saved, bank_balance, bank_level, bank_last_interest, bank_bonus "
+                + "FROM profile_data WHERE profile_id = ? AND player_uuid = ?";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, profileId.toString());
+            st.setString(2, player.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                if (rs.next() && rs.getInt("bank_saved") != 0) {
+                    return new com.mystipixel.royalskyblock.bank.BankSnapshotState(
+                            rs.getDouble("bank_balance"), rs.getInt("bank_level"),
+                            rs.getLong("bank_last_interest"), rs.getInt("bank_bonus") != 0);
+                }
+                return null;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load bank snapshot " + profileId + "/" + player + ": " + e.getMessage());
+            return null;
+        }
+    }
+
+    public boolean hasBankSnapshot(UUID profileId, UUID player) {
+        return getBankSnapshot(profileId, player) != null;
     }
 
     public boolean saveCoopBankBalance(UUID profileId, double balance) {

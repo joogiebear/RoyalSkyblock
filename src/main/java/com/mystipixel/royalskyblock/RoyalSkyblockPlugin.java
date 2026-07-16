@@ -1,7 +1,9 @@
 package com.mystipixel.royalskyblock;
 
 import com.mystipixel.royalskyblock.bank.CoopBank;
-import com.mystipixel.royalskyblock.bank.RoyalBankCoopBank;
+import com.mystipixel.royalskyblock.bank.NoOpPersonalSync;
+import com.mystipixel.royalskyblock.bank.PersonalBankSync;
+import com.mystipixel.royalskyblock.bank.RoyalBankHook;
 import com.mystipixel.royalskyblock.bank.VaultCoopBank;
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.currency.CurrencyService;
@@ -55,6 +57,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private UpgradeManager upgradeManager;
     private LevelService levelService;
     private CoopBank coopBank;
+    private PersonalBankSync personalBank;
     private VaultHook vaultHook; // wallet lookups for coop-bank "deposit all"
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
@@ -95,7 +98,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.levelService = new LevelService(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.vaultHook = resolveVault();
-        this.coopBank = createCoopBank();
+        createBankBackends();
         this.guiManager = new GuiManager(this);
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
@@ -198,26 +201,35 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         return coopBank;
     }
 
+    public PersonalBankSync personalBank() {
+        return personalBank;
+    }
+
     /**
-     * Pick the coop-bank backend: RoyalBank's shared-account API when RoyalBank is installed (guarded so
-     * its classes are only linked when present), else a Vault-backed store owned by RoyalSkyblock.
+     * Pick the bank backends: RoyalBank's id-keyed accounts (full coop bank + per-profile personal bank
+     * swap) when RoyalBank is installed — guarded so its classes only link when present — else a
+     * Vault-backed coop store and a no-op personal sync.
      */
-    private CoopBank createCoopBank() {
+    private void createBankBackends() {
         if (getServer().getPluginManager().getPlugin("RoyalBank") != null) {
             try {
                 Class.forName("com.mystipixel.royalbank.api.RoyalBankAPI", false, getClass().getClassLoader());
-                RoyalBankCoopBank hook = new RoyalBankCoopBank();
-                if (hook.available()) {
-                    getLogger().info("Coop bank backend: RoyalBank (shared accounts).");
-                    return hook;
+                RoyalBankHook hook = new RoyalBankHook();
+                if (hook.ready()) {
+                    this.coopBank = hook;
+                    this.personalBank = hook;
+                    getLogger().info("Bank backend: RoyalBank (full coop bank + per-profile personal banks).");
+                    return;
                 }
             } catch (Throwable notRoyalBank) {
                 // RoyalBank present but API missing/older — fall through to Vault.
             }
         }
-        getLogger().info("Coop bank backend: " + (vaultHook != null && vaultHook.isReady()
-                ? "Vault (RoyalSkyblock-owned balances)." : "unavailable (install Vault or RoyalBank)."));
-        return new VaultCoopBank(this, vaultHook);
+        this.coopBank = new VaultCoopBank(this, vaultHook);
+        this.personalBank = new NoOpPersonalSync();
+        getLogger().info("Bank backend: " + (vaultHook != null && vaultHook.isReady()
+                ? "Vault coop vault (no RoyalBank — personal banks not per-profile, coop bank has no upgrades)."
+                : "unavailable (install Vault or RoyalBank)."));
     }
 
     /** The player's Vault wallet balance (0 if no economy). Used by the coop-bank "deposit all" button. */

@@ -119,6 +119,7 @@ coop:
 bank:
   deposited: "&aDeposited &e%amount% &ainto the coop bank."
   withdrew: "&aWithdrew &e%amount% &afrom the coop bank."
+  upgraded: "&aThe coop bank was upgraded!"
   empty-purse: "&cYou have no money to deposit."
   empty: "&cThe coop bank is empty."
   not-coop: "&cYou need to be on a Coop profile to use the coop bank."

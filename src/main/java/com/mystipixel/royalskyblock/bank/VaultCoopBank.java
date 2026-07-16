@@ -4,13 +4,13 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.hooks.VaultHook;
 import org.bukkit.entity.Player;
 
+import java.util.List;
 import java.util.UUID;
 
 /**
- * Fallback coop bank used when RoyalBank isn't installed: the balance lives in RoyalSkyblock's own
- * {@code coop_banks} table and moves to/from player purses through Vault. Each op persists first and
- * compensates (refund / claw-back) if the paired Vault or DB step fails, so money is never lost or
- * duplicated. Needs only Vault.
+ * Fallback coop bank when RoyalBank isn't installed: a balance-only vault in RoyalSkyblock's
+ * {@code coop_banks} table, moved to/from purses through Vault with refund/claw-back on failure. No
+ * levels or upgrades ({@link #supportsUpgrades()} is false) and no ledger.
  */
 public final class VaultCoopBank implements CoopBank {
 
@@ -33,8 +33,15 @@ public final class VaultCoopBank implements CoopBank {
     }
 
     @Override
-    public double balance(UUID coopId) {
-        return round(plugin.storage().getCoopBankBalance(coopId));
+    public boolean supportsUpgrades() {
+        return false;
+    }
+
+    @Override
+    public CoopAccountView view(UUID coopId, String label) {
+        double cap = plugin.getConfig().getDouble("coop.bank.max-balance", -1.0);
+        return new CoopAccountView(round(plugin.storage().getCoopBankBalance(coopId)), 0, "Basic",
+                cap < 0 ? Double.MAX_VALUE : cap);
     }
 
     @Override
@@ -63,7 +70,7 @@ public final class VaultCoopBank implements CoopBank {
             return "&cDeposit failed.";
         }
         if (!plugin.storage().saveCoopBankBalance(coopId, round(balance + charge))) {
-            vault.deposit(from, charge); // refund — the DB write failed
+            vault.deposit(from, charge);
             return "&cDeposit could not be saved; your money was refunded.";
         }
         return null;
@@ -84,10 +91,25 @@ public final class VaultCoopBank implements CoopBank {
         }
         vault.deposit(to, amount);
         if (!plugin.storage().saveCoopBankBalance(coopId, round(balance - amount))) {
-            vault.withdraw(to, amount); // claw back — the DB write failed
+            vault.withdraw(to, amount);
             return "&cWithdrawal could not be saved and was reverted; please try again.";
         }
         return null;
+    }
+
+    @Override
+    public CoopUpgrade upgradeInfo(UUID coopId, String label) {
+        return new CoopUpgrade(true, 0, "", 0.0, "None", 0.0); // no levels on the Vault fallback
+    }
+
+    @Override
+    public String upgrade(Player by, UUID coopId, String label) {
+        return "&cCoop bank upgrades need RoyalBank installed.";
+    }
+
+    @Override
+    public List<CoopTxn> transactions(UUID coopId, int limit) {
+        return List.of();
     }
 
     private static double round(double value) {

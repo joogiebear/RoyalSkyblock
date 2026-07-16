@@ -124,6 +124,11 @@ public final class ProfileManager {
             storage.setActiveProfile(uuid, active);
         }
         activeProfile.put(uuid, active);
+        // One-time migration: the player's existing (global) bank belongs to whatever profile is active
+        // now. Seed it here so load() restores it instead of resetting; other profiles start fresh.
+        if (plugin.personalBank().active() && !storage.hasBankSnapshot(active, uuid)) {
+            storage.saveBankSnapshot(active, uuid, plugin.personalBank().export(uuid));
+        }
         state.load(player, active);
     }
 

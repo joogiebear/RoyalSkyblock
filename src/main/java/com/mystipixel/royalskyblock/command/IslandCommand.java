@@ -611,11 +611,11 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         Profile active = plugin.profiles().getActiveProfile(player);
-        if (active == null || active.gamemode() != Gamemode.COOP) {
-            plugin.messages().send(player, "bank.not-coop");
-            return;
+        if (active != null && active.gamemode() == Gamemode.COOP) {
+            plugin.gui().open(player, GuiManager.BANK_HUB); // coop: choose personal vs coop bank
+        } else {
+            player.performCommand("bank"); // solo/ironman: your per-profile personal bank (native /bank)
         }
-        plugin.gui().open(player, GuiManager.COOP_BANK);
     }
 
     /** {@code /is level} opens the level menu; {@code /is level recalc} triggers a fresh scan. */

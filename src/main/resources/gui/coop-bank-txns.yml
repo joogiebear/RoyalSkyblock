@@ -1,17 +1,15 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock  ·  Coop Bank
+#  RoyalSkyblock  ·  Coop Bank — Transactions
 # ═══════════════════════════════════════════════════════════════════════════════
-#  A shared balance for the coop. Backed by RoyalBank's shared-account API when
-#  RoyalBank is installed, otherwise a Vault-backed store RoyalSkyblock owns — either
-#  way money moves through Vault. The balance header and Deposit/Withdraw buttons
-#  (amounts from coop.bank.amounts in config.yml) are placed by code; this is the frame.
+#  The 0 slots fill at runtime with the coop bank's recent ledger entries (newest
+#  first). Only available with the RoyalBank backend; the Vault fallback has no ledger.
 #
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lCoop Bank"
+title: "&6&lCoop Bank Ledger"
 rows: 6
 
 pages:
@@ -21,23 +19,22 @@ pages:
         - black_stained_glass_pane
       pattern:
         - "111111111"
-        - "111111111"
-        - "111111111"
-        - "111111111"
+        - "100000001"
+        - "100000001"
+        - "100000001"
         - "111111111"
         - "111111111"
 
 slots:
-  # ── footer (balance + deposit/withdraw buttons are placed by code) ──
   - item: arrow name:"&7« Back"
     lore:
-      - "&7Return to the bank menu."
+      - "&7Return to the coop bank."
     row: 6
     column: 4
     left-click:
       - id: open_menu
         args:
-          menu: bank-hub
+          menu: coop-bank
 
   - item: barrier name:"&c&lClose"
     lore:

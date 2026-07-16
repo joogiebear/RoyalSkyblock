@@ -1,18 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock  ·  Coop Bank
+#  RoyalSkyblock  ·  Bank
 # ═══════════════════════════════════════════════════════════════════════════════
-#  A shared balance for the coop. Backed by RoyalBank's shared-account API when
-#  RoyalBank is installed, otherwise a Vault-backed store RoyalSkyblock owns — either
-#  way money moves through Vault. The balance header and Deposit/Withdraw buttons
-#  (amounts from coop.bank.amounts in config.yml) are placed by code; this is the frame.
+#  Shown on a Coop profile: pick which bank to open. Personal Bank is your own
+#  per-profile RoyalBank account (native /bank); Coop Bank is the shared account.
 #
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lCoop Bank"
-rows: 6
+title: "&6&lBank"
+rows: 3
 
 pages:
   - page: 1
@@ -23,26 +21,49 @@ pages:
         - "111111111"
         - "111111111"
         - "111111111"
-        - "111111111"
-        - "111111111"
-        - "111111111"
 
 slots:
-  # ── footer (balance + deposit/withdraw buttons are placed by code) ──
+  - item: player_head name:"&a&lPersonal Bank"
+    lore:
+      - "&7Your own bank for this profile."
+      - "&7Deposit, withdraw, upgrade, interest."
+      - ""
+      - "&eClick to open!"
+    row: 2
+    column: 3
+    left-click:
+      - id: player_command
+        args:
+          command: "bank"
+
+  - item: gold_ingot name:"&6&lCoop Bank"
+    lore:
+      - "&7The shared coop balance."
+      - "&7Deposit together to build or buy."
+      - ""
+      - "&eClick to open!"
+    row: 2
+    column: 7
+    left-click:
+      - id: open_menu
+        args:
+          menu: coop-bank
+
+  # ── footer ──
   - item: arrow name:"&7« Back"
     lore:
-      - "&7Return to the bank menu."
-    row: 6
+      - "&7Return to Coop Members."
+    row: 3
     column: 4
     left-click:
       - id: open_menu
         args:
-          menu: bank-hub
+          menu: coop
 
   - item: barrier name:"&c&lClose"
     lore:
       - "&7Close this menu."
-    row: 6
+    row: 3
     column: 6
     left-click:
       - id: close

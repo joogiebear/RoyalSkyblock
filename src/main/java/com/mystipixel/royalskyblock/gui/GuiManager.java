@@ -1,7 +1,10 @@
 package com.mystipixel.royalskyblock.gui;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.bank.CoopAccountView;
 import com.mystipixel.royalskyblock.bank.CoopBank;
+import com.mystipixel.royalskyblock.bank.CoopTxn;
+import com.mystipixel.royalskyblock.bank.CoopUpgrade;
 import com.mystipixel.royalskyblock.gui.menu.MenuEffect;
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot;
 import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
@@ -54,12 +57,14 @@ public final class GuiManager implements Listener {
     public static final String COOP = "coop";
     public static final String COOP_INVITE = "coop-invite";
     public static final String COOP_MEMBER = "coop-member";
+    public static final String BANK_HUB = "bank-hub";
     public static final String COOP_BANK = "coop-bank";
+    public static final String COOP_BANK_TXNS = "coop-bank-txns";
     public static final String LEVEL = "level";
     public static final String TOP = "top";
 
     private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
-            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, COOP_BANK, LEVEL, TOP};
+            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, BANK_HUB, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -141,6 +146,10 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(COOP_BANK)) {
             fillCoopBank(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(COOP_BANK_TXNS)) {
+            fillCoopBankTxns(player, template, inv, holder);
             return;
         }
         if (menuId.equals(LEVEL)) {
@@ -577,9 +586,9 @@ public final class GuiManager implements Listener {
         UUID coopId = profile.id();
         String label = profile.name();
         CoopBank bank = plugin.coopBank();
-        double balance = bank.balance(coopId);
+        CoopAccountView acct = bank.view(coopId, label);
 
-        inv.setItem(4, coopBankHeaderIcon(profile, balance, bank)); // header (row 1, col 5)
+        inv.setItem(4, coopBankHeaderIcon(profile, acct, bank)); // header (row 1, col 5)
         if (!bank.available()) {
             return; // no economy — header explains, no buttons
         }
@@ -624,7 +633,7 @@ public final class GuiManager implements Listener {
             inv.setItem(34, infoIcon(Material.GOLD_BLOCK, "&6&lWithdraw All",
                     List.of("&7Withdraw the whole coop", "&7balance to your purse.", "", "&eClick to withdraw!")));
             holder.putAction(34, (viewer, right) -> {
-                long amount = (long) Math.floor(bank.balance(coopId));
+                long amount = (long) Math.floor(bank.view(coopId, label).balance());
                 if (amount < 1) {
                     plugin.messages().send(viewer, "bank.empty");
                     open(viewer, COOP_BANK);
@@ -633,6 +642,87 @@ public final class GuiManager implements Listener {
                 runBank(viewer, coopId, label, amount, false);
             });
         }
+
+        // upgrade (row 5, col 4) — only when the backend has levels
+        if (bank.supportsUpgrades()) {
+            CoopUpgrade up = bank.upgradeInfo(coopId, label);
+            inv.setItem(39, coopUpgradeIcon(up));
+            if (!up.maxed()) {
+                holder.putAction(39, (viewer, right) -> {
+                    String error = bank.upgrade(viewer, coopId, label);
+                    if (error != null) {
+                        viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+                    } else {
+                        plugin.messages().send(viewer, "bank.upgraded");
+                    }
+                    open(viewer, COOP_BANK);
+                });
+            }
+        }
+
+        // transactions (row 5, col 6)
+        inv.setItem(41, infoIcon(Material.BOOK, "&e&lTransactions",
+                List.of("&7Recent coop bank activity.", "", "&eClick to view!")));
+        holder.putAction(41, (viewer, right) -> open(viewer, COOP_BANK_TXNS));
+    }
+
+    private ItemStack coopUpgradeIcon(CoopUpgrade up) {
+        if (up.maxed()) {
+            return infoIcon(Material.NETHER_STAR, "&a&lBank Maxed",
+                    List.of("&7This coop bank is at the", "&7highest level."));
+        }
+        List<String> lore = new ArrayList<>();
+        lore.add("&7Next: &f" + up.nextName());
+        lore.add("&7Cost: &e" + fmtCoins(up.moneyCost()));
+        if (up.itemsText() != null && !up.itemsText().isEmpty() && !up.itemsText().equalsIgnoreCase("None")) {
+            lore.add("&7Items: &f" + up.itemsText());
+        }
+        lore.add("&7New max balance: &f" + fmtCoins(up.nextMaxBalance()));
+        lore.add("");
+        lore.add("&eClick to upgrade!");
+        return infoIcon(Material.ANVIL, "&6&lUpgrade Coop Bank", lore);
+    }
+
+    private void fillCoopBankTxns(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        Profile profile = plugin.profiles().getActiveProfile(player);
+        if (profile == null) {
+            return;
+        }
+        List<Integer> slots = template.contentSlots();
+        if (slots.isEmpty()) {
+            return;
+        }
+        List<CoopTxn> txns = plugin.coopBank().transactions(profile.id(), slots.size());
+        if (txns.isEmpty()) {
+            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No transactions yet",
+                    List.of("&7Coop bank deposits, withdrawals,", "&7and upgrades will show here.")));
+            return;
+        }
+        for (int i = 0; i < txns.size() && i < slots.size(); i++) {
+            inv.setItem(slots.get(i), txnIcon(txns.get(i)));
+        }
+    }
+
+    private ItemStack txnIcon(CoopTxn t) {
+        Material material = switch (t.type()) {
+            case "COOP_DEPOSIT" -> Material.LIME_DYE;
+            case "COOP_WITHDRAW" -> Material.GOLD_NUGGET;
+            case "COOP_UPGRADE" -> Material.ANVIL;
+            default -> Material.PAPER;
+        };
+        String verb = switch (t.type()) {
+            case "COOP_DEPOSIT" -> "&aDeposit";
+            case "COOP_WITHDRAW" -> "&6Withdraw";
+            case "COOP_UPGRADE" -> "&bUpgrade";
+            default -> "&7" + t.type();
+        };
+        List<String> lore = new ArrayList<>();
+        lore.add("&7Amount: &e" + fmtCoins(t.amount()));
+        lore.add("&7Balance after: &f" + fmtCoins(t.balanceAfter()));
+        if (t.note() != null && !t.note().isEmpty()) {
+            lore.add("&8" + t.note());
+        }
+        return infoIcon(material, verb + " &7(" + fmtCoins(t.amount()) + ")", lore);
     }
 
     private void runBank(Player viewer, UUID coopId, String label, long amount, boolean deposit) {
@@ -647,13 +737,17 @@ public final class GuiManager implements Listener {
         open(viewer, COOP_BANK);
     }
 
-    private ItemStack coopBankHeaderIcon(Profile profile, double balance, CoopBank bank) {
+    private ItemStack coopBankHeaderIcon(Profile profile, CoopAccountView acct, CoopBank bank) {
         ItemStack item = new ItemStack(Material.GOLD_INGOT);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(noItalic("&6&l" + profile.name() + " &7Bank"));
             List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Balance: &e" + fmtCoins(balance)));
+            lore.add(noItalic("&7Balance: &e" + fmtCoins(acct.balance())));
+            if (bank.supportsUpgrades()) {
+                lore.add(noItalic("&7Level: &f" + acct.level() + " &8- " + acct.levelName()));
+                lore.add(noItalic("&7Max balance: &f" + fmtCoins(acct.maxBalance())));
+            }
             if (!bank.available()) {
                 lore.add(noItalic(""));
                 lore.add(noItalic("&cNo economy plugin — banking disabled."));
