@@ -35,7 +35,6 @@ home:
 
 visit:
   no-permission: "&cYou don't have permission to visit islands."
-  usage: "&cUsage: &e/is visit <player>"
   no-target-island: "&c%player% doesn't have an island."
   visiting: "&aVisiting &e%player%&a's island."
   private: "&e%player%&c's island is private — only members can visit."
@@ -46,7 +45,6 @@ delete:
   warning: "&c&lWarning: &7this permanently deletes your island and everything on it."
   confirm-hint: "&7Type &e/is delete confirm &7to proceed."
   deleting: "&7Deleting your island..."
-  not-owner: "&cYou don't own an island to delete."
   deleted: "&aYour island has been deleted."
   failed: "&cCouldn't delete your island: &7%error%"
   evicted: "&eThe island you were on has been deleted."
@@ -62,7 +60,6 @@ upgrade:
   in-progress: "&r%upgrade% &7is already upgrading — &e%time% &7left."
   not-in-progress: "&7There's no upgrade in progress to skip."
   cant-afford: "&cYou can't afford that."
-  no-permission-manage: "&cOnly the island owner can buy upgrades."
 
 level:
   scanning: "&7Scanning your island — this runs in the background."
@@ -89,7 +86,6 @@ profile:
   blocked-command: "&cThat command is disabled on your &e%gamemode% &cprofile."
 
 coop:
-  invite-usage: "&cUsage: &e/is invite <player>"
   invite-sent: "&aInvited &e%player% &ato your coop island."
   invite-received: "&e%player% &7invited you to their coop island."
   invite-accept-button: "&a&l[✔ Accept]"
@@ -107,8 +103,6 @@ coop:
   you-were-kicked: "&cYou were removed from the coop profile."
   left: "&aYou left the coop profile."
   leave-error: "&c%error%"
-  members-header: "&6&lMembers &7(%count%/%max%)"
-  members-line: "&8» &e%player% &7- %role%"
   promoted: "&aPromoted &e%player% &ato co-owner."
   demoted: "&e%player% &7is now a regular member."
   transferred: "&aOwnership transferred to &e%player%&a. You're now a co-owner."
@@ -125,7 +119,6 @@ bank:
   interest: "&aInterest claimed into your bank."
   empty-purse: "&cYou have no money to deposit."
   empty: "&cThe coop bank is empty."
-  not-coop: "&cYou need to be on a Coop profile to use the coop bank."
 
 help:
   header: "&6&l✦ RoyalSkyblock"
