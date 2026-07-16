@@ -271,7 +271,7 @@ public final class IslandManager {
     private void applyBorder(World world, Island island) {
         // Borders are enforced per-player (so admins with royalskyblock.bypass can pass through); the
         // world's own border is kept wide open so it never enforces anyone. See BorderService.
-        world.getWorldBorder().setSize(60_000_000.0);
+        world.getWorldBorder().setSize(59_999_968.0); // Bukkit's max world-border size
         plugin.borders().applyToWorld(world);
     }
 

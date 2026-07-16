@@ -234,7 +234,7 @@ public final class UpgradeManager {
             return;
         }
         // Size changed — refresh the per-player borders for everyone on the island (see BorderService).
-        world.getWorldBorder().setSize(60_000_000.0);
+        world.getWorldBorder().setSize(59_999_968.0); // Bukkit's max world-border size
         plugin.borders().applyToWorld(world);
     }
 
