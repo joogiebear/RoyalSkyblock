@@ -115,6 +115,24 @@ coop:
   # How long a coop invite stays valid before it expires.
   invite-timeout-seconds: 60
 
+# ── Currencies (used by upgrade costs) ────────────────────────────────────────
+# Define named currencies; upgrades reference them by key. Two kinds:
+#   type: vault    -> your server's Vault economy (works with any economy plugin)
+#   type: command  -> universal: read the balance from a PlaceholderAPI placeholder for the
+#                     affordability check, and charge with a console command. %player% and %amount%
+#                     are substituted. Works with EcoBits gems, any currency plugin, even block/item
+#                     costs (via a command that removes them).
+currencies:
+  coins:
+    type: vault
+    display-name: "coins"
+  gems:
+    type: command
+    display-name: "gems"
+    balance-placeholder: "%ecobits_gems%"
+    take-command: "ecobits remove %player% %amount% gems"
+    give-command: "ecobits give %player% %amount% gems"
+
 # ── Spawn / hub (where players go when they leave or lose an island) ──────────
 # When a player's island is deleted (and later: when they leave one, or an island
 # unloads out from under them), they are sent here. Point `world` at whatever world
