@@ -154,9 +154,14 @@ public final class Storage {
                         + "exp_level " + integer + " NOT NULL DEFAULT 0, exp_progress " + flt + " NOT NULL DEFAULT 0, "
                         + "health " + dbl + " NOT NULL DEFAULT 20, food " + integer + " NOT NULL DEFAULT 20, "
                         + "saturation " + flt + " NOT NULL DEFAULT 5, PRIMARY KEY (profile_id, player_uuid))",
-                // Vault-backed coop bank balances (only used when RoyalBank isn't the backend).
-                "CREATE TABLE IF NOT EXISTS coop_banks ("
-                        + "profile_id " + txt36 + " PRIMARY KEY, balance " + dbl + " NOT NULL DEFAULT 0)"
+                // Native bank: accounts keyed by an opaque id (personal per-profile or shared coop).
+                "CREATE TABLE IF NOT EXISTS bank_accounts ("
+                        + "account_id " + txt + " PRIMARY KEY, balance " + dbl + " NOT NULL DEFAULT 0, "
+                        + "level " + integer + " NOT NULL DEFAULT 1, last_interest " + big + " NOT NULL DEFAULT 0)",
+                "CREATE TABLE IF NOT EXISTS bank_txns ("
+                        + "id " + (mysql() ? "BIGINT PRIMARY KEY AUTO_INCREMENT" : "INTEGER PRIMARY KEY AUTOINCREMENT")
+                        + ", account_id " + txt + " NOT NULL, type " + txt32 + " NOT NULL, amount " + dbl + " NOT NULL, "
+                        + "balance_after " + dbl + " NOT NULL, created_at " + big + " NOT NULL, note " + txt + " NOT NULL DEFAULT '')"
         };
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
             for (String q : ddl) {
@@ -592,82 +597,83 @@ public final class Storage {
         }
     }
 
-    // ── coop bank (Vault-backed fallback) ──────────────────────────────────────────
+    // ── native bank ────────────────────────────────────────────────────────────────
 
-    public double getCoopBankBalance(UUID profileId) {
-        try (Connection c = dataSource.getConnection();
-             PreparedStatement st = c.prepareStatement("SELECT balance FROM coop_banks WHERE profile_id = ?")) {
-            st.setString(1, profileId.toString());
+    public com.mystipixel.royalskyblock.bank.@Nullable BankAccount getBankAccount(String accountId) {
+        String sql = "SELECT balance, level, last_interest FROM bank_accounts WHERE account_id = ?";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, accountId);
             try (ResultSet rs = st.executeQuery()) {
-                return rs.next() ? rs.getDouble("balance") : 0.0;
+                return rs.next() ? new com.mystipixel.royalskyblock.bank.BankAccount(
+                        accountId, rs.getDouble("balance"), rs.getInt("level"), rs.getLong("last_interest")) : null;
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load coop bank " + profileId + ": " + e.getMessage());
-            return 0.0;
-        }
-    }
-
-    // ── per-profile personal bank snapshot ─────────────────────────────────────────
-
-    public void saveBankSnapshot(UUID profileId, UUID player, com.mystipixel.royalskyblock.bank.BankSnapshotState s) {
-        String sql = mysql()
-                ? "INSERT INTO profile_data (profile_id, player_uuid, bank_saved, bank_balance, bank_level, bank_last_interest, bank_bonus) "
-                + "VALUES (?,?,1,?,?,?,?) ON DUPLICATE KEY UPDATE bank_saved=1, bank_balance=VALUES(bank_balance), "
-                + "bank_level=VALUES(bank_level), bank_last_interest=VALUES(bank_last_interest), bank_bonus=VALUES(bank_bonus)"
-                : "INSERT INTO profile_data (profile_id, player_uuid, bank_saved, bank_balance, bank_level, bank_last_interest, bank_bonus) "
-                + "VALUES (?,?,1,?,?,?,?) ON CONFLICT(profile_id, player_uuid) DO UPDATE SET bank_saved=1, bank_balance=excluded.bank_balance, "
-                + "bank_level=excluded.bank_level, bank_last_interest=excluded.bank_last_interest, bank_bonus=excluded.bank_bonus";
-        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
-            st.setString(1, profileId.toString());
-            st.setString(2, player.toString());
-            st.setDouble(3, s.balance());
-            st.setInt(4, s.level());
-            st.setLong(5, s.lastInterest());
-            st.setInt(6, s.bonus() ? 1 : 0);
-            st.executeUpdate();
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save bank snapshot " + profileId + "/" + player + ": " + e.getMessage());
-        }
-    }
-
-    /** The stored per-profile bank snapshot, or {@code null} if this profile has never saved one. */
-    public com.mystipixel.royalskyblock.bank.@Nullable BankSnapshotState getBankSnapshot(UUID profileId, UUID player) {
-        String sql = "SELECT bank_saved, bank_balance, bank_level, bank_last_interest, bank_bonus "
-                + "FROM profile_data WHERE profile_id = ? AND player_uuid = ?";
-        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
-            st.setString(1, profileId.toString());
-            st.setString(2, player.toString());
-            try (ResultSet rs = st.executeQuery()) {
-                if (rs.next() && rs.getInt("bank_saved") != 0) {
-                    return new com.mystipixel.royalskyblock.bank.BankSnapshotState(
-                            rs.getDouble("bank_balance"), rs.getInt("bank_level"),
-                            rs.getLong("bank_last_interest"), rs.getInt("bank_bonus") != 0);
-                }
-                return null;
-            }
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load bank snapshot " + profileId + "/" + player + ": " + e.getMessage());
+            plugin.getLogger().severe("Could not load bank account " + accountId + ": " + e.getMessage());
             return null;
         }
     }
 
-    public boolean hasBankSnapshot(UUID profileId, UUID player) {
-        return getBankSnapshot(profileId, player) != null;
-    }
-
-    public boolean saveCoopBankBalance(UUID profileId, double balance) {
-        String sql = mysql()
-                ? "INSERT INTO coop_banks (profile_id, balance) VALUES (?,?) ON DUPLICATE KEY UPDATE balance=VALUES(balance)"
-                : "INSERT INTO coop_banks (profile_id, balance) VALUES (?,?) ON CONFLICT(profile_id) DO UPDATE SET balance=excluded.balance";
-        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
-            st.setString(1, profileId.toString());
-            st.setDouble(2, balance);
-            st.executeUpdate();
-            return true;
+    /** Atomically upsert an account and append its ledger row — balance and ledger never diverge. */
+    public boolean saveBankAccountWithTxn(com.mystipixel.royalskyblock.bank.BankAccount account,
+                                          String type, double amount, double balanceAfter, String note) {
+        String upsert = mysql()
+                ? "INSERT INTO bank_accounts (account_id, balance, level, last_interest) VALUES (?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE balance=VALUES(balance), level=VALUES(level), last_interest=VALUES(last_interest)"
+                : "INSERT INTO bank_accounts (account_id, balance, level, last_interest) VALUES (?,?,?,?) "
+                + "ON CONFLICT(account_id) DO UPDATE SET balance=excluded.balance, level=excluded.level, last_interest=excluded.last_interest";
+        String txn = "INSERT INTO bank_txns (account_id, type, amount, balance_after, created_at, note) VALUES (?,?,?,?,?,?)";
+        try (Connection c = dataSource.getConnection()) {
+            boolean auto = c.getAutoCommit();
+            c.setAutoCommit(false);
+            try {
+                try (PreparedStatement st = c.prepareStatement(upsert)) {
+                    st.setString(1, account.id());
+                    st.setDouble(2, account.balance());
+                    st.setInt(3, account.level());
+                    st.setLong(4, account.lastInterest());
+                    st.executeUpdate();
+                }
+                try (PreparedStatement st = c.prepareStatement(txn)) {
+                    st.setString(1, account.id());
+                    st.setString(2, type);
+                    st.setDouble(3, amount);
+                    st.setDouble(4, balanceAfter);
+                    st.setLong(5, java.time.Instant.now().getEpochSecond());
+                    st.setString(6, note == null ? "" : note);
+                    st.executeUpdate();
+                }
+                c.commit();
+                return true;
+            } catch (SQLException e) {
+                try { c.rollback(); } catch (SQLException ignored) { }
+                plugin.getLogger().severe("Could not save bank account " + account.id() + ": " + e.getMessage());
+                return false;
+            } finally {
+                try { c.setAutoCommit(auto); } catch (SQLException ignored) { }
+            }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save coop bank " + profileId + ": " + e.getMessage());
+            plugin.getLogger().severe("Bank DB connection error: " + e.getMessage());
             return false;
         }
+    }
+
+    public java.util.List<com.mystipixel.royalskyblock.bank.BankTxn> getBankTransactions(String accountId, int limit) {
+        java.util.List<com.mystipixel.royalskyblock.bank.BankTxn> out = new java.util.ArrayList<>();
+        String sql = "SELECT type, amount, balance_after, created_at, note FROM bank_txns "
+                + "WHERE account_id = ? ORDER BY created_at DESC, id DESC LIMIT ?";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, accountId);
+            st.setInt(2, Math.max(1, limit));
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    out.add(new com.mystipixel.royalskyblock.bank.BankTxn(rs.getString("type"), rs.getDouble("amount"),
+                            rs.getDouble("balance_after"), rs.getLong("created_at"), rs.getString("note")));
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load bank transactions " + accountId + ": " + e.getMessage());
+        }
+        return out;
     }
 
     /** Remove a player's saved state for one profile — used when they leave/are kicked from a coop. */

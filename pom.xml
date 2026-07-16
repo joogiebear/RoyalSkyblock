@@ -119,14 +119,6 @@
             <version>7.3.6</version>
             <scope>provided</scope>
         </dependency>
-        <!-- RoyalBank shared-account API. Soft-dependency: com.mystipixel.royalbank.api.* is only
-             touched when RoyalBank is present; the coop bank falls back to a Vault-backed store otherwise. -->
-        <dependency>
-            <groupId>com.mystipixel</groupId>
-            <artifactId>royalbank</artifactId>
-            <version>2026.28.0</version>
-            <scope>provided</scope>
-        </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

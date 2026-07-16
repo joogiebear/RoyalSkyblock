@@ -1,15 +1,16 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock  ·  Coop Bank — Transactions
+#  RoyalSkyblock  ·  Personal Bank
 # ═══════════════════════════════════════════════════════════════════════════════
-#  The 0 slots fill at runtime with the coop bank's recent ledger entries (newest
-#  first). Only available with the RoyalBank backend; the Vault fallback has no ledger.
+#  Your own bank for the active profile (per-profile — a new profile starts fresh).
+#  Balance/level header + Deposit/Withdraw/Interest/Upgrade/Transactions are placed
+#  by code; this is the frame. Levels come from bank.yml.
 #
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lCoop Bank Ledger"
+title: "&6&lPersonal Bank"
 rows: 6
 
 pages:
@@ -19,18 +20,17 @@ pages:
         - black_stained_glass_pane
       pattern:
         - "111111111"
-        - "100000001"
-        - "100000001"
-        - "100000001"
+        - "111111111"
+        - "111111111"
+        - "111111111"
         - "111111111"
         - "111111111"
 
 slots:
-  # (a dynamic « Back at row 6, col 4 is placed by code — it returns to the right bank)
   - item: barrier name:"&c&lClose"
     lore:
       - "&7Close this menu."
     row: 6
-    column: 6
+    column: 5
     left-click:
       - id: close

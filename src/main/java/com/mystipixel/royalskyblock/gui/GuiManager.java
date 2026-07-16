@@ -1,10 +1,10 @@
 package com.mystipixel.royalskyblock.gui;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
-import com.mystipixel.royalskyblock.bank.CoopAccountView;
-import com.mystipixel.royalskyblock.bank.CoopBank;
-import com.mystipixel.royalskyblock.bank.CoopTxn;
-import com.mystipixel.royalskyblock.bank.CoopUpgrade;
+import com.mystipixel.royalskyblock.bank.BankAccount;
+import com.mystipixel.royalskyblock.bank.BankLevel;
+import com.mystipixel.royalskyblock.bank.BankService;
+import com.mystipixel.royalskyblock.bank.BankTxn;
 import com.mystipixel.royalskyblock.gui.menu.MenuEffect;
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot;
 import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
@@ -58,13 +58,14 @@ public final class GuiManager implements Listener {
     public static final String COOP_INVITE = "coop-invite";
     public static final String COOP_MEMBER = "coop-member";
     public static final String BANK_HUB = "bank-hub";
+    public static final String BANK_PERSONAL = "bank-personal";
     public static final String COOP_BANK = "coop-bank";
     public static final String COOP_BANK_TXNS = "coop-bank-txns";
     public static final String LEVEL = "level";
     public static final String TOP = "top";
 
     private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
-            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, BANK_HUB, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP};
+            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, BANK_HUB, BANK_PERSONAL, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -145,11 +146,15 @@ public final class GuiManager implements Listener {
             return;
         }
         if (menuId.equals(COOP_BANK)) {
-            fillCoopBank(player, template, inv, holder);
+            fillBank(player, template, inv, holder, true);
+            return;
+        }
+        if (menuId.equals(BANK_PERSONAL)) {
+            fillBank(player, template, inv, holder, false);
             return;
         }
         if (menuId.equals(COOP_BANK_TXNS)) {
-            fillCoopBankTxns(player, template, inv, holder);
+            fillBankTxns(player, template, inv, holder);
             return;
         }
         if (menuId.equals(LEVEL)) {
@@ -576,25 +581,27 @@ public final class GuiManager implements Listener {
         });
     }
 
-    // ── coop bank ────────────────────────────────────────────────────────────────
+    // ── bank (native; personal + coop share this engine) ──────────────────────────
 
-    private void fillCoopBank(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillBank(Player player, MenuTemplate template, Inventory inv, MenuHolder holder, boolean coop) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
             return;
         }
-        UUID coopId = profile.id();
-        String label = profile.name();
-        CoopBank bank = plugin.coopBank();
-        CoopAccountView acct = bank.view(coopId, label);
+        BankService bank = plugin.bank();
+        String accountId = coop ? BankService.coopId(profile.id())
+                : BankService.personalId(profile.id(), player.getUniqueId());
+        String menu = coop ? COOP_BANK : BANK_PERSONAL;
+        BankAccount acct = bank.account(accountId);
+        BankLevel level = bank.levels().effectiveLevel(acct.level());
 
-        inv.setItem(4, coopBankHeaderIcon(profile, acct, bank)); // header (row 1, col 5)
+        inv.setItem(4, bankHeaderIcon(bank, acct, level, coop ? "&6&l" + profile.name() + " Coop Bank" : "&6&lPersonal Bank"));
         if (!bank.available()) {
-            return; // no economy — header explains, no buttons
+            return; // no economy / no levels — header explains, no buttons
         }
 
         boolean canWithdraw = true;
-        if (plugin.getConfig().getBoolean("coop.bank.withdraw-requires-manager", false)) {
+        if (coop && plugin.getConfig().getBoolean("coop.bank.withdraw-requires-manager", false)) {
             IslandRole role = profile.roleOf(player.getUniqueId());
             canWithdraw = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
         }
@@ -603,151 +610,93 @@ public final class GuiManager implements Listener {
         if (amounts.isEmpty()) {
             amounts = List.of(100, 1000, 10000);
         }
-        int[] depositCols = {19, 21, 23}; // row 3, cols 2/4/6
-        int[] withdrawCols = {28, 30, 32}; // row 4, cols 2/4/6
+        int[] depositCols = {19, 21, 23};
+        int[] withdrawCols = {28, 30, 32};
         for (int i = 0; i < depositCols.length && i < amounts.size(); i++) {
             long amount = amounts.get(i);
             inv.setItem(depositCols[i], infoIcon(Material.LIME_DYE, "&a&lDeposit " + fmtCoins(amount),
-                    List.of("&7From your purse → coop bank.", "", "&eClick to deposit!")));
-            holder.putAction(depositCols[i], (viewer, right) -> runBank(viewer, coopId, label, amount, true));
+                    List.of("&7From your purse → bank.", "", "&eClick to deposit!")));
+            holder.putAction(depositCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, true));
             if (canWithdraw) {
                 inv.setItem(withdrawCols[i], infoIcon(Material.GOLD_NUGGET, "&6&lWithdraw " + fmtCoins(amount),
-                        List.of("&7From coop bank → your purse.", "", "&eClick to withdraw!")));
-                holder.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, coopId, label, amount, false));
+                        List.of("&7From bank → your purse.", "", "&eClick to withdraw!")));
+                holder.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, false));
             }
         }
-        // deposit all (row 3, col 8)
         inv.setItem(25, infoIcon(Material.LIME_WOOL, "&a&lDeposit All",
-                List.of("&7Deposit your whole purse", "&7(up to any bank cap).", "", "&eClick to deposit!")));
+                List.of("&7Deposit your whole purse", "&7(up to the level cap).", "", "&eClick to deposit!")));
         holder.putAction(25, (viewer, right) -> {
             long amount = (long) Math.floor(plugin.purseBalance(viewer));
             if (amount < 1) {
                 plugin.messages().send(viewer, "bank.empty-purse");
-                open(viewer, COOP_BANK);
+                open(viewer, menu);
                 return;
             }
-            runBank(viewer, coopId, label, amount, true);
+            runBank(viewer, accountId, menu, amount, true);
         });
-        // withdraw all (row 4, col 8)
         if (canWithdraw) {
             inv.setItem(34, infoIcon(Material.GOLD_BLOCK, "&6&lWithdraw All",
-                    List.of("&7Withdraw the whole coop", "&7balance to your purse.", "", "&eClick to withdraw!")));
+                    List.of("&7Withdraw the whole balance", "&7to your purse.", "", "&eClick to withdraw!")));
             holder.putAction(34, (viewer, right) -> {
-                long amount = (long) Math.floor(bank.view(coopId, label).balance());
+                long amount = (long) Math.floor(bank.account(accountId).balance());
                 if (amount < 1) {
                     plugin.messages().send(viewer, "bank.empty");
-                    open(viewer, COOP_BANK);
+                    open(viewer, menu);
                     return;
                 }
-                runBank(viewer, coopId, label, amount, false);
+                runBank(viewer, accountId, menu, amount, false);
             });
         }
 
-        // upgrade (row 5, col 4) — only when the backend has levels
-        if (bank.supportsUpgrades()) {
-            CoopUpgrade up = bank.upgradeInfo(coopId, label);
-            inv.setItem(39, coopUpgradeIcon(up));
-            if (!up.maxed()) {
-                holder.putAction(39, (viewer, right) -> {
-                    String error = bank.upgrade(viewer, coopId, label);
-                    if (error != null) {
-                        viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
-                    } else {
-                        plugin.messages().send(viewer, "bank.upgraded");
-                    }
-                    open(viewer, COOP_BANK);
-                });
-            }
+        // interest (row 5, col 2)
+        long remaining = bank.interestSecondsRemaining(accountId);
+        if (remaining <= 0) {
+            inv.setItem(37, infoIcon(Material.EXPERIENCE_BOTTLE, "&a&lClaim Interest",
+                    List.of("&7Interest is ready.", "", "&eClick to claim!")));
+            holder.putAction(37, (viewer, right) -> {
+                String error = bank.claimInterest(accountId);
+                if (error != null) {
+                    viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+                } else {
+                    plugin.messages().send(viewer, "bank.interest");
+                }
+                open(viewer, menu);
+            });
+        } else {
+            inv.setItem(37, infoIcon(Material.CLOCK, "&7Interest",
+                    List.of("&7Next interest in &f" + formatDuration(remaining) + "&7.")));
+        }
+
+        // upgrade (row 5, col 4)
+        inv.setItem(39, bankUpgradeIcon(bank, acct));
+        if (bank.levels().getNextLevel(acct.level()).isPresent()) {
+            holder.putAction(39, (viewer, right) -> {
+                String error = bank.upgrade(viewer, accountId);
+                if (error != null) {
+                    viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+                } else {
+                    plugin.messages().send(viewer, "bank.upgraded");
+                }
+                open(viewer, menu);
+            });
         }
 
         // transactions (row 5, col 6)
         inv.setItem(41, infoIcon(Material.BOOK, "&e&lTransactions",
-                List.of("&7Recent coop bank activity.", "", "&eClick to view!")));
-        holder.putAction(41, (viewer, right) -> open(viewer, COOP_BANK_TXNS));
+                List.of("&7Recent bank activity.", "", "&eClick to view!")));
+        holder.putAction(41, (viewer, right) -> open(viewer, COOP_BANK_TXNS, accountId));
     }
 
-    private ItemStack coopUpgradeIcon(CoopUpgrade up) {
-        if (up.maxed()) {
-            return infoIcon(Material.NETHER_STAR, "&a&lBank Maxed",
-                    List.of("&7This coop bank is at the", "&7highest level."));
-        }
-        List<String> lore = new ArrayList<>();
-        lore.add("&7Next: &f" + up.nextName());
-        lore.add("&7Cost: &e" + fmtCoins(up.moneyCost()));
-        if (up.itemsText() != null && !up.itemsText().isEmpty() && !up.itemsText().equalsIgnoreCase("None")) {
-            lore.add("&7Items: &f" + up.itemsText());
-        }
-        lore.add("&7New max balance: &f" + fmtCoins(up.nextMaxBalance()));
-        lore.add("");
-        lore.add("&eClick to upgrade!");
-        return infoIcon(Material.ANVIL, "&6&lUpgrade Coop Bank", lore);
-    }
-
-    private void fillCoopBankTxns(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
-        Profile profile = plugin.profiles().getActiveProfile(player);
-        if (profile == null) {
-            return;
-        }
-        List<Integer> slots = template.contentSlots();
-        if (slots.isEmpty()) {
-            return;
-        }
-        List<CoopTxn> txns = plugin.coopBank().transactions(profile.id(), slots.size());
-        if (txns.isEmpty()) {
-            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No transactions yet",
-                    List.of("&7Coop bank deposits, withdrawals,", "&7and upgrades will show here.")));
-            return;
-        }
-        for (int i = 0; i < txns.size() && i < slots.size(); i++) {
-            inv.setItem(slots.get(i), txnIcon(txns.get(i)));
-        }
-    }
-
-    private ItemStack txnIcon(CoopTxn t) {
-        Material material = switch (t.type()) {
-            case "COOP_DEPOSIT" -> Material.LIME_DYE;
-            case "COOP_WITHDRAW" -> Material.GOLD_NUGGET;
-            case "COOP_UPGRADE" -> Material.ANVIL;
-            default -> Material.PAPER;
-        };
-        String verb = switch (t.type()) {
-            case "COOP_DEPOSIT" -> "&aDeposit";
-            case "COOP_WITHDRAW" -> "&6Withdraw";
-            case "COOP_UPGRADE" -> "&bUpgrade";
-            default -> "&7" + t.type();
-        };
-        List<String> lore = new ArrayList<>();
-        lore.add("&7Amount: &e" + fmtCoins(t.amount()));
-        lore.add("&7Balance after: &f" + fmtCoins(t.balanceAfter()));
-        if (t.note() != null && !t.note().isEmpty()) {
-            lore.add("&8" + t.note());
-        }
-        return infoIcon(material, verb + " &7(" + fmtCoins(t.amount()) + ")", lore);
-    }
-
-    private void runBank(Player viewer, UUID coopId, String label, long amount, boolean deposit) {
-        CoopBank bank = plugin.coopBank();
-        String error = deposit ? bank.deposit(viewer, coopId, label, amount)
-                : bank.withdraw(viewer, coopId, label, amount);
-        if (error != null) {
-            viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
-        } else {
-            plugin.messages().send(viewer, deposit ? "bank.deposited" : "bank.withdrew", "amount", fmtCoins(amount));
-        }
-        open(viewer, COOP_BANK);
-    }
-
-    private ItemStack coopBankHeaderIcon(Profile profile, CoopAccountView acct, CoopBank bank) {
+    private ItemStack bankHeaderIcon(BankService bank, BankAccount acct, BankLevel level, String title) {
         ItemStack item = new ItemStack(Material.GOLD_INGOT);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(noItalic("&6&l" + profile.name() + " &7Bank"));
+            meta.displayName(noItalic(title));
             List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Balance: &e" + fmtCoins(acct.balance())));
-            if (bank.supportsUpgrades()) {
-                lore.add(noItalic("&7Level: &f" + acct.level() + " &8- " + acct.levelName()));
-                lore.add(noItalic("&7Max balance: &f" + fmtCoins(acct.maxBalance())));
-            }
+            lore.add(noItalic("&7Balance: &e" + bank.money(acct.balance())));
+            lore.add(noItalic("&7Level: &f" + level.level() + " &8- " + level.name()));
+            lore.add(noItalic("&7Max balance: &f" + bank.money(level.maxBalance())));
+            lore.add(noItalic("&7Next interest: &f" + bank.money(bank.calculateInterest(acct.balance(), level))));
             if (!bank.available()) {
                 lore.add(noItalic(""));
                 lore.add(noItalic("&cNo economy plugin — banking disabled."));
@@ -756,6 +705,88 @@ public final class GuiManager implements Listener {
             item.setItemMeta(meta);
         }
         return item;
+    }
+
+    private ItemStack bankUpgradeIcon(BankService bank, BankAccount acct) {
+        BankLevel next = bank.levels().getNextLevel(acct.level()).orElse(null);
+        if (next == null) {
+            return infoIcon(Material.NETHER_STAR, "&a&lBank Maxed",
+                    List.of("&7This bank is at the highest level."));
+        }
+        List<String> lore = new ArrayList<>();
+        lore.add("&7Next: &f" + next.name());
+        lore.add("&7Cost: &e" + bank.money(next.upgradeMoneyCost()));
+        String items = next.itemRequirements().stream()
+                .map(com.mystipixel.royalskyblock.bank.ItemRequirement::displayName)
+                .collect(java.util.stream.Collectors.joining(", "));
+        if (!items.isEmpty()) {
+            lore.add("&7Items: &f" + items);
+        }
+        lore.add("&7New max balance: &f" + bank.money(next.maxBalance()));
+        lore.add("");
+        lore.add("&eClick to upgrade!");
+        return infoIcon(Material.ANVIL, "&6&lUpgrade Bank", lore);
+    }
+
+    private void fillBankTxns(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        Profile profile = plugin.profiles().getActiveProfile(player);
+        if (profile == null) {
+            return;
+        }
+        String accountId = holder.context() != null ? holder.context()
+                : BankService.coopId(profile.id());
+        List<Integer> slots = template.contentSlots();
+        // dynamic Back (col 4, row 6) — return to the right bank menu for this account
+        String menu = accountId.startsWith("p:") ? BANK_PERSONAL : COOP_BANK;
+        inv.setItem(48, infoIcon(Material.ARROW, "&7« Back", List.of("&7Return to the bank.")));
+        holder.putAction(48, (viewer, right) -> open(viewer, menu));
+        if (slots.isEmpty()) {
+            return;
+        }
+        List<BankTxn> txns = plugin.bank().transactions(accountId, slots.size());
+        if (txns.isEmpty()) {
+            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No transactions yet",
+                    List.of("&7Deposits, withdrawals, upgrades,", "&7and interest will show here.")));
+            return;
+        }
+        for (int i = 0; i < txns.size() && i < slots.size(); i++) {
+            inv.setItem(slots.get(i), txnIcon(txns.get(i)));
+        }
+    }
+
+    private ItemStack txnIcon(BankTxn t) {
+        Material material = switch (t.type()) {
+            case "DEPOSIT" -> Material.LIME_DYE;
+            case "WITHDRAW" -> Material.GOLD_NUGGET;
+            case "UPGRADE" -> Material.ANVIL;
+            case "INTEREST" -> Material.EXPERIENCE_BOTTLE;
+            default -> Material.PAPER;
+        };
+        String verb = switch (t.type()) {
+            case "DEPOSIT" -> "&aDeposit";
+            case "WITHDRAW" -> "&6Withdraw";
+            case "UPGRADE" -> "&bUpgrade";
+            case "INTEREST" -> "&dInterest";
+            default -> "&7" + t.type();
+        };
+        List<String> lore = new ArrayList<>();
+        lore.add("&7Amount: &e" + plugin.bank().money(t.amount()));
+        lore.add("&7Balance after: &f" + plugin.bank().money(t.balanceAfter()));
+        if (t.note() != null && !t.note().isEmpty()) {
+            lore.add("&8" + t.note());
+        }
+        return infoIcon(material, verb, lore);
+    }
+
+    private void runBank(Player viewer, String accountId, String menu, long amount, boolean deposit) {
+        BankService bank = plugin.bank();
+        String error = deposit ? bank.deposit(viewer, accountId, amount) : bank.withdraw(viewer, accountId, amount);
+        if (error != null) {
+            viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+        } else {
+            plugin.messages().send(viewer, deposit ? "bank.deposited" : "bank.withdrew", "amount", fmtCoins(amount));
+        }
+        open(viewer, menu);
     }
 
     private static String fmtCoins(double value) {

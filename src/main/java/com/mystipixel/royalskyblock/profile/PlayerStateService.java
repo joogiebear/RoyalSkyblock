@@ -45,11 +45,7 @@ public final class PlayerStateService {
                 player.getSaturation());
         storage.saveProfileData(profileId, player.getUniqueId(), data);
         plugin.eco().save(player.getUniqueId(), profileId);
-        // Per-profile personal bank: stash this profile's bank state (no-op without RoyalBank).
-        var bank = plugin.personalBank();
-        if (bank.active()) {
-            storage.saveBankSnapshot(profileId, player.getUniqueId(), bank.export(player.getUniqueId()));
-        }
+        // The native bank is keyed by (profile, player), so it's already per-profile — nothing to swap.
     }
 
     /** Load {@code profileId}'s saved data (or a fresh slate) onto the player, plus its eco shadow. */
@@ -80,19 +76,6 @@ public final class PlayerStateService {
         player.setHealth(Math.max(1.0, Math.min(data.health(), DEFAULT_MAX_HEALTH)));
 
         plugin.eco().load(player.getUniqueId(), profileId);
-
-        // Per-profile personal bank: restore this profile's saved bank, or reset to a fresh account if
-        // it has none (a new profile). handleJoin seeds the active profile first so migration doesn't wipe.
-        var bank = plugin.personalBank();
-        if (bank.active()) {
-            com.mystipixel.royalskyblock.bank.BankSnapshotState saved =
-                    storage.getBankSnapshot(profileId, player.getUniqueId());
-            if (saved != null) {
-                bank.restore(player.getUniqueId(), saved);
-            } else {
-                bank.reset(player.getUniqueId());
-            }
-        }
         player.updateInventory();
     }
 

@@ -32,9 +32,9 @@ slots:
     row: 2
     column: 3
     left-click:
-      - id: player_command
+      - id: open_menu
         args:
-          command: "bank"
+          menu: bank-personal
 
   - item: gold_ingot name:"&6&lCoop Bank"
     lore:

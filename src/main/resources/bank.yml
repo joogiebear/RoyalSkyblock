@@ -1,0 +1,86 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Bank
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock's built-in bank — no other bank plugin required. Each profile has
+#  its own personal bank; coop profiles also share a coop bank. Money is held in your
+#  server's Vault economy (whatever you already run), so the bank is just a savings
+#  layer on top. Reload with /is reload.
+#
+#  Each level sets a max balance, interest, and the cost to upgrade to it. Interest is
+#  paid into the bank on a cooldown (settings.interest-cooldown-hours) and is the sum
+#  of its tranches, capped at max-interest. Upgrade items use "<namespace>:<id>:<amount>"
+#  (minecraft:… for vanilla, or an EcoItems id).
+# ═══════════════════════════════════════════════════════════════════════════════
+
+settings:
+  # Symbol shown in front of amounts (display only; the real economy is Vault's).
+  currency-symbol: "$"
+  starting-level: 1
+  min-transaction: 0.01
+  decimal-places: 2
+  # Hours between interest payouts per account.
+  interest-cooldown-hours: 24
+  # Hard ceiling on a single interest payout (per account). -1 = no global cap.
+  max-daily-interest: 1000000
+
+levels:
+  1:
+    name: "Wooden"
+    max-balance: 100000
+    interest-tranches:
+      first:
+        from: 0
+        to: 100000
+        percent: 1.0
+
+  2:
+    name: "Iron"
+    max-balance: 1000000
+    upgrade-cost:
+      money: 50000
+      items:
+        - "minecraft:iron_block:16"
+    interest-tranches:
+      first:
+        from: 0
+        to: 1000000
+        percent: 1.25
+
+  3:
+    name: "Gold"
+    max-balance: 10000000
+    upgrade-cost:
+      money: 500000
+      items:
+        - "minecraft:gold_block:32"
+    interest-tranches:
+      first:
+        from: 0
+        to: 10000000
+        percent: 1.5
+
+  4:
+    name: "Diamond"
+    max-balance: 100000000
+    upgrade-cost:
+      money: 5000000
+      items:
+        - "minecraft:diamond_block:32"
+    interest-tranches:
+      first:
+        from: 0
+        to: 100000000
+        percent: 1.75
+
+  5:
+    name: "Netherite"
+    max-balance: 1000000000
+    upgrade-cost:
+      money: 50000000
+      items:
+        - "minecraft:netherite_block:8"
+    interest-tranches:
+      first:
+        from: 0
+        to: 1000000000
+        percent: 2.0

@@ -614,7 +614,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         if (active != null && active.gamemode() == Gamemode.COOP) {
             plugin.gui().open(player, GuiManager.BANK_HUB); // coop: choose personal vs coop bank
         } else {
-            player.performCommand("bank"); // solo/ironman: your per-profile personal bank (native /bank)
+            plugin.gui().open(player, GuiManager.BANK_PERSONAL); // solo/ironman: personal bank
         }
     }
 

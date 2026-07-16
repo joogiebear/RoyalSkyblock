@@ -1,10 +1,8 @@
 package com.mystipixel.royalskyblock;
 
-import com.mystipixel.royalskyblock.bank.CoopBank;
-import com.mystipixel.royalskyblock.bank.NoOpPersonalSync;
-import com.mystipixel.royalskyblock.bank.PersonalBankSync;
-import com.mystipixel.royalskyblock.bank.RoyalBankHook;
-import com.mystipixel.royalskyblock.bank.VaultCoopBank;
+import com.mystipixel.royalskyblock.bank.BankLevelManager;
+import com.mystipixel.royalskyblock.bank.BankService;
+import com.mystipixel.royalskyblock.command.BankCommand;
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.currency.CurrencyService;
 import com.mystipixel.royalskyblock.hooks.VaultHook;
@@ -56,9 +54,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private CurrencyService currencyService;
     private UpgradeManager upgradeManager;
     private LevelService levelService;
-    private CoopBank coopBank;
-    private PersonalBankSync personalBank;
-    private VaultHook vaultHook; // wallet lookups for coop-bank "deposit all"
+    private BankLevelManager bankLevels;
+    private BankService bankService;
+    private VaultHook vaultHook; // wallet lookups for the bank "deposit all"
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
     private GuiManager guiManager;
@@ -98,7 +96,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.levelService = new LevelService(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.vaultHook = resolveVault();
-        createBankBackends();
+        this.bankLevels = new BankLevelManager(this);
+        this.bankService = new BankService(this, bankLevels, vaultHook);
         this.guiManager = new GuiManager(this);
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
@@ -159,6 +158,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         currencyService.reload();
         upgradeManager.reload();
         levelService.reload();
+        bankLevels.reload();
         guiManager.reload();
     }
 
@@ -195,41 +195,14 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         } else {
             getLogger().warning("Command 'island' missing from plugin.yml — command not registered.");
         }
-    }
-
-    public CoopBank coopBank() {
-        return coopBank;
-    }
-
-    public PersonalBankSync personalBank() {
-        return personalBank;
-    }
-
-    /**
-     * Pick the bank backends: RoyalBank's id-keyed accounts (full coop bank + per-profile personal bank
-     * swap) when RoyalBank is installed — guarded so its classes only link when present — else a
-     * Vault-backed coop store and a no-op personal sync.
-     */
-    private void createBankBackends() {
-        if (getServer().getPluginManager().getPlugin("RoyalBank") != null) {
-            try {
-                Class.forName("com.mystipixel.royalbank.api.RoyalBankAPI", false, getClass().getClassLoader());
-                RoyalBankHook hook = new RoyalBankHook();
-                if (hook.ready()) {
-                    this.coopBank = hook;
-                    this.personalBank = hook;
-                    getLogger().info("Bank backend: RoyalBank (full coop bank + per-profile personal banks).");
-                    return;
-                }
-            } catch (Throwable notRoyalBank) {
-                // RoyalBank present but API missing/older — fall through to Vault.
-            }
+        PluginCommand bank = getCommand("bank");
+        if (bank != null) {
+            bank.setExecutor(new BankCommand(this));
         }
-        this.coopBank = new VaultCoopBank(this, vaultHook);
-        this.personalBank = new NoOpPersonalSync();
-        getLogger().info("Bank backend: " + (vaultHook != null && vaultHook.isReady()
-                ? "Vault coop vault (no RoyalBank — personal banks not per-profile, coop bank has no upgrades)."
-                : "unavailable (install Vault or RoyalBank)."));
+    }
+
+    public BankService bank() {
+        return bankService;
     }
 
     /** The player's Vault wallet balance (0 if no economy). Used by the coop-bank "deposit all" button. */

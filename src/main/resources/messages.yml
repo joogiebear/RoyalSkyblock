@@ -117,9 +117,10 @@ coop:
   you-owner: "&6&l✦ &eYou are now the &6owner &eof the island!"
 
 bank:
-  deposited: "&aDeposited &e%amount% &ainto the coop bank."
-  withdrew: "&aWithdrew &e%amount% &afrom the coop bank."
-  upgraded: "&aThe coop bank was upgraded!"
+  deposited: "&aDeposited &e%amount% &ainto the bank."
+  withdrew: "&aWithdrew &e%amount% &afrom the bank."
+  upgraded: "&aThe bank was upgraded!"
+  interest: "&aInterest claimed into your bank."
   empty-purse: "&cYou have no money to deposit."
   empty: "&cThe coop bank is empty."
   not-coop: "&cYou need to be on a Coop profile to use the coop bank."

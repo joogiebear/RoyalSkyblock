@@ -14,7 +14,6 @@ softdepend:
   - Vault
   - eco
   - EcoItems
-  - RoyalBank
   - PlaceholderAPI
   - RoyalBank
   - WorldEdit
@@ -24,6 +23,9 @@ commands:
     description: RoyalSkyblock island command.
     usage: /island [create|home|go|visit|invite|kick|leave|sethome|setwarp|level|top|upgrade|settings|reload|admin]
     aliases: [is, sb, skyblock]
+  bank:
+    description: Open your bank (personal + coop).
+    usage: /bank
 permissions:
   royalskyblock.use:
     description: Base access to island commands.
