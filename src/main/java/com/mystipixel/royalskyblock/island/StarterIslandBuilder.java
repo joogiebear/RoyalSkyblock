@@ -73,22 +73,83 @@ public final class StarterIslandBuilder {
             }
         }
 
-        // ── trees (two oaks, -x quadrants) ──
+        // ── one oak tree (-x/-z quadrant) ──
         if (trees) {
             plantTree(world, x - 3, y + 1, z - 3);
-            plantTree(world, x - 4, y + 1, z + 3);
         }
 
+        // ── a cozy starter hut (-x/+z quadrant) ──
+        buildHut(world, x - 4, y, z + 4);
+
         // ── a little decoration ──
-        world.getBlockAt(x - 2, y + 1, z + 1).setType(Material.POPPY, false);
-        world.getBlockAt(x - 1, y + 1, z + 2).setType(Material.DANDELION, false);
+        world.getBlockAt(x + 1, y + 1, z - 1).setType(Material.POPPY, false);
+        world.getBlockAt(x - 1, y + 1, z - 1).setType(Material.DANDELION, false);
         world.getBlockAt(x + radius, y + 1, z).setType(Material.TORCH, false);
         world.getBlockAt(x - radius, y + 1, z).setType(Material.TORCH, false);
 
-        // ── starter chest near spawn ──
+        // ── starter chest (inside the hut, back-left corner) ──
         ConfigurationSection chestCfg = cfg != null ? cfg.getConfigurationSection("chest") : null;
         if (chestCfg == null || chestCfg.getBoolean("enabled", true)) {
-            placeStarterChest(world, x - 1, y + 1, z, chestCfg, logger);
+            placeStarterChest(world, x - 5, y + 1, z + 5, chestCfg, logger);
+        }
+    }
+
+    /**
+     * A small cozy 5x5 oak hut centred at {@code (cx, cz)} on surface {@code y}: plank walls with log
+     * corners, a door facing spawn, glass windows, a flat roof with eaves, and a bed + crafting table +
+     * furnace + hanging lantern inside. The starter chest is placed separately (back-left corner).
+     */
+    private static void buildHut(World world, int cx, int y, int cz) {
+        int r = 2;
+        // floor + hollow the interior
+        for (int dx = -r; dx <= r; dx++) {
+            for (int dz = -r; dz <= r; dz++) {
+                world.getBlockAt(cx + dx, y, cz + dz).setType(Material.OAK_PLANKS, false);
+                for (int h = 1; h <= 3; h++) {
+                    world.getBlockAt(cx + dx, y + h, cz + dz).setType(Material.AIR, false);
+                }
+            }
+        }
+        // walls: logs at the corners, planks between (y+1..y+3)
+        for (int h = 1; h <= 3; h++) {
+            for (int dx = -r; dx <= r; dx++) {
+                for (int dz = -r; dz <= r; dz++) {
+                    if (Math.abs(dx) == r || Math.abs(dz) == r) {
+                        boolean corner = Math.abs(dx) == r && Math.abs(dz) == r;
+                        world.getBlockAt(cx + dx, y + h, cz + dz)
+                                .setType(corner ? Material.OAK_LOG : Material.OAK_PLANKS, false);
+                    }
+                }
+            }
+        }
+        // flat roof with a 1-block eave overhang
+        for (int dx = -r - 1; dx <= r + 1; dx++) {
+            for (int dz = -r - 1; dz <= r + 1; dz++) {
+                world.getBlockAt(cx + dx, y + 4, cz + dz).setType(Material.OAK_PLANKS, false);
+            }
+        }
+        // door on the front (-z) wall, facing out toward spawn
+        setData(world, cx, y + 1, cz - r, "minecraft:oak_door[facing=north,half=lower,hinge=left]");
+        setData(world, cx, y + 2, cz - r, "minecraft:oak_door[facing=north,half=upper,hinge=left]");
+        // glass windows on the other three walls
+        world.getBlockAt(cx - r, y + 2, cz).setType(Material.GLASS_PANE, false);
+        world.getBlockAt(cx + r, y + 2, cz).setType(Material.GLASS_PANE, false);
+        world.getBlockAt(cx, y + 2, cz + r).setType(Material.GLASS_PANE, false);
+        // hanging lantern for light
+        setData(world, cx, y + 3, cz, "minecraft:lantern[hanging=true]");
+        // furniture (chest is placed separately at cx-1, cz+1)
+        world.getBlockAt(cx + 1, y + 1, cz + 1).setType(Material.CRAFTING_TABLE, false);
+        world.getBlockAt(cx + 1, y + 1, cz - 1).setType(Material.FURNACE, false);
+        setData(world, cx - 1, y + 1, cz - 1, "minecraft:red_bed[facing=south,part=foot]");
+        setData(world, cx - 1, y + 1, cz, "minecraft:red_bed[facing=south,part=head]");
+    }
+
+    /** Set a block from a blockdata string, skipping gracefully if that data is invalid on this version. */
+    private static void setData(World world, int x, int y, int z, String data) {
+        try {
+            world.getBlockAt(x, y, z).setBlockData(Bukkit.createBlockData(data), false);
+        } catch (IllegalArgumentException badData) {
+            // unknown block/state on this MC version — leave it as-is
         }
     }
 

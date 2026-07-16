@@ -17,7 +17,7 @@ islands without a bloated single world.
 | **Vault + an economy** | Needed for the bank and upgrade/coin costs. Any Vault economy works (EcoBits, Essentials, CMI, …). Without it, the bank and coin costs are disabled. |
 | **eco / EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
 | **PlaceholderAPI** | Optional. Used by command-based currencies (e.g. gems) and placeholders. |
-| **WorldEdit / FastAsyncWorldEdit** | Optional. Enables `.schem` starter islands; without it, a built-in generator makes the starter island. |
+| **WorldEdit / FastAsyncWorldEdit** | Optional. Enables `.schem` starter islands; without it, a built-in generator makes the starter island (grass platform + a cozy oak hut, pond, crop farm, and tree). |
 
 ## Quick start
 
