@@ -831,15 +831,16 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     private void sendHelp(CommandSender sender) {
         plugin.messages().sendPlain(sender, "help.header");
         plugin.messages().sendPlain(sender, "help.subtitle");
-        plugin.messages().sendPlain(sender, "help.menu");
-        plugin.messages().sendPlain(sender, "help.create");
-        plugin.messages().sendPlain(sender, "help.home");
-        plugin.messages().sendPlain(sender, "help.visit");
+        plugin.messages().sendPlain(sender, "help.island");
+        plugin.messages().sendPlain(sender, "help.bank");
+        plugin.messages().sendPlain(sender, "help.level");
+        plugin.messages().sendPlain(sender, "help.upgrade");
         plugin.messages().sendPlain(sender, "help.profile");
-        plugin.messages().sendPlain(sender, "help.invite");
+        plugin.messages().sendPlain(sender, "help.coop");
+        plugin.messages().sendPlain(sender, "help.manage");
         plugin.messages().sendPlain(sender, "help.delete");
         if (sender.hasPermission("royalskyblock.admin")) {
-            plugin.messages().sendPlain(sender, "help.reload");
+            plugin.messages().sendPlain(sender, "help.admin");
         }
     }
 

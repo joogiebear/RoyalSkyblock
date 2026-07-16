@@ -105,11 +105,11 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         worldService.initialize().whenComplete((ignored, error) -> {
             if (error != null) {
                 getLogger().severe("Island world backend unavailable: " + rootMessage(error));
-                getLogger().severe("Island creation/teleport is disabled until the server runs Advanced Slime Paper.");
                 worldBackendReady = false;
             } else {
                 worldBackendReady = true;
             }
+            printStatusPanel(); // once ASP status is known, print the boot summary
         });
 
         registerCommands();
@@ -134,8 +134,30 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
-        getLogger().info("Schematic backend: " + (schematicService.isAvailable()
-                ? "WorldEdit/FAWE (.schem supported)" : "built-in generator (install WorldEdit/FAWE for .schem)"));
+        // The full status panel prints once the ASP backend finishes initialising (see above).
+    }
+
+    /** A one-glance boot summary: which dependencies are active and what an admin should configure first. */
+    private void printStatusPanel() {
+        boolean vault = vaultHook != null && vaultHook.isReady();
+        String storage = getConfig().getString("storage.type", "sqlite").toUpperCase();
+        String worldSource = getConfig().getString("world.slime-data-source", "file");
+        getLogger().info("======================== RoyalSkyblock ========================");
+        getLogger().info(" Islands (ASP)    : " + (worldBackendReady
+                ? "READY (source: " + worldSource + ")"
+                : "UNAVAILABLE — install Advanced Slime Paper (island create/teleport off)"));
+        getLogger().info(" Economy (Vault)  : " + (vault ? "READY" : "NOT FOUND — bank & coin costs disabled"));
+        getLogger().info(" Bank             : " + (bankService.available()
+                ? "READY (native, " + storage + ")" : "needs Vault + bank.yml levels"));
+        getLogger().info(" Schematics       : " + (schematicService.isAvailable()
+                ? "WorldEdit/FAWE (.schem)" : "built-in generator (install WorldEdit/FAWE for .schem)"));
+        getLogger().info(" Progression (eco): " + (ecoBridge.isPresent()
+                ? "linked (skills/coins are per-profile)" : "not found (progression is not per-profile)"));
+        getLogger().info(" Metadata storage : " + storage);
+        getLogger().info(" ---------------------------------------------------------------");
+        getLogger().info(" Configure first  : spawn.world + currencies in config.yml");
+        getLogger().info(" Commands: /is help  ·  Reload: /is reload  ·  See README.md");
+        getLogger().info("===============================================================");
     }
 
     @Override

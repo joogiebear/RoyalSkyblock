@@ -15,7 +15,6 @@ softdepend:
   - eco
   - EcoItems
   - PlaceholderAPI
-  - RoyalBank
   - WorldEdit
   - FastAsyncWorldEdit
 commands:
@@ -41,6 +40,9 @@ permissions:
   royalskyblock.upgrade:
     default: true
   royalskyblock.settings:
+    default: true
+  royalskyblock.bank:
+    description: Access the bank (/bank).
     default: true
   royalskyblock.admin:
     description: Administrative island management.
