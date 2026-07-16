@@ -1,6 +1,8 @@
 package com.mystipixel.royalskyblock.listener;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import org.bukkit.Bukkit;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -21,7 +23,19 @@ public final class ProfileListener implements Listener {
 
     @EventHandler(priority = EventPriority.NORMAL)
     public void onJoin(PlayerJoinEvent event) {
-        plugin.profiles().handleJoin(event.getPlayer());
+        Player player = event.getPlayer();
+        plugin.profiles().handleJoin(player);
+
+        // Route players to the configured spawn (hub) on join — but leave anyone who logged out on
+        // their own island where they are. Deferred a tick so it runs after the join teleport settles.
+        if (plugin.getConfig().getBoolean("spawn.teleport-on-join", true)
+                && plugin.islands().getIslandByWorld(player.getWorld()) == null) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (player.isOnline() && plugin.islands().getIslandByWorld(player.getWorld()) == null) {
+                    plugin.islands().sendToSpawn(player);
+                }
+            });
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
