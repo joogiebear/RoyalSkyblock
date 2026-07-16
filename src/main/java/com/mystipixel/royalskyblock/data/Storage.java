@@ -230,24 +230,28 @@ public final class Storage {
 
     public @Nullable Profile getProfile(UUID id) {
         String sql = "SELECT id, owner, name, gamemode, created_at FROM profiles WHERE id = ?";
+        Profile profile;
+        // Load the profile + roster on one connection, then release it BEFORE looking up the island —
+        // the island query opens its own connection, and nesting on the single-connection SQLite pool
+        // would deadlock.
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, id.toString());
             try (ResultSet rs = st.executeQuery()) {
                 if (!rs.next()) {
                     return null;
                 }
-                Profile profile = readProfile(rs);
+                profile = readProfile(rs);
                 loadMembers(c, profile);
-                Island island = getIslandByProfile(profile.id());
-                if (island != null) {
-                    profile.setIslandId(island.id());
-                }
-                return profile;
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not load profile " + id + ": " + e.getMessage());
             return null;
         }
+        Island island = getIslandByProfile(profile.id());
+        if (island != null) {
+            profile.setIslandId(island.id());
+        }
+        return profile;
     }
 
     public List<Profile> getProfilesByOwner(UUID owner) {
@@ -262,13 +266,16 @@ public final class Storage {
             }
             for (Profile p : out) {
                 loadMembers(c, p);
-                Island island = getIslandByProfile(p.id());
-                if (island != null) {
-                    p.setIslandId(island.id());
-                }
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not load profiles for " + owner + ": " + e.getMessage());
+        }
+        // Island lookups AFTER the connection above is released (see getProfile) to avoid nesting.
+        for (Profile p : out) {
+            Island island = getIslandByProfile(p.id());
+            if (island != null) {
+                p.setIslandId(island.id());
+            }
         }
         return out;
     }
