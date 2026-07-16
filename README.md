@@ -83,6 +83,8 @@ Aliases for `/island`: `/is`, `/sb`, `/skyblock`.
 | Command | Description |
 |---|---|
 | `/is reload` | Reload all config, messages, and menus |
+| `/is admin status` | Dependency + config health panel (in-game) |
+| `/is admin border <blue\|red\|green\|off>` | Set the island border colour, live |
 | `/is admin testworld` | Diagnostic: ASP world round-trip |
 | `/is admin schematic save <name>` | Save your WorldEdit selection as a starter schematic |
 | `/is admin upgrade <key> <tier>` | Set an island upgrade tier instantly |

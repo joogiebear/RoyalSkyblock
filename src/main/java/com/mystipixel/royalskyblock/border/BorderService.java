@@ -89,8 +89,14 @@ public final class BorderService implements Listener {
         }
         World world = player.getWorld();
         Island island = plugin.islands().getIslandByWorld(world);
-        if (island == null || player.hasPermission("royalskyblock.bypass")) {
+        boolean bypass = player.hasPermission("royalskyblock.bypass");
+        boolean debug = plugin.getConfig().getBoolean("island.border.debug", false);
+        if (island == null || bypass) {
             player.setWorldBorder(null); // not an island world, or an admin who bypasses
+            if (debug) {
+                plugin.getLogger().info("[border] " + player.getName() + " world=" + world.getName()
+                        + " island=" + (island == null ? "null" : "yes") + " bypass=" + bypass + " -> no border");
+            }
             return;
         }
         ConfigurationSection paste = plugin.getConfig().getConfigurationSection("island.paste");
@@ -115,5 +121,9 @@ public final class BorderService implements Listener {
             default -> border.setSize(size); // BLUE: static -> blue
         }
         player.setWorldBorder(border);
+        if (debug) {
+            plugin.getLogger().info("[border] " + player.getName() + " world=" + world.getName()
+                    + " -> " + color + " border size=" + size + " center=" + cx + "," + cz + " radius=" + island.radius());
+        }
     }
 }

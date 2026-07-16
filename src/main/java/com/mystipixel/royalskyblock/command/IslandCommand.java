@@ -699,10 +699,34 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleAdminStatus(sender);
             return;
         }
+        if (action.equals("border")) {
+            handleBorderAdmin(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
+        sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7— island border colour"));
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
         sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
+    }
+
+    /** {@code /is admin border <blue|red|green|off>} — set the island border colour live. */
+    private void handleBorderAdmin(CommandSender sender, String[] args) {
+        if (args.length < 3) {
+            sender.sendMessage(Text.color("&7Border colour: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
+                    + "  &8· &e/is admin border <blue|red|green|off>"));
+            return;
+        }
+        String choice = args[2].toLowerCase(Locale.ROOT);
+        if (!java.util.Set.of("blue", "red", "green", "off").contains(choice)) {
+            sender.sendMessage(Text.color("&cUse: blue, red, green, or off."));
+            return;
+        }
+        plugin.getConfig().set("island.border.color", choice);
+        plugin.saveConfig();
+        plugin.borders().reload();
+        plugin.borders().refreshAll();
+        sender.sendMessage(Text.color("&aIsland border set to &e" + choice + "&a (applied live)."));
     }
 
     /** In-game version of the boot status panel: which dependencies are active + config health. */
@@ -970,7 +994,10 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return filter(names, args[1], sender);
         }
         if (args.length == 2 && sub.equals("admin") && sender.hasPermission("royalskyblock.admin")) {
-            return filter(List.of("status", "testworld", "schematic", "upgrade", "chesttest"), args[1], sender);
+            return filter(List.of("status", "border", "testworld", "schematic", "upgrade", "chesttest"), args[1], sender);
+        }
+        if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("border")) {
+            return filter(List.of("blue", "red", "green", "off"), args[2], sender);
         }
         if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("schematic")) {
             return filter(List.of("save"), args[2], sender);

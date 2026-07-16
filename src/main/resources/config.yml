@@ -124,10 +124,13 @@ island:
   # royalskyblock.bypass (admins) pass through it while everyone else is kept on-island.
   border:
     enabled: true
-    # Border colour: blue | red | green | off. (Minecraft derives border colour from motion, so these
-    # are faked with an imperceptible perpetual lerp. 'off' shows no border.)
+    # Border colour: blue | red | green | off. Change live with /is admin border <colour>.
+    # (Minecraft derives border colour from motion, so these are faked with an imperceptible
+    # perpetual lerp. 'off' shows no border.)
     color: blue
     warning-blocks: 2           # red screen vignette this many blocks before the edge
+    # Log where the border applies/clears per player (troubleshooting "I don't see a border").
+    debug: false
 
 # ── Profiles (Hypixel-style saves: each has its own island, inventory & progression) ─
 profiles:
