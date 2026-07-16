@@ -1,6 +1,10 @@
 package com.mystipixel.royalskyblock.command;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.gui.GuiManager;
+import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.profile.Gamemode;
+import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
@@ -15,15 +19,14 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * The {@code /island} command tree. Player-facing text comes from {@code messages.yml} via
- * {@link com.mystipixel.royalskyblock.message.MessageManager}; only temporary spike/diagnostic
- * strings ({@code admin testworld/ecoslot}) are inline.
+ * The {@code /island} command tree. Island actions operate on the player's <em>active profile</em>;
+ * {@code /is profile} manages the profiles themselves. Player-facing text comes from messages.yml.
  */
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
-            "menu", "create", "home", "go", "visit", "invite", "kick", "leave",
-            "sethome", "setwarp", "level", "top", "upgrade", "settings", "delete", "reload", "admin");
+            "menu", "create", "home", "go", "visit", "profile", "sethome", "setwarp",
+            "level", "top", "upgrade", "settings", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
 
@@ -38,17 +41,16 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             sendHelp(sender);
             return true;
         }
-
-        String sub = args[0].toLowerCase(Locale.ROOT);
-        switch (sub) {
+        switch (args[0].toLowerCase(Locale.ROOT)) {
             case "menu" -> handleMenu(sender);
             case "reload" -> handleReload(sender);
             case "create" -> handleCreate(sender);
             case "home", "go" -> handleHome(sender);
             case "visit" -> handleVisit(sender, args);
+            case "profile", "profiles" -> handleProfile(sender, args);
             case "delete" -> handleDelete(sender, args);
             case "admin" -> handleAdmin(sender, args);
-            default -> sender.sendMessage(Text.color("&e/is " + sub + " &7isn't wired up yet — coming soon."));
+            default -> sender.sendMessage(Text.color("&e/is " + args[0] + " &7isn't wired up yet — coming soon."));
         }
         return true;
     }
@@ -58,7 +60,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             plugin.messages().send(sender, "general.players-only");
             return;
         }
-        plugin.gui().open(player, com.mystipixel.royalskyblock.gui.GuiManager.MAIN);
+        plugin.gui().open(player, GuiManager.MAIN);
     }
 
     private void handleReload(CommandSender sender) {
@@ -83,20 +85,18 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             plugin.messages().send(player, "island.worlds-unavailable");
             return;
         }
-        if (plugin.islands().hasIsland(player.getUniqueId())) {
+        if (plugin.profiles().activeHasIsland(player)) {
             plugin.messages().send(player, "island.already-have");
             return;
         }
-
         plugin.messages().send(player, "island.creating");
-        plugin.islands().createIsland(player).whenComplete((island, error) ->
-                onMain(() -> {
-                    if (error != null) {
-                        plugin.messages().send(player, "island.create-failed", "error", rootMessage(error));
-                    } else {
-                        plugin.messages().send(player, "island.created");
-                    }
-                }));
+        plugin.profiles().goToActiveIsland(player).whenComplete((ok, error) -> onMain(() -> {
+            if (error != null) {
+                plugin.messages().send(player, "island.create-failed", "error", rootMessage(error));
+            } else {
+                plugin.messages().send(player, "island.created");
+            }
+        }));
     }
 
     private void handleHome(CommandSender sender) {
@@ -104,14 +104,17 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             plugin.messages().send(sender, "general.players-only");
             return;
         }
-        plugin.islands().goHome(player).whenComplete((ok, error) ->
-                onMain(() -> {
-                    if (error != null) {
-                        plugin.messages().send(player, "home.failed", "error", rootMessage(error));
-                    } else if (!Boolean.TRUE.equals(ok)) {
-                        plugin.messages().send(player, "home.no-island");
-                    }
-                }));
+        if (!plugin.isWorldBackendReady()) {
+            plugin.messages().send(player, "island.worlds-unavailable");
+            return;
+        }
+        plugin.profiles().goToActiveIsland(player).whenComplete((ok, error) -> onMain(() -> {
+            if (error != null) {
+                plugin.messages().send(player, "home.failed", "error", rootMessage(error));
+            } else if (!Boolean.TRUE.equals(ok)) {
+                plugin.messages().send(player, "home.no-island");
+            }
+        }));
     }
 
     private void handleVisit(CommandSender sender, String[] args) {
@@ -133,21 +136,30 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleHome(player);
             return;
         }
-        plugin.islands().visit(player, targetId).whenComplete((ok, error) ->
-                onMain(() -> {
-                    if (error != null) {
-                        plugin.messages().send(player, "visit.failed", "error", rootMessage(error));
-                    } else if (!Boolean.TRUE.equals(ok)) {
-                        plugin.messages().send(player, "visit.no-target-island", "player", targetName);
-                    } else {
-                        plugin.messages().send(player, "visit.visiting", "player", targetName);
-                    }
-                }));
+        UUID targetActive = plugin.profiles().getActiveProfileId(targetId);
+        Island island = targetActive == null ? null : plugin.islands().getIslandByProfile(targetActive);
+        if (island == null) {
+            plugin.messages().send(player, "visit.no-target-island", "player", targetName);
+            return;
+        }
+        plugin.islands().teleportToIsland(player, island).whenComplete((ok, error) -> onMain(() -> {
+            if (error != null) {
+                plugin.messages().send(player, "visit.failed", "error", rootMessage(error));
+            } else {
+                plugin.messages().send(player, "visit.visiting", "player", targetName);
+            }
+        }));
     }
 
     private void handleDelete(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = active == null ? null : plugin.islands().getIslandByProfile(active);
+        if (island == null) {
+            plugin.messages().send(player, "home.no-island");
             return;
         }
         if (args.length < 2 || !args[1].equalsIgnoreCase("confirm")) {
@@ -156,19 +168,131 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         plugin.messages().send(player, "delete.deleting");
-        plugin.islands().deleteOwnIsland(player).whenComplete((ok, error) ->
-                onMain(() -> {
-                    if (error != null) {
-                        plugin.messages().send(player, "delete.failed", "error", rootMessage(error));
-                    } else if (!Boolean.TRUE.equals(ok)) {
-                        plugin.messages().send(player, "delete.not-owner");
-                    } else {
-                        plugin.messages().send(player, "delete.deleted");
-                    }
-                }));
+        plugin.islands().deleteIsland(island.id()).whenComplete((ignored, error) -> onMain(() -> {
+            if (error != null) {
+                plugin.messages().send(player, "delete.failed", "error", rootMessage(error));
+            } else {
+                plugin.messages().send(player, "delete.deleted");
+            }
+        }));
     }
 
-    // ── admin / spike diagnostics (temporary, inline strings) ────────────────────
+    // ── profiles ──────────────────────────────────────────────────────────────────
+
+    private void handleProfile(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        String sub = args.length >= 2 ? args[1].toLowerCase(Locale.ROOT) : "list";
+        switch (sub) {
+            case "create" -> profileCreate(player, args);
+            case "switch", "swap" -> profileSwitch(player, args);
+            case "delete" -> profileDelete(player, args);
+            default -> profileList(player);
+        }
+    }
+
+    private void profileList(Player player) {
+        List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
+        UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        int max = plugin.getConfig().getInt("profiles.max-profiles", 3);
+        plugin.messages().sendPlain(player, "profile.header", "count", String.valueOf(profiles.size()), "max", String.valueOf(max));
+        for (Profile p : profiles) {
+            boolean hasIsland = plugin.islands().getIslandByProfile(p.id()) != null;
+            String activeTag = p.id().equals(active) ? plugin.messages().raw("profile.active-tag") : "";
+            plugin.messages().sendPlain(player, "profile.line",
+                    "name", p.name(),
+                    "gamemode", p.gamemode().name().toLowerCase(Locale.ROOT),
+                    "active", activeTag,
+                    "has_island", hasIsland ? "&ayes" : "&cno");
+        }
+        plugin.messages().sendPlain(player, "profile.hint");
+    }
+
+    private void profileCreate(Player player, String[] args) {
+        if (args.length < 3) {
+            plugin.messages().send(player, "profile.create-usage");
+            return;
+        }
+        Gamemode gamemode = Gamemode.fromString(args[2], null);
+        if (gamemode == null) {
+            plugin.messages().send(player, "profile.unknown-gamemode");
+            return;
+        }
+        String name = args.length >= 4 ? args[3] : null;
+        if (!plugin.isWorldBackendReady()) {
+            plugin.messages().send(player, "island.worlds-unavailable");
+            return;
+        }
+        plugin.profiles().createProfile(player, gamemode, name).whenComplete((profile, error) -> onMain(() -> {
+            if (error != null) {
+                plugin.messages().send(player, "profile.create-failed", "error", rootMessage(error));
+            } else {
+                plugin.messages().send(player, "profile.created",
+                        "name", profile.name(), "gamemode", profile.gamemode().name().toLowerCase(Locale.ROOT));
+            }
+        }));
+    }
+
+    private void profileSwitch(Player player, String[] args) {
+        if (args.length < 3) {
+            plugin.messages().send(player, "profile.switch-usage");
+            return;
+        }
+        Profile target = findProfile(player, args[2]);
+        if (target == null) {
+            plugin.messages().send(player, "profile.not-found", "name", args[2]);
+            return;
+        }
+        plugin.messages().send(player, "profile.switching", "name", target.name());
+        plugin.profiles().switchProfile(player, target.id()).whenComplete((ok, error) -> onMain(() -> {
+            if (error != null) {
+                plugin.messages().send(player, "profile.switch-failed", "error", rootMessage(error));
+            } else if (Boolean.TRUE.equals(ok)) {
+                plugin.messages().send(player, "profile.switched", "name", target.name());
+            }
+        }));
+    }
+
+    private void profileDelete(Player player, String[] args) {
+        if (args.length < 3) {
+            plugin.messages().send(player, "profile.delete-usage");
+            return;
+        }
+        Profile target = findProfile(player, args[2]);
+        if (target == null) {
+            plugin.messages().send(player, "profile.not-found", "name", args[2]);
+            return;
+        }
+        String name = target.name();
+        plugin.profiles().deleteProfile(player, target.id()).whenComplete((ok, error) -> onMain(() -> {
+            if (Boolean.TRUE.equals(ok)) {
+                plugin.messages().send(player, "profile.deleted", "name", name);
+            }
+        }));
+    }
+
+    /** Find a player's profile by name (case-insensitive) or 1-based list index. */
+    private Profile findProfile(Player player, String query) {
+        List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
+        for (Profile p : profiles) {
+            if (p.name().equalsIgnoreCase(query)) {
+                return p;
+            }
+        }
+        try {
+            int index = Integer.parseInt(query) - 1;
+            if (index >= 0 && index < profiles.size()) {
+                return profiles.get(index);
+            }
+        } catch (NumberFormatException ignored) {
+            // not an index
+        }
+        return null;
+    }
+
+    // ── admin / spike diagnostics ────────────────────────────────────────────────
 
     private void handleAdmin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("royalskyblock.admin")) {
@@ -180,12 +304,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleTestWorld(sender);
             return;
         }
-        if (action.equals("ecoslot")) {
-            handleEcoSlot(sender, args);
-            return;
-        }
-        sender.sendMessage(Text.color("&8» &e/is admin testworld &7— run an ASP world round-trip diagnostic"));
-        sender.sendMessage(Text.color("&8» &e/is admin ecoslot <1|2> &7— SPIKE: swap live eco data between two profile slots"));
+        sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
     }
 
     private void handleTestWorld(CommandSender sender) {
@@ -197,9 +316,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&7[diag] creating + loading throwaway slime world '" + name + "'..."));
         plugin.worlds().createIsland(name)
                 .thenCompose(world -> {
-                    onMain(() -> sender.sendMessage(Text.color(
-                            "&a[diag] created & loaded &f" + world.getName()
-                                    + " &7(env=" + world.getEnvironment() + ", spawn=" + world.getSpawnLocation().toVector() + ")")));
+                    onMain(() -> sender.sendMessage(Text.color("&a[diag] created & loaded &f" + world.getName())));
                     return plugin.worlds().deleteIsland(name);
                 })
                 .whenComplete((ignored, error) -> onMain(() -> {
@@ -211,37 +328,6 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 }));
     }
 
-    private void handleEcoSlot(CommandSender sender, String[] args) {
-        if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.color("&cPlayers only."));
-            return;
-        }
-        if (plugin.eco() == null || !plugin.eco().isPresent()) {
-            sender.sendMessage(Text.color("&ceco isn't installed — nothing to swap."));
-            return;
-        }
-        int target;
-        try {
-            target = Integer.parseInt(args[2]);
-        } catch (Exception e) {
-            sender.sendMessage(Text.color("&cUsage: &e/is admin ecoslot <1|2>"));
-            return;
-        }
-        int current = plugin.ecoSlot(player.getUniqueId());
-        if (current == target) {
-            player.sendMessage(Text.color("&7You're already on eco slot &e" + target + "&7."));
-            return;
-        }
-        plugin.eco().swap(player.getUniqueId(), slotProfileId(current), slotProfileId(target));
-        plugin.setEcoSlot(player.getUniqueId(), target);
-        player.sendMessage(Text.color("&aSwapped eco data: slot &e" + current + " &a→ &e" + target
-                + "&a. Check your skills/pets/collections — they should reflect slot " + target + "."));
-    }
-
-    private static UUID slotProfileId(int slot) {
-        return UUID.nameUUIDFromBytes(("rsb-eco-slot:" + slot).getBytes());
-    }
-
     // ── help / tab-complete ──────────────────────────────────────────────────────
 
     private void sendHelp(CommandSender sender) {
@@ -251,6 +337,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.messages().sendPlain(sender, "help.create");
         plugin.messages().sendPlain(sender, "help.home");
         plugin.messages().sendPlain(sender, "help.visit");
+        plugin.messages().sendPlain(sender, "help.profile");
         plugin.messages().sendPlain(sender, "help.delete");
         if (sender.hasPermission("royalskyblock.admin")) {
             plugin.messages().sendPlain(sender, "help.reload");
@@ -277,31 +364,48 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
                                       @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
-            String prefix = args[0].toLowerCase(Locale.ROOT);
-            List<String> out = new ArrayList<>();
-            for (String s : ROOT_SUBS) {
-                if ((s.equals("reload") || s.equals("admin")) && !sender.hasPermission("royalskyblock.admin")) {
-                    continue;
-                }
-                if (s.startsWith(prefix)) {
-                    out.add(s);
-                }
-            }
-            return out;
+            return filter(ROOT_SUBS, args[0], sender);
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("delete")) {
+        String sub = args[0].toLowerCase(Locale.ROOT);
+        if (args.length == 2 && sub.equals("delete")) {
             return List.of("confirm");
         }
-        if (args.length == 2 && args[0].equalsIgnoreCase("visit")) {
-            String prefix = args[1].toLowerCase(Locale.ROOT);
+        if (args.length == 2 && (sub.equals("profile") || sub.equals("profiles"))) {
+            return filter(List.of("list", "create", "switch", "delete"), args[1], sender);
+        }
+        if (args.length == 3 && (sub.equals("profile") || sub.equals("profiles")) && args[1].equalsIgnoreCase("create")) {
+            return filter(List.of("solo", "coop", "ironman"), args[2], sender);
+        }
+        if (args.length == 3 && (sub.equals("profile") || sub.equals("profiles"))
+                && (args[1].equalsIgnoreCase("switch") || args[1].equalsIgnoreCase("delete"))
+                && sender instanceof Player player) {
+            List<String> names = new ArrayList<>();
+            for (Profile p : plugin.profiles().getProfiles(player.getUniqueId())) {
+                names.add(p.name());
+            }
+            return filter(names, args[2], sender);
+        }
+        if (args.length == 2 && sub.equals("visit")) {
             List<String> names = new ArrayList<>();
             for (Player online : plugin.getServer().getOnlinePlayers()) {
-                if (online.getName().toLowerCase(Locale.ROOT).startsWith(prefix)) {
-                    names.add(online.getName());
-                }
+                names.add(online.getName());
             }
-            return names;
+            return filter(names, args[1], sender);
         }
         return List.of();
+    }
+
+    private List<String> filter(List<String> options, String prefix, CommandSender sender) {
+        String p = prefix.toLowerCase(Locale.ROOT);
+        List<String> out = new ArrayList<>();
+        for (String s : options) {
+            if ((s.equals("reload") || s.equals("admin")) && !sender.hasPermission("royalskyblock.admin")) {
+                continue;
+            }
+            if (s.toLowerCase(Locale.ROOT).startsWith(p)) {
+                out.add(s);
+            }
+        }
+        return out;
     }
 }

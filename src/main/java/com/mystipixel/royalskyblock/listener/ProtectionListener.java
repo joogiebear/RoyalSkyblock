@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock.listener;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.profile.Profile;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -48,7 +49,11 @@ public final class ProtectionListener implements Listener {
         if (island == null) {
             return true; // not an island world — RoyalSkyblock doesn't govern it
         }
-        return island.roleOf(player.getUniqueId()).canBuild();
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        if (profile == null) {
+            return true; // orphaned island — don't trap anyone
+        }
+        return profile.roleOf(player.getUniqueId()).canBuild();
     }
 
     private void deny(Player player) {

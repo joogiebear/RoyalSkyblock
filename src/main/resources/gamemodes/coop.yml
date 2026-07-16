@@ -1,0 +1,5 @@
+# Coop — a shared island and economy with invited members.
+display-name: "&b&lCOOP"
+description: "&7Share one island and economy with friends."
+icon: player_head
+blocked-commands: []

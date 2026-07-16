@@ -84,7 +84,7 @@ public final class GuiManager implements Listener {
     private Map<String, String> placeholders(Player player) {
         Map<String, String> map = new LinkedHashMap<>();
         map.put("player", player.getName());
-        map.put("has_island", String.valueOf(plugin.islands().hasIsland(player.getUniqueId())));
+        map.put("has_island", String.valueOf(plugin.profiles().activeHasIsland(player)));
         return map;
     }
 

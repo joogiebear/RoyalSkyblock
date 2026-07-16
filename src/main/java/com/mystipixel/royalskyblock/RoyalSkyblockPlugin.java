@@ -1,12 +1,17 @@
 package com.mystipixel.royalskyblock;
 
 import com.mystipixel.royalskyblock.command.IslandCommand;
-import com.mystipixel.royalskyblock.data.IslandDatabase;
+import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge;
 import com.mystipixel.royalskyblock.island.IslandManager;
+import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
+import com.mystipixel.royalskyblock.listener.CommandGateListener;
 import com.mystipixel.royalskyblock.message.MessageManager;
+import com.mystipixel.royalskyblock.profile.GamemodeManager;
+import com.mystipixel.royalskyblock.profile.PlayerStateService;
+import com.mystipixel.royalskyblock.profile.ProfileManager;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 
 import java.util.Map;
@@ -28,9 +33,12 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     private static RoyalSkyblockPlugin instance;
 
-    private IslandDatabase database;
+    private Storage storage;
     private IslandWorldService worldService;
     private IslandManager islandManager;
+    private ProfileManager profileManager;
+    private PlayerStateService stateService;
+    private GamemodeManager gamemodeManager;
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
     private GuiManager guiManager;
@@ -52,16 +60,19 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         saveDefaultConfig();
         this.messageManager = new MessageManager(this);
 
-        this.database = new IslandDatabase(this);
-        if (!database.connect()) {
+        this.storage = new Storage(this);
+        if (!storage.connect()) {
             getLogger().severe("Storage failed to initialise — disabling RoyalSkyblock.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
 
-        this.worldService = aspAvailable() ? new AspIslandWorldService(this) : new NoOpIslandWorldService();
-        this.islandManager = new IslandManager(this, database, worldService);
         this.ecoBridge = new EcoProfileBridge();
+        this.worldService = aspAvailable() ? new AspIslandWorldService(this) : new NoOpIslandWorldService();
+        this.islandManager = new IslandManager(this, storage, worldService);
+        this.stateService = new PlayerStateService(this, storage);
+        this.gamemodeManager = new GamemodeManager(this);
+        this.profileManager = new ProfileManager(this, storage, stateService);
         this.guiManager = new GuiManager(this);
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
@@ -78,6 +89,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
         registerCommands();
         getServer().getPluginManager().registerEvents(new ProtectionListener(this), this);
+        getServer().getPluginManager().registerEvents(new ProfileListener(this), this);
+        getServer().getPluginManager().registerEvents(new CommandGateListener(this), this);
         getServer().getPluginManager().registerEvents(guiManager, this);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
@@ -90,8 +103,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         if (worldService != null) {
             worldService.shutdown();
         }
-        if (database != null) {
-            database.close();
+        if (storage != null) {
+            storage.close();
         }
         getLogger().info("RoyalSkyblock disabled.");
         instance = null;
@@ -101,7 +114,12 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     public void reload() {
         reloadConfig();
         messageManager.reload();
+        gamemodeManager.reload();
         guiManager.reload();
+    }
+
+    public GamemodeManager gamemodes() {
+        return gamemodeManager;
     }
 
     public MessageManager messages() {
@@ -149,8 +167,16 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         return worldService;
     }
 
-    public IslandDatabase database() {
-        return database;
+    public Storage storage() {
+        return storage;
+    }
+
+    public ProfileManager profiles() {
+        return profileManager;
+    }
+
+    public PlayerStateService playerState() {
+        return stateService;
     }
 
     public boolean isWorldBackendReady() {

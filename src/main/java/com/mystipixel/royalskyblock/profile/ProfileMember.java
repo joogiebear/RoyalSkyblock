@@ -1,19 +1,22 @@
-package com.mystipixel.royalskyblock.island;
+package com.mystipixel.royalskyblock.profile;
+
+import com.mystipixel.royalskyblock.island.IslandRole;
 
 import java.util.UUID;
 
 /**
- * A single membership row on an island: who they are, their {@link IslandRole}, and when they joined.
- * The name is a cached last-known value for display (rosters must render offline members).
+ * A member of a profile (coop roster row): who they are, their {@link IslandRole}, and when they
+ * joined. The name is a cached last-known value for display. For a Solo/Ironman profile this is just
+ * the owner; for Coop it can be several players sharing the island and economy.
  */
-public final class IslandMember {
+public final class ProfileMember {
 
     private final UUID uuid;
     private String name;
     private IslandRole role;
     private final long joinedAt;
 
-    public IslandMember(UUID uuid, String name, IslandRole role, long joinedAt) {
+    public ProfileMember(UUID uuid, String name, IslandRole role, long joinedAt) {
         this.uuid = uuid;
         this.name = name;
         this.role = role;
@@ -40,7 +43,6 @@ public final class IslandMember {
         this.role = role;
     }
 
-    /** Epoch millis when this member joined the island. */
     public long joinedAt() {
         return joinedAt;
     }

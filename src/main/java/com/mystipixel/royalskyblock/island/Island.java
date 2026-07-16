@@ -5,42 +5,38 @@ import org.bukkit.Location;
 import org.bukkit.World;
 import org.jetbrains.annotations.Nullable;
 
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The in-memory model of one island. Persisted metadata (owner, members, level, upgrades, home)
- * maps to the {@code islands} / {@code island_members} tables; the island's blocks live in the ASP
- * slime data-source, not here.
+ * The in-memory model of one island. An island belongs to a {@link com.mystipixel.royalskyblock.profile.Profile}
+ * (not directly to a player) — the profile owns the roster, so membership/roles are resolved through
+ * the profile. Persisted metadata maps to the {@code islands} table; the island's blocks live in the
+ * ASP slime data-source.
  *
- * <p>Home coordinates are stored relative to the island world's own origin, so an island can be
- * migrated or re-pasted without rewriting its home.
+ * <p>Home coordinates are stored relative to the island world's own origin.
  */
 public final class Island {
 
     private final UUID id;
-    private UUID owner;
+    private UUID profileId;
     private final String worldName;
     private final long createdAt;
 
     private int radius;
     private double level;
 
-    // Home, in island-world coordinates.
     private double homeX, homeY, homeZ;
     private float homeYaw, homePitch;
 
-    private final Map<UUID, IslandMember> members = new ConcurrentHashMap<>();
-
-    /** Upgrade tier per upgrade key (e.g. "size" -> 3). Populated in Phase 3. */
+    /** Upgrade tier per upgrade key (e.g. "size" -> 3). Populated in the upgrades phase. */
     private final Map<String, Integer> upgrades = new ConcurrentHashMap<>();
 
-    public Island(UUID id, UUID owner, String worldName, long createdAt) {
+    public Island(UUID id, UUID profileId, String worldName, long createdAt) {
         this.id = id;
-        this.owner = owner;
+        this.profileId = profileId;
         this.worldName = worldName;
         this.createdAt = createdAt;
     }
@@ -49,12 +45,12 @@ public final class Island {
         return id;
     }
 
-    public UUID owner() {
-        return owner;
+    public UUID profileId() {
+        return profileId;
     }
 
-    public void setOwner(UUID owner) {
-        this.owner = owner;
+    public void setProfileId(UUID profileId) {
+        this.profileId = profileId;
     }
 
     public String worldName() {
@@ -81,39 +77,7 @@ public final class Island {
         this.level = level;
     }
 
-    // ── Members ───────────────────────────────────────────────────────────────
-
-    public Collection<IslandMember> members() {
-        return members.values();
-    }
-
-    public @Nullable IslandMember member(UUID uuid) {
-        return members.get(uuid);
-    }
-
-    public boolean isMember(UUID uuid) {
-        return members.containsKey(uuid);
-    }
-
-    public void putMember(IslandMember member) {
-        members.put(member.uuid(), member);
-    }
-
-    public void removeMember(UUID uuid) {
-        members.remove(uuid);
-    }
-
-    public int memberCount() {
-        return members.size();
-    }
-
-    /** The member's role, or {@link IslandRole#VISITOR} if they are not on the roster. */
-    public IslandRole roleOf(UUID uuid) {
-        IslandMember m = members.get(uuid);
-        return m != null ? m.role() : IslandRole.VISITOR;
-    }
-
-    // ── Upgrades (Phase 3) ──────────────────────────────────────────────────────
+    // ── upgrades ────────────────────────────────────────────────────────────────
 
     public int upgradeTier(String key) {
         return upgrades.getOrDefault(key, 0);
@@ -127,7 +91,7 @@ public final class Island {
         return new HashMap<>(upgrades);
     }
 
-    // ── Home ────────────────────────────────────────────────────────────────────
+    // ── home ────────────────────────────────────────────────────────────────────
 
     public void setHome(double x, double y, double z, float yaw, float pitch) {
         this.homeX = x;
@@ -143,10 +107,7 @@ public final class Island {
     public float homeYaw() { return homeYaw; }
     public float homePitch() { return homePitch; }
 
-    /**
-     * Resolve the home as a live Bukkit {@link Location}, or {@code null} if the island world is not
-     * currently loaded. Callers should load the island world first (see IslandWorldService).
-     */
+    /** Resolve the home as a live Bukkit {@link Location}, or {@code null} if the world isn't loaded. */
     public @Nullable Location homeLocation() {
         World world = Bukkit.getWorld(worldName);
         if (world == null) {

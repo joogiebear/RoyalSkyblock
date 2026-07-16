@@ -1,7 +1,7 @@
 package com.mystipixel.royalskyblock.island;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
-import com.mystipixel.royalskyblock.data.IslandDatabase;
+import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,48 +21,54 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * The island lifecycle: create, resolve, teleport home, and delete. Ties together the metadata store
- * ({@link IslandDatabase}), the world backend ({@link IslandWorldService}) and the starter builder,
- * and keeps a small in-memory cache so hot lookups don't hit the DB.
- *
- * <p>World and player touches happen on the server thread; DB and slime I/O happen off it. The public
- * methods return futures that complete once the whole flow is done.
+ * Manages islands, which now belong to <em>profiles</em> rather than players. Creates the slime world +
+ * starter island, teleports players in, and deletes islands. Player-facing flows (whose island, who
+ * may build) resolve through {@link com.mystipixel.royalskyblock.profile.ProfileManager}.
  */
 public final class IslandManager {
 
     private final RoyalSkyblockPlugin plugin;
-    private final IslandDatabase database;
+    private final Storage storage;
     private final IslandWorldService worlds;
 
     private final Map<UUID, Island> byId = new ConcurrentHashMap<>();
-    private final Map<UUID, UUID> playerIndex = new ConcurrentHashMap<>(); // player -> island id
+    private final Map<UUID, UUID> profileToIsland = new ConcurrentHashMap<>();
 
-    public IslandManager(RoyalSkyblockPlugin plugin, IslandDatabase database, IslandWorldService worlds) {
+    public IslandManager(RoyalSkyblockPlugin plugin, Storage storage, IslandWorldService worlds) {
         this.plugin = plugin;
-        this.database = database;
+        this.storage = storage;
         this.worlds = worlds;
     }
 
     // ── lookups ─────────────────────────────────────────────────────────────────
 
-    /** The island {@code player} belongs to (as owner or member), loading it from the DB if needed. */
-    public @Nullable Island getPlayerIsland(UUID player) {
-        UUID cached = playerIndex.get(player);
+    public @Nullable Island getIsland(UUID islandId) {
+        Island cached = byId.get(islandId);
         if (cached != null) {
-            Island island = getIsland(cached);
-            if (island != null && island.isMember(player)) {
-                return island;
-            }
-            playerIndex.remove(player);
+            return cached;
         }
-        UUID id = database.getIslandIdByMember(player);
-        return id != null ? getIsland(id) : null;
+        Island loaded = storage.getIsland(islandId);
+        if (loaded != null) {
+            cache(loaded);
+        }
+        return loaded;
+    }
+
+    public @Nullable Island getIslandByProfile(UUID profileId) {
+        UUID cached = profileToIsland.get(profileId);
+        if (cached != null) {
+            return getIsland(cached);
+        }
+        Island island = storage.getIslandByProfile(profileId);
+        if (island != null) {
+            cache(island);
+        }
+        return island;
     }
 
     /**
-     * Resolve which island a world belongs to. Because every island is its own world named
-     * {@code <prefix><islandId>}, this is a direct parse — no region lookup. Returns {@code null} for
-     * non-island worlds (the hub, the overworld, etc.).
+     * Resolve which island a world belongs to. Every island is its own world named
+     * {@code <prefix><islandId>}, so this is a direct parse — no region lookup.
      */
     public @Nullable Island getIslandByWorld(World world) {
         if (world == null) {
@@ -80,42 +86,24 @@ public final class IslandManager {
         }
     }
 
-    /** Fetch an island by id, from cache or the DB. */
-    public @Nullable Island getIsland(UUID id) {
-        Island cached = byId.get(id);
-        if (cached != null) {
-            return cached;
-        }
-        Island loaded = database.getIsland(id);
-        if (loaded != null) {
-            cache(loaded);
-        }
-        return loaded;
-    }
-
-    public boolean hasIsland(UUID player) {
-        return playerIndex.containsKey(player) || database.getIslandIdByMember(player) != null;
-    }
-
     private void cache(Island island) {
         byId.put(island.id(), island);
-        for (IslandMember member : island.members()) {
-            playerIndex.put(member.uuid(), island.id());
-        }
+        profileToIsland.put(island.profileId(), island.id());
     }
 
     // ── create ──────────────────────────────────────────────────────────────────
 
-    /**
-     * Create a brand-new island for {@code player}: allocate a slime world, paste the starter island,
-     * persist metadata, and teleport them home. Fails (completes exceptionally) if they already have one.
-     */
-    public CompletableFuture<Island> createIsland(Player player) {
-        UUID pid = player.getUniqueId();
-        if (hasIsland(pid)) {
-            return CompletableFuture.failedFuture(new IllegalStateException("You already have an island."));
+    /** Get the profile's island, creating (world + starter) it if it doesn't exist yet. */
+    public CompletableFuture<Island> ensureIsland(UUID profileId) {
+        Island existing = getIslandByProfile(profileId);
+        if (existing != null) {
+            return CompletableFuture.completedFuture(existing);
         }
+        return createIslandForProfile(profileId);
+    }
 
+    /** Allocate a fresh slime world + starter island for a profile and persist it. Does not teleport. */
+    public CompletableFuture<Island> createIslandForProfile(UUID profileId) {
         UUID islandId = UUID.randomUUID();
         String prefix = plugin.getConfig().getString("world.world-name-prefix", "island_");
         String worldName = prefix + islandId;
@@ -125,14 +113,12 @@ public final class IslandManager {
         int px = paste != null ? paste.getInt("x", 0) : 0;
         int py = paste != null ? paste.getInt("y", 100) : 100;
         int pz = paste != null ? paste.getInt("z", 0) : 0;
-
         int startingRadius = plugin.getConfig().getInt("island.starting-radius", 50);
         long now = Instant.now().toEpochMilli();
 
         return worlds.createIsland(worldName)
                 .thenCompose(world -> onMain(() -> {
-                    StarterIslandBuilder.paste(world, px, py, pz,
-                            section("island.starter"), plugin.getLogger());
+                    StarterIslandBuilder.paste(world, px, py, pz, section("island.starter"), plugin.getLogger());
 
                     double hx = px + (homeOff != null ? homeOff.getInt("x", 0) : 0) + 0.5;
                     double hy = py + (homeOff != null ? homeOff.getInt("y", 1) : 1);
@@ -141,38 +127,24 @@ public final class IslandManager {
                     float pitch = homeOff != null ? (float) homeOff.getDouble("pitch", 0) : 0f;
                     world.setSpawnLocation((int) hx, (int) hy, (int) hz);
 
-                    Island island = new Island(islandId, pid, worldName, now);
+                    Island island = new Island(islandId, profileId, worldName, now);
                     island.setRadius(startingRadius);
                     island.setHome(hx, hy, hz, yaw, pitch);
-                    island.putMember(new IslandMember(pid, player.getName(), IslandRole.OWNER, now));
                     applyBorder(world, island);
                     return island;
                 }))
                 .thenApply(island -> {
                     cache(island);
-                    // Persist the pasted blocks and the metadata, then teleport home.
                     worlds.saveIsland(worldName);
-                    CompletableFuture.runAsync(() -> database.saveIsland(island),
-                            r -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, r));
-                    onMain(() -> {
-                        teleportTo(player, island);
-                        return null;
-                    });
+                    runAsync(() -> storage.saveIsland(island));
                     return island;
                 });
     }
 
     // ── teleport ─────────────────────────────────────────────────────────────────
 
-    /**
-     * Send {@code player} to their island home, loading the island world first if it isn't loaded.
-     * Completes with {@code false} if they have no island.
-     */
-    public CompletableFuture<Boolean> goHome(Player player) {
-        Island island = getPlayerIsland(player.getUniqueId());
-        if (island == null) {
-            return CompletableFuture.completedFuture(false);
-        }
+    /** Load the island's world (if needed) and teleport the player to its home. */
+    public CompletableFuture<Boolean> teleportToIsland(Player player, Island island) {
         return worlds.loadIsland(island.worldName())
                 .thenCompose(world -> onMain(() -> {
                     applyBorder(world, island);
@@ -181,43 +153,6 @@ public final class IslandManager {
                 }));
     }
 
-    /**
-     * Send {@code visitor} to another player's island (as a visitor — build protection applies),
-     * loading the world first. Completes with {@code false} if the target has no island.
-     */
-    public CompletableFuture<Boolean> visit(Player visitor, UUID targetPlayer) {
-        Island island = getPlayerIsland(targetPlayer);
-        if (island == null) {
-            return CompletableFuture.completedFuture(false);
-        }
-        return worlds.loadIsland(island.worldName())
-                .thenCompose(world -> onMain(() -> {
-                    applyBorder(world, island);
-                    teleportTo(visitor, island);
-                    return true;
-                }));
-    }
-
-    /**
-     * Apply a world border at the island edge: centred on the island's paste origin, sized to its
-     * radius. No-op if borders are disabled in config. Main thread only.
-     */
-    private void applyBorder(World world, Island island) {
-        if (!plugin.getConfig().getBoolean("island.border.enabled", true)) {
-            return;
-        }
-        ConfigurationSection paste = section("island.paste");
-        double cx = (paste != null ? paste.getInt("x", 0) : 0) + 0.5;
-        double cz = (paste != null ? paste.getInt("z", 0) : 0) + 0.5;
-        org.bukkit.WorldBorder border = world.getWorldBorder();
-        border.setCenter(cx, cz);
-        border.setSize(Math.max(1.0, island.radius() * 2.0));
-        border.setWarningDistance(Math.max(0, plugin.getConfig().getInt("island.border.warning-blocks", 2)));
-        border.setDamageAmount(0.0);
-        border.setDamageBuffer(0.0);
-    }
-
-    /** Teleport a player to an island home, nudging them upward to a safe spot. Main thread only. */
     private void teleportTo(Player player, Island island) {
         Location home = island.homeLocation();
         if (home == null) {
@@ -227,7 +162,6 @@ public final class IslandManager {
         player.teleport(safeLocation(home));
     }
 
-    /** Scan upward from {@code base} for a spot with solid footing and two air blocks. */
     private Location safeLocation(Location base) {
         int scan = plugin.getConfig().getInt("teleport.safe-scan-height", 8);
         World world = base.getWorld();
@@ -250,37 +184,24 @@ public final class IslandManager {
 
     // ── delete ────────────────────────────────────────────────────────────────────
 
-    /**
-     * Permanently delete {@code player}'s island: evict cache, drop metadata, and remove the slime
-     * world. Only the owner may delete. Completes with {@code false} if they own no island.
-     */
-    public CompletableFuture<Boolean> deleteOwnIsland(Player player) {
-        Island island = getPlayerIsland(player.getUniqueId());
-        if (island == null || !island.owner().equals(player.getUniqueId())) {
-            return CompletableFuture.completedFuture(false);
+    /** Evacuate anyone on the island, then remove its world and metadata row. */
+    public CompletableFuture<Void> deleteIsland(UUID islandId) {
+        Island island = getIsland(islandId);
+        if (island == null) {
+            return CompletableFuture.completedFuture(null);
         }
-        UUID islandId = island.id();
         String worldName = island.worldName();
-
         byId.remove(islandId);
-        playerIndex.values().removeIf(id -> id.equals(islandId));
+        profileToIsland.remove(island.profileId());
 
-        // Evacuate everyone still on the island BEFORE unloading it — Bukkit.unloadWorld() fails
-        // while players are inside, which would otherwise leave the deleted world lingering in memory.
         return onMain(() -> {
             evacuate(worldName, plugin.messages().raw("delete.evicted"));
             return null;
         }).thenCompose(ignored -> worlds.deleteIsland(worldName))
-                .thenCompose(ignored -> CompletableFuture.runAsync(
-                        () -> database.deleteIsland(islandId),
-                        r -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, r)))
-                .thenApply(ignored -> true);
+                .thenCompose(ignored -> runAsyncFuture(() -> storage.deleteIsland(islandId)));
     }
 
-    /**
-     * Move every player currently in the named world to the configured spawn/hub. Main thread only.
-     * Used before an island world is unloaded or deleted so nobody is stranded in it.
-     */
+    /** Move everyone in the named world to the configured spawn/hub. Main thread only. */
     public void evacuate(String worldName, String message) {
         World world = plugin.getServer().getWorld(worldName);
         if (world == null || world.getPlayers().isEmpty()) {
@@ -297,10 +218,6 @@ public final class IslandManager {
         }
     }
 
-    /**
-     * The configured spawn/hub location: the {@code spawn.world}'s own spawn, or explicit coords.
-     * Falls back to the primary world's spawn if the configured world isn't loaded.
-     */
     public @Nullable Location resolveSpawnLocation() {
         String worldName = plugin.getConfig().getString("spawn.world", "world");
         World world = plugin.getServer().getWorld(worldName);
@@ -311,8 +228,7 @@ public final class IslandManager {
             }
             plugin.getLogger().warning("spawn.world '" + worldName + "' is not loaded; using '"
                     + worldList.get(0).getName() + "' spawn instead.");
-            world = worldList.get(0);
-            return world.getSpawnLocation();
+            return worldList.get(0).getSpawnLocation();
         }
         if (plugin.getConfig().getBoolean("spawn.use-world-spawn", true)) {
             return world.getSpawnLocation();
@@ -325,10 +241,42 @@ public final class IslandManager {
                 (float) plugin.getConfig().getDouble("spawn.pitch", 0.0));
     }
 
+    /** Send a player to the configured spawn/hub. Main thread only. */
+    public void sendToSpawn(Player player) {
+        Location spawn = resolveSpawnLocation();
+        if (spawn != null) {
+            player.teleport(spawn);
+        }
+    }
+
+    private void applyBorder(World world, Island island) {
+        if (!plugin.getConfig().getBoolean("island.border.enabled", true)) {
+            return;
+        }
+        ConfigurationSection paste = section("island.paste");
+        double cx = (paste != null ? paste.getInt("x", 0) : 0) + 0.5;
+        double cz = (paste != null ? paste.getInt("z", 0) : 0) + 0.5;
+        org.bukkit.WorldBorder border = world.getWorldBorder();
+        border.setCenter(cx, cz);
+        border.setSize(Math.max(1.0, island.radius() * 2.0));
+        border.setWarningDistance(Math.max(0, plugin.getConfig().getInt("island.border.warning-blocks", 2)));
+        border.setDamageAmount(0.0);
+        border.setDamageBuffer(0.0);
+    }
+
     // ── helpers ────────────────────────────────────────────────────────────────────
 
     private @Nullable ConfigurationSection section(String path) {
         return plugin.getConfig().getConfigurationSection(path);
+    }
+
+    private void runAsync(Runnable runnable) {
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable);
+    }
+
+    private CompletableFuture<Void> runAsyncFuture(Runnable runnable) {
+        return CompletableFuture.runAsync(runnable,
+                r -> plugin.getServer().getScheduler().runTaskAsynchronously(plugin, r));
     }
 
     private <T> CompletableFuture<T> onMain(Supplier<T> supplier) {

@@ -1,0 +1,18 @@
+# Ironman — fully self-sufficient. No trading with other players.
+display-name: "&7&lIRONMAN"
+description: "&7No auction house, bazaar, or trading. Earn everything yourself."
+icon: iron_block
+# These commands are blocked while on an Ironman profile (command word only, no slash).
+# Add or remove entries to match the commands your economy plugins use.
+blocked-commands:
+  - ah
+  - auctionhouse
+  - auction
+  - auctions
+  - royalauctions
+  - bazaar
+  - baz
+  - royalbazaar
+  - pay
+  - trade
+  - market

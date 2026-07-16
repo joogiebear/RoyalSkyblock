@@ -40,6 +40,22 @@ public final class EcoProfileBridge {
         return UUID.nameUUIDFromBytes(("rsb-profile:" + player + ":" + profileId).getBytes());
     }
 
+    /** Copy the player's live eco data into a profile's shadow (called when leaving that profile). */
+    public void save(UUID player, UUID profileId) {
+        if (!present || profileId == null) {
+            return;
+        }
+        copyAll(PlayerProfile.load(player), PlayerProfile.load(shadowUuid(player, profileId)));
+    }
+
+    /** Copy a profile's shadow eco data into the player's live data (called when entering it). */
+    public void load(UUID player, UUID profileId) {
+        if (!present || profileId == null) {
+            return;
+        }
+        copyAll(PlayerProfile.load(shadowUuid(player, profileId)), PlayerProfile.load(player));
+    }
+
     /**
      * Move the player's live eco data into the {@code from} profile's shadow, then load the {@code to}
      * profile's shadow into the player's live data. Passing {@code null} for {@code from} skips the

@@ -1,0 +1,6 @@
+# Solo — standard Skyblock. Everything enabled.
+display-name: "&a&lSOLO"
+description: "&7Classic Skyblock — trade, sell, and build freely."
+icon: grass_block
+# Commands blocked on this gamemode (command word only, no slash). Empty = nothing blocked.
+blocked-commands: []

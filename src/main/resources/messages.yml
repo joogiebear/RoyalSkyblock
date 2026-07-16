@@ -43,6 +43,24 @@ delete:
 protection:
   cannot-build: "&cYou can't build on this island."
 
+profile:
+  header: "&6&lYour Profiles &7(%count%/%max%)"
+  line: "&8» &e%name% &7(%gamemode%)%active% &8- &7island: %has_island%"
+  active-tag: " &a(active)"
+  hint: "&7Use &e/is profile switch <name> &7or &e/is profile create <mode>&7."
+  created: "&aCreated profile &e%name% &7(%gamemode%)&a — welcome to your new island!"
+  create-failed: "&cCouldn't create profile: &7%error%"
+  switching: "&7Switching to &e%name%&7..."
+  switched: "&aNow on profile &e%name%&a."
+  switch-failed: "&cCouldn't switch profile: &7%error%"
+  not-found: "&cYou have no profile named &e%name%&c."
+  deleted: "&aDeleted profile &e%name%&a."
+  create-usage: "&cUsage: &e/is profile create <solo|coop|ironman> [name]"
+  switch-usage: "&cUsage: &e/is profile switch <name>"
+  delete-usage: "&cUsage: &e/is profile delete <name>"
+  unknown-gamemode: "&cUnknown gamemode. Choose: &esolo&c, &ecoop&c, or &eironman&c."
+  blocked-command: "&cThat command is disabled on your &e%gamemode% &cprofile."
+
 help:
   header: "&6&lRoyalSkyblock"
   subtitle: "&7Scalable per-island Skyblock."
@@ -50,5 +68,6 @@ help:
   create: "&8» &e/is create &7— start your island"
   home: "&8» &e/is home &7— go to your island"
   visit: "&8» &e/is visit <player> &7— visit an island"
+  profile: "&8» &e/is profile &7— manage your profiles"
   delete: "&8» &e/is delete confirm &7— delete your island"
   reload: "&8» &e/is reload &7— reload config"
