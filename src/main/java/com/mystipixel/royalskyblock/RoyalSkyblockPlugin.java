@@ -162,7 +162,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
-        new ConfigValidator(this).validate(); // warn about misconfig with actionable messages
+        // Deferred a tick: worlds (Multiverse) and Vault economies register during other plugins' enable,
+        // which may run after ours — checking inline would flag a healthy hub/economy as missing.
+        getServer().getScheduler().runTask(this, () -> new ConfigValidator(this).validate());
         // The full status panel prints once the ASP backend finishes initialising (see above).
     }
 

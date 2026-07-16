@@ -16,7 +16,8 @@ import java.util.Set;
 /**
  * Checks the loaded configuration for common admin mistakes and logs a clear, actionable warning for
  * each — so a misconfiguration surfaces at boot/reload with a fix, instead of as a confused player
- * later ("can't afford" when the real problem is no economy). Runs on enable and on {@code /is reload}.
+ * later ("can't afford" when the real problem is no economy). Runs on {@code /is reload}, and once at boot
+ * on the first tick — after every plugin has enabled, so worlds and economies it checks for actually exist.
  */
 public final class ConfigValidator {
 
