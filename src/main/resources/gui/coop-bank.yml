@@ -1,16 +1,17 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock  ·  Coop Members
+#  RoyalSkyblock  ·  Coop Bank
 # ═══════════════════════════════════════════════════════════════════════════════
-#  The 0 slots fill at runtime with your coop roster (owner first). Owner/co-owner
-#  click a member's head to remove them. Invite opens the player picker; Leave
-#  removes you from the profile.
+#  A shared balance for the coop. Backed by RoyalBank's shared-account API when
+#  RoyalBank is installed, otherwise a Vault-backed store RoyalSkyblock owns — either
+#  way money moves through Vault. The balance header and Deposit/Withdraw buttons
+#  (amounts from coop.bank.amounts in config.yml) are placed by code; this is the frame.
 #
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lCoop Members"
+title: "&6&lCoop Bank"
 rows: 6
 
 pages:
@@ -20,50 +21,23 @@ pages:
         - black_stained_glass_pane
       pattern:
         - "111111111"
-        - "100000001"   # 0 = a member head (filled dynamically)
-        - "100000001"
+        - "111111111"
+        - "111111111"
         - "111111111"
         - "111111111"
         - "111111111"
 
 slots:
-  # ── coop bank ──
-  - item: gold_ingot name:"&6&lCoop Bank"
-    lore:
-      - "&7A shared balance for the coop."
-      - "&7Deposit and withdraw together."
-      - ""
-      - "&eClick to open!"
-    row: 5
-    column: 5
-    left-click:
-      - id: open_menu
-        args:
-          menu: coop-bank
-
-  # ── footer ──
-  - item: lime_dye name:"&a&lInvite Player"
-    lore:
-      - "&7Invite an online player to"
-      - "&7your coop island."
-      - ""
-      - "&eClick to pick someone!"
-    row: 6
-    column: 2
-    left-click:
-      - id: open_menu
-        args:
-          menu: coop-invite
-
+  # ── footer (balance + deposit/withdraw buttons are placed by code) ──
   - item: arrow name:"&7« Back"
     lore:
-      - "&7Return to Manage Island."
+      - "&7Return to Coop Members."
     row: 6
     column: 4
     left-click:
       - id: open_menu
         args:
-          menu: manage
+          menu: coop
 
   - item: barrier name:"&c&lClose"
     lore:
@@ -72,16 +46,3 @@ slots:
     column: 6
     left-click:
       - id: close
-
-  - item: oak_door name:"&c&lLeave Coop"
-    lore:
-      - "&7Remove yourself from this"
-      - "&7coop profile."
-      - ""
-      - "&eClick to leave!"
-    row: 6
-    column: 8
-    left-click:
-      - id: player_command
-        args:
-          command: "is leave"

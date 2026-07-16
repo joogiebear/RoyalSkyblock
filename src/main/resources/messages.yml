@@ -116,6 +116,13 @@ coop:
   you-demoted: "&eYou were set back to a regular member."
   you-owner: "&6&l✦ &eYou are now the &6owner &eof the island!"
 
+bank:
+  deposited: "&aDeposited &e%amount% &ainto the coop bank."
+  withdrew: "&aWithdrew &e%amount% &afrom the coop bank."
+  empty-purse: "&cYou have no money to deposit."
+  empty: "&cThe coop bank is empty."
+  not-coop: "&cYou need to be on a Coop profile to use the coop bank."
+
 help:
   header: "&6&lRoyalSkyblock"
   subtitle: "&7Scalable per-island Skyblock."

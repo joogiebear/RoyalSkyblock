@@ -153,7 +153,10 @@ public final class Storage {
                         + "inventory " + blob + ", ender_chest " + blob + ", "
                         + "exp_level " + integer + " NOT NULL DEFAULT 0, exp_progress " + flt + " NOT NULL DEFAULT 0, "
                         + "health " + dbl + " NOT NULL DEFAULT 20, food " + integer + " NOT NULL DEFAULT 20, "
-                        + "saturation " + flt + " NOT NULL DEFAULT 5, PRIMARY KEY (profile_id, player_uuid))"
+                        + "saturation " + flt + " NOT NULL DEFAULT 5, PRIMARY KEY (profile_id, player_uuid))",
+                // Vault-backed coop bank balances (only used when RoyalBank isn't the backend).
+                "CREATE TABLE IF NOT EXISTS coop_banks ("
+                        + "profile_id " + txt36 + " PRIMARY KEY, balance " + dbl + " NOT NULL DEFAULT 0)"
         };
         try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
             for (String q : ddl) {
@@ -579,6 +582,36 @@ public final class Storage {
             return true;
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not save profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    // ── coop bank (Vault-backed fallback) ──────────────────────────────────────────
+
+    public double getCoopBankBalance(UUID profileId) {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement st = c.prepareStatement("SELECT balance FROM coop_banks WHERE profile_id = ?")) {
+            st.setString(1, profileId.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                return rs.next() ? rs.getDouble("balance") : 0.0;
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load coop bank " + profileId + ": " + e.getMessage());
+            return 0.0;
+        }
+    }
+
+    public boolean saveCoopBankBalance(UUID profileId, double balance) {
+        String sql = mysql()
+                ? "INSERT INTO coop_banks (profile_id, balance) VALUES (?,?) ON DUPLICATE KEY UPDATE balance=VALUES(balance)"
+                : "INSERT INTO coop_banks (profile_id, balance) VALUES (?,?) ON CONFLICT(profile_id) DO UPDATE SET balance=excluded.balance";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, profileId.toString());
+            st.setDouble(2, balance);
+            st.executeUpdate();
+            return true;
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not save coop bank " + profileId + ": " + e.getMessage());
             return false;
         }
     }

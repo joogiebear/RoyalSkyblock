@@ -14,6 +14,7 @@ softdepend:
   - Vault
   - eco
   - EcoItems
+  - RoyalBank
   - PlaceholderAPI
   - RoyalBank
   - WorldEdit

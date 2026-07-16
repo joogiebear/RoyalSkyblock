@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.gui;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.bank.CoopBank;
 import com.mystipixel.royalskyblock.gui.menu.MenuEffect;
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot;
 import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
@@ -53,11 +54,12 @@ public final class GuiManager implements Listener {
     public static final String COOP = "coop";
     public static final String COOP_INVITE = "coop-invite";
     public static final String COOP_MEMBER = "coop-member";
+    public static final String COOP_BANK = "coop-bank";
     public static final String LEVEL = "level";
     public static final String TOP = "top";
 
     private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
-            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, LEVEL, TOP};
+            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, COOP_BANK, LEVEL, TOP};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -135,6 +137,10 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(COOP_MEMBER)) {
             fillCoopMember(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(COOP_BANK)) {
+            fillCoopBank(player, template, inv, holder);
             return;
         }
         if (menuId.equals(LEVEL)) {
@@ -559,6 +565,107 @@ public final class GuiManager implements Listener {
                 open(viewer, COOP);
             }
         });
+    }
+
+    // ── coop bank ────────────────────────────────────────────────────────────────
+
+    private void fillCoopBank(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        Profile profile = plugin.profiles().getActiveProfile(player);
+        if (profile == null) {
+            return;
+        }
+        UUID coopId = profile.id();
+        String label = profile.name();
+        CoopBank bank = plugin.coopBank();
+        double balance = bank.balance(coopId);
+
+        inv.setItem(4, coopBankHeaderIcon(profile, balance, bank)); // header (row 1, col 5)
+        if (!bank.available()) {
+            return; // no economy — header explains, no buttons
+        }
+
+        boolean canWithdraw = true;
+        if (plugin.getConfig().getBoolean("coop.bank.withdraw-requires-manager", false)) {
+            IslandRole role = profile.roleOf(player.getUniqueId());
+            canWithdraw = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
+        }
+
+        List<Integer> amounts = plugin.getConfig().getIntegerList("coop.bank.amounts");
+        if (amounts.isEmpty()) {
+            amounts = List.of(100, 1000, 10000);
+        }
+        int[] depositCols = {19, 21, 23}; // row 3, cols 2/4/6
+        int[] withdrawCols = {28, 30, 32}; // row 4, cols 2/4/6
+        for (int i = 0; i < depositCols.length && i < amounts.size(); i++) {
+            long amount = amounts.get(i);
+            inv.setItem(depositCols[i], infoIcon(Material.LIME_DYE, "&a&lDeposit " + fmtCoins(amount),
+                    List.of("&7From your purse → coop bank.", "", "&eClick to deposit!")));
+            holder.putAction(depositCols[i], (viewer, right) -> runBank(viewer, coopId, label, amount, true));
+            if (canWithdraw) {
+                inv.setItem(withdrawCols[i], infoIcon(Material.GOLD_NUGGET, "&6&lWithdraw " + fmtCoins(amount),
+                        List.of("&7From coop bank → your purse.", "", "&eClick to withdraw!")));
+                holder.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, coopId, label, amount, false));
+            }
+        }
+        // deposit all (row 3, col 8)
+        inv.setItem(25, infoIcon(Material.LIME_WOOL, "&a&lDeposit All",
+                List.of("&7Deposit your whole purse", "&7(up to any bank cap).", "", "&eClick to deposit!")));
+        holder.putAction(25, (viewer, right) -> {
+            long amount = (long) Math.floor(plugin.purseBalance(viewer));
+            if (amount < 1) {
+                plugin.messages().send(viewer, "bank.empty-purse");
+                open(viewer, COOP_BANK);
+                return;
+            }
+            runBank(viewer, coopId, label, amount, true);
+        });
+        // withdraw all (row 4, col 8)
+        if (canWithdraw) {
+            inv.setItem(34, infoIcon(Material.GOLD_BLOCK, "&6&lWithdraw All",
+                    List.of("&7Withdraw the whole coop", "&7balance to your purse.", "", "&eClick to withdraw!")));
+            holder.putAction(34, (viewer, right) -> {
+                long amount = (long) Math.floor(bank.balance(coopId));
+                if (amount < 1) {
+                    plugin.messages().send(viewer, "bank.empty");
+                    open(viewer, COOP_BANK);
+                    return;
+                }
+                runBank(viewer, coopId, label, amount, false);
+            });
+        }
+    }
+
+    private void runBank(Player viewer, UUID coopId, String label, long amount, boolean deposit) {
+        CoopBank bank = plugin.coopBank();
+        String error = deposit ? bank.deposit(viewer, coopId, label, amount)
+                : bank.withdraw(viewer, coopId, label, amount);
+        if (error != null) {
+            viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+        } else {
+            plugin.messages().send(viewer, deposit ? "bank.deposited" : "bank.withdrew", "amount", fmtCoins(amount));
+        }
+        open(viewer, COOP_BANK);
+    }
+
+    private ItemStack coopBankHeaderIcon(Profile profile, double balance, CoopBank bank) {
+        ItemStack item = new ItemStack(Material.GOLD_INGOT);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic("&6&l" + profile.name() + " &7Bank"));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic("&7Balance: &e" + fmtCoins(balance)));
+            if (!bank.available()) {
+                lore.add(noItalic(""));
+                lore.add(noItalic("&cNo economy plugin — banking disabled."));
+            }
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private static String fmtCoins(double value) {
+        return String.format(Locale.US, "%,.0f", value);
     }
 
     /** Run a role change, message actor + (online) target, and re-open the right menu. */

@@ -122,6 +122,20 @@ coop:
   # How long a coop invite stays valid before it expires.
   invite-timeout-seconds: 60
 
+  # Shared coop bank. Backed by RoyalBank's shared-account API when RoyalBank is installed, otherwise a
+  # Vault-backed balance RoyalSkyblock owns. Needs an economy (Vault) either way.
+  bank:
+    # Preset deposit/withdraw amount buttons in the coop-bank GUI (first three are shown).
+    amounts:
+      - 100
+      - 1000
+      - 10000
+    # Cap for the Vault-backed store. -1 = unlimited. (The RoyalBank backend uses its own
+    # shared-accounts.max-balance instead.)
+    max-balance: -1
+    # Require owner/co-owner to withdraw? Deposits are always open to members.
+    withdraw-requires-manager: false
+
 # ── Currencies (used by upgrade costs) ────────────────────────────────────────
 # Define named currencies; upgrades reference them by key. Two kinds:
 #   type: vault    -> your server's Vault economy (works with any economy plugin)

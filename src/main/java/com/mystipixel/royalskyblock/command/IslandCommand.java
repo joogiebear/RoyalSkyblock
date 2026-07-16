@@ -26,7 +26,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
             "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
-            "kick", "leave", "members", "manage", "transfer", "promote", "demote", "settings",
+            "kick", "leave", "members", "manage", "bank", "transfer", "promote", "demote", "settings",
             "setspawn", "sethome", "setguestspawn", "kickall",
             "level", "top", "upgrade", "delete", "reload", "admin");
 
@@ -60,6 +60,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
             case "manage" -> handleManage(sender);
+            case "bank" -> handleBank(sender);
             case "level" -> handleLevel(sender, args);
             case "top" -> handleTop(sender);
             case "settings" -> handleSettings(sender);
@@ -602,6 +603,19 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return;
         }
         plugin.gui().open(player, GuiManager.MANAGE);
+    }
+
+    private void handleBank(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        Profile active = plugin.profiles().getActiveProfile(player);
+        if (active == null || active.gamemode() != Gamemode.COOP) {
+            plugin.messages().send(player, "bank.not-coop");
+            return;
+        }
+        plugin.gui().open(player, GuiManager.COOP_BANK);
     }
 
     /** {@code /is level} opens the level menu; {@code /is level recalc} triggers a fresh scan. */

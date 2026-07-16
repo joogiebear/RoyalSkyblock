@@ -1,7 +1,11 @@
 package com.mystipixel.royalskyblock;
 
+import com.mystipixel.royalskyblock.bank.CoopBank;
+import com.mystipixel.royalskyblock.bank.RoyalBankCoopBank;
+import com.mystipixel.royalskyblock.bank.VaultCoopBank;
 import com.mystipixel.royalskyblock.command.IslandCommand;
 import com.mystipixel.royalskyblock.currency.CurrencyService;
+import com.mystipixel.royalskyblock.hooks.VaultHook;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge;
@@ -50,6 +54,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private CurrencyService currencyService;
     private UpgradeManager upgradeManager;
     private LevelService levelService;
+    private CoopBank coopBank;
+    private VaultHook vaultHook; // wallet lookups for coop-bank "deposit all"
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
     private GuiManager guiManager;
@@ -88,6 +94,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.upgradeManager = new UpgradeManager(this);
         this.levelService = new LevelService(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
+        this.vaultHook = resolveVault();
+        this.coopBank = createCoopBank();
         this.guiManager = new GuiManager(this);
 
         // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
@@ -183,6 +191,51 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
             command.setTabCompleter(island);
         } else {
             getLogger().warning("Command 'island' missing from plugin.yml — command not registered.");
+        }
+    }
+
+    public CoopBank coopBank() {
+        return coopBank;
+    }
+
+    /**
+     * Pick the coop-bank backend: RoyalBank's shared-account API when RoyalBank is installed (guarded so
+     * its classes are only linked when present), else a Vault-backed store owned by RoyalSkyblock.
+     */
+    private CoopBank createCoopBank() {
+        if (getServer().getPluginManager().getPlugin("RoyalBank") != null) {
+            try {
+                Class.forName("com.mystipixel.royalbank.api.RoyalBankAPI", false, getClass().getClassLoader());
+                RoyalBankCoopBank hook = new RoyalBankCoopBank();
+                if (hook.available()) {
+                    getLogger().info("Coop bank backend: RoyalBank (shared accounts).");
+                    return hook;
+                }
+            } catch (Throwable notRoyalBank) {
+                // RoyalBank present but API missing/older — fall through to Vault.
+            }
+        }
+        getLogger().info("Coop bank backend: " + (vaultHook != null && vaultHook.isReady()
+                ? "Vault (RoyalSkyblock-owned balances)." : "unavailable (install Vault or RoyalBank)."));
+        return new VaultCoopBank(this, vaultHook);
+    }
+
+    /** The player's Vault wallet balance (0 if no economy). Used by the coop-bank "deposit all" button. */
+    public double purseBalance(org.bukkit.entity.Player player) {
+        return vaultHook != null ? vaultHook.balance(player) : 0.0;
+    }
+
+    /** Guarded Vault lookup — only links {@code net.milkbowl.vault.*} when Vault is actually present. */
+    private VaultHook resolveVault() {
+        if (getServer().getPluginManager().getPlugin("Vault") == null) {
+            return null;
+        }
+        try {
+            Class.forName("net.milkbowl.vault.economy.Economy");
+            VaultHook hook = new VaultHook();
+            return hook.isReady() ? hook : null;
+        } catch (Throwable notVault) {
+            return null;
         }
     }
 
