@@ -24,7 +24,9 @@ import java.util.UUID;
  * pre-computed on a background timer so a placeholder request never sorts every island inline.
  *
  * <table>
- *   <tr><td>{@code has_island}</td><td>true/false</td></tr>
+ *   <tr><td>{@code has_island}</td><td>true/false — the player owns/belongs to an island</td></tr>
+ *   <tr><td>{@code on_island}</td><td>true/false — standing on ANY island world (gate eco effects to islands)</td></tr>
+ *   <tr><td>{@code on_own_island}</td><td>true/false — standing on their OWN island</td></tr>
  *   <tr><td>{@code level}</td><td>island level, whole number with grouping</td></tr>
  *   <tr><td>{@code level_raw}</td><td>island level, raw</td></tr>
  *   <tr><td>{@code rank}</td><td>leaderboard position (1 = highest), or {@code -}</td></tr>
@@ -95,6 +97,21 @@ public final class RoyalSkyblockExpansion extends PlaceholderExpansion {
         switch (params.toLowerCase(Locale.ROOT)) {
             case "has_island":
                 return String.valueOf(island != null);
+            case "on_island": {
+                // Is the player currently standing on ANY island world? (for gating eco effects to islands)
+                if (!player.isOnline()) {
+                    return "false";
+                }
+                return String.valueOf(plugin.islands().getIslandByWorld(player.getPlayer().getWorld()) != null);
+            }
+            case "on_own_island": {
+                // Is the player on THEIR OWN island (their active profile's island)?
+                if (!player.isOnline()) {
+                    return "false";
+                }
+                Island here = plugin.islands().getIslandByWorld(player.getPlayer().getWorld());
+                return String.valueOf(here != null && profileId != null && here.profileId().equals(profileId));
+            }
             case "profile":
                 return profile != null ? profile.name() : "";
             case "gamemode":
