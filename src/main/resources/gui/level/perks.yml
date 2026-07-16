@@ -1,0 +1,56 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Island Perks
+# ═══════════════════════════════════════════════════════════════════════════════
+#  The 0 slots fill at runtime with the perks from perks.yml — unlocked ones show
+#  their icon, locked ones are greyed with the level needed. Perks are OPTIONAL and
+#  off by default; this menu is only reachable when they're enabled.
+#
+#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
+#    click ids: open_menu · close · player_command · console_command · message · play_sound
+# ═══════════════════════════════════════════════════════════════════════════════
+
+title: "&6&lIsland Perks"
+rows: 6
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - black_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "100000001"
+        - "100000001"
+        - "100000001"
+        - "111111111"
+        - "111111111"
+
+slots:
+  # ── header ──
+  - item: nether_star name:"&d&lIsland Perks"
+    lore:
+      - "&7Perks unlock as your island's"
+      - "&7level rises. Stand on your island"
+      - "&7to enjoy them."
+    row: 1
+    column: 5
+
+  # ── footer ──
+  - item: arrow name:"&7« Back"
+    lore:
+      - "&7Return to the island level menu."
+    row: 6
+    column: 4
+    left-click:
+      - id: open_menu
+        args:
+          menu: level
+
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 6
+    column: 6
+    left-click:
+      - id: close

@@ -55,6 +55,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private CurrencyService currencyService;
     private UpgradeManager upgradeManager;
     private LevelService levelService;
+    private com.mystipixel.royalskyblock.perk.PerkService perkService;
     private BankLevelManager bankLevels;
     private BankService bankService;
     private VaultHook vaultHook; // wallet lookups for the bank "deposit all"
@@ -95,6 +96,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.currencyService = new CurrencyService(this);
         this.upgradeManager = new UpgradeManager(this);
         this.levelService = new LevelService(this);
+        this.perkService = new com.mystipixel.royalskyblock.perk.PerkService(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.vaultHook = resolveVault();
         this.bankLevels = new BankLevelManager(this);
@@ -131,6 +133,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
             long period = autoRecalcMinutes * 60L * 20L;
             getServer().getScheduler().runTaskTimer(this, () -> levelService.autoRecalcActiveIslands(), period, period);
         }
+        // Level-gated perks tick (self-guards to a no-op when perks are disabled).
+        long perkPeriod = perkService.refreshSeconds() * 20L;
+        getServer().getScheduler().runTaskTimer(this, () -> perkService.tick(), perkPeriod, perkPeriod);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
@@ -156,6 +161,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getLogger().info(" Progression (eco): " + (ecoBridge.isPresent()
                 ? "linked (skills/coins are per-profile)" : "not found (progression is not per-profile)"));
         getLogger().info(" Metadata storage : " + storage);
+        getLogger().info(" Perks            : " + (perkService.enabled()
+                ? "ON (" + perkService.perkCount() + " perks)" : "off (optional — enable in perks.yml)"));
         getLogger().info(" ---------------------------------------------------------------");
         getLogger().info(" Configure first  : spawn.world + currencies in config.yml");
         getLogger().info(" Commands: /is help  ·  Reload: /is reload  ·  See README.md");
@@ -182,6 +189,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         currencyService.reload();
         upgradeManager.reload();
         levelService.reload();
+        perkService.reload();
         bankLevels.reload();
         guiManager.reload();
         new ConfigValidator(this).validate();
@@ -193,6 +201,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public LevelService levels() {
         return levelService;
+    }
+
+    public com.mystipixel.royalskyblock.perk.PerkService perks() {
+        return perkService;
     }
 
     public GamemodeManager gamemodes() {

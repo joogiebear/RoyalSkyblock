@@ -28,7 +28,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
             "kick", "leave", "members", "manage", "bank", "transfer", "promote", "demote", "settings",
             "setspawn", "sethome", "setguestspawn", "kickall",
-            "level", "top", "upgrade", "delete", "reload", "admin");
+            "level", "top", "perks", "upgrade", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
 
@@ -63,6 +63,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "bank" -> handleBank(sender);
             case "level" -> handleLevel(sender, args);
             case "top" -> handleTop(sender);
+            case "perks" -> handlePerks(sender);
             case "settings" -> handleSettings(sender);
             case "upgrade", "upgrades" -> handleUpgrades(sender);
             case "sethome", "setspawn" -> handleSetSpawn(sender, false);
@@ -658,6 +659,18 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.TOP);
     }
 
+    private void handlePerks(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (!plugin.perks().enabled()) {
+            plugin.messages().send(player, "perks.disabled");
+            return;
+        }
+        plugin.gui().open(player, GuiManager.PERKS);
+    }
+
     // ── admin / spike diagnostics ────────────────────────────────────────────────
 
     private void handleAdmin(CommandSender sender, String[] args) {
@@ -708,6 +721,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color(dep("Progression (eco)", plugin.eco().isPresent(),
                 "per-profile", "not per-profile")));
         sender.sendMessage(Text.color("&7Storage: &f" + storage));
+        sender.sendMessage(Text.color("&7Perks: " + (plugin.perks().enabled()
+                ? "&a✔ on &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
         sender.sendMessage(Text.color("&7Config health:"));
         String spawnWorld = plugin.getConfig().getString("spawn.world", "world");
         boolean spawnOk = plugin.getServer().getWorld(spawnWorld) != null;

@@ -13,6 +13,7 @@ import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.island.IslandSetting;
 import com.mystipixel.royalskyblock.level.LevelConfig;
+import com.mystipixel.royalskyblock.perk.Perk;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.Bukkit;
@@ -63,6 +64,7 @@ public final class GuiManager implements Listener {
     public static final String COOP_BANK_TXNS = "coop-bank-txns";
     public static final String LEVEL = "level";
     public static final String TOP = "top";
+    public static final String PERKS = "perks";
 
     // Menu files live in gui/<category>/ folders for organisation. The menu id is the file's basename,
     // so the constants above and every open_menu reference are unaffected by the folder layout.
@@ -72,7 +74,7 @@ public final class GuiManager implements Listener {
             "island/manage", "island/settings", "island/upgrades", "island/visit",
             "coop/coop", "coop/coop-invite", "coop/coop-member",
             "bank/bank-hub", "bank/bank-personal", "bank/coop-bank", "bank/coop-bank-txns",
-            "level/level", "level/top",
+            "level/level", "level/top", "level/perks",
     };
 
     private final RoyalSkyblockPlugin plugin;
@@ -172,6 +174,10 @@ public final class GuiManager implements Listener {
         }
         if (menuId.equals(TOP)) {
             fillTop(player, template, inv, holder);
+            return;
+        }
+        if (menuId.equals(PERKS)) {
+            fillPerks(player, template, inv, holder);
             return;
         }
         if (!menuId.equals(PROFILES)) {
@@ -934,6 +940,12 @@ public final class GuiManager implements Listener {
 
     /** Fill the level menu with the biggest point contributors from the island's last scan. */
     private void fillLevel(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        // Perks entry point (row 5, col 5) — only when the optional perks system is enabled.
+        if (plugin.perks().enabled()) {
+            inv.setItem(40, infoIcon(Material.NETHER_STAR, "&d&lPerks",
+                    List.of("&7Perks that unlock as your", "&7island levels up.", "", "&eClick to view!")));
+            holder.putAction(40, (viewer, right) -> open(viewer, PERKS));
+        }
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
         if (island == null) {
@@ -1031,6 +1043,49 @@ public final class GuiManager implements Listener {
     }
 
     /** "DIAMOND_BLOCK" -> "Diamond Block". */
+    private void fillPerks(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        List<Integer> slots = template.contentSlots();
+        if (slots.isEmpty()) {
+            return;
+        }
+        if (!plugin.perks().enabled()) {
+            inv.setItem(slots.get(0), infoIcon(Material.BARRIER, "&cPerks are disabled",
+                    List.of("&7This server has perks turned off.", "&8(admins: enable in perks.yml)")));
+            return;
+        }
+        UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        int level = island == null ? 0 : (int) island.level();
+        List<Perk> perks = plugin.perks().perks();
+        if (perks.isEmpty()) {
+            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No perks configured",
+                    List.of("&7Add perks in perks.yml.")));
+            return;
+        }
+        for (int i = 0; i < perks.size() && i < slots.size(); i++) {
+            inv.setItem(slots.get(i), perkIcon(perks.get(i), level));
+        }
+    }
+
+    private ItemStack perkIcon(Perk perk, int islandLevel) {
+        boolean unlocked = islandLevel >= perk.requiredLevel();
+        ItemStack item = new ItemStack(unlocked ? perk.icon() : Material.GRAY_DYE);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            meta.displayName(noItalic(perk.name() + (unlocked ? " &a✔" : " &8(locked)")));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            for (String line : perk.description()) {
+                lore.add(noItalic(line));
+            }
+            lore.add(noItalic(""));
+            lore.add(noItalic("&7Requires island level &f" + perk.requiredLevel()));
+            lore.add(noItalic(unlocked ? "&a✔ Unlocked" : "&c✘ Locked — reach level " + perk.requiredLevel()));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
     private static String prettyName(Material material) {
         String[] words = material.name().toLowerCase(Locale.ROOT).split("_");
         StringBuilder sb = new StringBuilder();

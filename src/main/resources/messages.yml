@@ -120,6 +120,9 @@ bank:
   empty-purse: "&cYou have no money to deposit."
   empty: "&cThe coop bank is empty."
 
+perks:
+  disabled: "&cLevel-gated perks are disabled on this server."
+
 help:
   header: "&6&l✦ RoyalSkyblock"
   subtitle: "&7Your Skyblock commands:"

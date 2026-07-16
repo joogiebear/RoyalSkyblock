@@ -29,6 +29,8 @@ public final class Island {
     private double level;
     /** Highest integer level whose level-up rewards have already been paid out. */
     private int rewardLevel;
+    /** Highest integer level whose perk unlock-commands have already run (perks are opt-in). */
+    private int perkLevel;
 
     private double homeX, homeY, homeZ;
     private float homeYaw, homePitch;
@@ -93,6 +95,14 @@ public final class Island {
 
     public void setRewardLevel(int rewardLevel) {
         this.rewardLevel = rewardLevel;
+    }
+
+    public int perkLevel() {
+        return perkLevel;
+    }
+
+    public void setPerkLevel(int perkLevel) {
+        this.perkLevel = perkLevel;
     }
 
     // ── upgrades ────────────────────────────────────────────────────────────────

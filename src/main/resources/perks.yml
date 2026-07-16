@@ -1,0 +1,63 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Level-Gated Perks
+# ═══════════════════════════════════════════════════════════════════════════════
+#  OPTIONAL, and OFF by default. Perks unlock as your island's level (see levels.yml)
+#  rises. They overlap the purchased upgrades system, so most servers won't need
+#  both — flip `enabled` to true only if you want them.
+#
+#  While OFF: no effects, no menu button, no overhead.
+#  While ON:  each perk applies its potion effects to a player standing on their own
+#             island (once the island is high enough), and runs its unlock-commands
+#             ONCE the first time the island reaches that level.
+#
+#  Each perk:
+#    name             shown in the perks menu (& colour codes)
+#    icon             menu item
+#    required-level   island level needed to unlock it
+#    description      lore lines in the menu
+#    effects          potion effects while on-island, as NAME:amplifier
+#                     (amplifier is 0-based: 0 = level I, 1 = level II). e.g. haste:1
+#    unlock-commands  console commands run ONCE on unlock. %owner% / %level%. Empty = none.
+#
+#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+enabled: false
+
+# Seconds between re-applying on-island potion effects (kept a touch shorter than the
+# effect duration so they never flicker). Lower = snappier, slightly more work.
+effect-refresh-seconds: 6
+
+perks:
+  haste:
+    name: "&e&lMiner's Haste"
+    icon: golden_pickaxe
+    required-level: 5
+    description:
+      - "&7Mine faster while on your island."
+    effects:
+      - "haste:0"
+    unlock-commands: []
+
+  regen:
+    name: "&a&lIsland Renewal"
+    icon: golden_apple
+    required-level: 15
+    description:
+      - "&7Slowly regenerate on your island."
+    effects:
+      - "regeneration:0"
+    unlock-commands: []
+
+  swift:
+    name: "&b&lSwift Steps"
+    icon: feather
+    required-level: 30
+    description:
+      - "&7Move quicker across your island."
+    effects:
+      - "speed:0"
+    # Example one-time unlock reward (needs an economy command; edit for your setup):
+    # unlock-commands:
+    #   - "eco give %owner% 5000"
+    unlock-commands: []

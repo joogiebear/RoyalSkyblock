@@ -13,6 +13,7 @@
 #    bank.yml         the built-in bank: levels, interest, upgrade costs
 #    levels.yml       island-level block values, scan tuning, level-up rewards
 #    upgrades.yml     island upgrades (size / guest limit / coop slots)
+#    perks.yml        OPTIONAL level-gated perks (off by default)
 #    gamemodes/*.yml  Solo / Coop / Ironman rulesets
 #    gui/<cat>/*.yml  one file per menu, grouped into folders:
 #                     core / profile / island / coop / bank / level
