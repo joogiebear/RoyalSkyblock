@@ -64,8 +64,16 @@ public final class GuiManager implements Listener {
     public static final String LEVEL = "level";
     public static final String TOP = "top";
 
-    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE, SETTINGS, UPGRADES,
-            VISIT, MANAGE, COOP, COOP_INVITE, COOP_MEMBER, BANK_HUB, BANK_PERSONAL, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP};
+    // Menu files live in gui/<category>/ folders for organisation. The menu id is the file's basename,
+    // so the constants above and every open_menu reference are unaffected by the folder layout.
+    private static final String[] MENU_PATHS = {
+            "core/main", "core/confirm-delete",
+            "profile/profiles", "profile/create-profile",
+            "island/manage", "island/settings", "island/upgrades", "island/visit",
+            "coop/coop", "coop/coop-invite", "coop/coop-member",
+            "bank/bank-hub", "bank/bank-personal", "bank/coop-bank", "bank/coop-bank-txns",
+            "level/level", "level/top",
+    };
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -79,11 +87,12 @@ public final class GuiManager implements Listener {
 
     public void reload() {
         byId.clear();
-        for (String id : MENUS) {
-            File file = new File(plugin.getDataFolder(), "gui/" + id + ".yml");
+        for (String path : MENU_PATHS) {
+            File file = new File(plugin.getDataFolder(), "gui/" + path + ".yml");
             if (!file.exists()) {
-                plugin.saveResource("gui/" + id + ".yml", false);
+                plugin.saveResource("gui/" + path + ".yml", false); // saveResource creates parent folders
             }
+            String id = path.substring(path.lastIndexOf('/') + 1); // menu id = basename
             byId.put(id, MenuTemplate.load(file, "&6&lSkyblock", 5));
         }
     }

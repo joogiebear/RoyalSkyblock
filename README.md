@@ -44,7 +44,7 @@ Settings in one place, text and content split out — the same layout across the
 | `levels.yml` | Island-level block values + scan/auto-recalc tuning + level-up rewards. |
 | `upgrades.yml` | Island upgrades (size / guest limit / coop slots): tiers, costs, wait/skip times. |
 | `gamemodes/*.yml` | One ruleset per gamemode (Solo / Coop / Ironman): display, icon, blocked commands. |
-| `gui/*.yml` | One file per menu. Rows, a filler mask, and slots placed by row/column with click effects. |
+| `gui/<category>/*.yml` | One file per menu, grouped into folders: `core`, `profile`, `island`, `coop`, `bank`, `level`. Rows, a filler mask, and slots placed by row/column with click effects. |
 
 Run `/is reload` to reload **all** of the above (config, messages, gamemodes, currencies, upgrades,
 levels, bank, and menus).
