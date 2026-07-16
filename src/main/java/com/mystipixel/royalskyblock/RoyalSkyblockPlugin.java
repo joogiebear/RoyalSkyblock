@@ -109,6 +109,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         // Resume in-progress upgrade timers and complete any that elapsed while offline.
         upgradeManager.loadPending();
         getServer().getScheduler().runTaskTimer(this, () -> upgradeManager.tick(), 40L, 20L);
+        // Live upgrade-menu countdowns (self-guards to no-op when nothing is cooking).
+        getServer().getScheduler().runTaskTimer(this, () -> guiManager.tickOpenMenus(), 20L, 20L);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()

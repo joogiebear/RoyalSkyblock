@@ -172,6 +172,43 @@ public final class GuiManager implements Listener {
         }
     }
 
+    /**
+     * Tick live upgrade countdowns. Guarded so it does nothing unless something is actually cooking,
+     * and even then only re-draws the specific timer icons for players currently viewing the menu.
+     */
+    public void tickOpenMenus() {
+        if (!plugin.upgrades().hasAnyPending()) {
+            return; // nothing cooking anywhere — zero work
+        }
+        MenuTemplate template = byId.get(UPGRADES);
+        if (template == null) {
+            return;
+        }
+        List<Integer> slots = template.contentSlots();
+        for (Player player : Bukkit.getOnlinePlayers()) {
+            if (!(player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder holder)
+                    || !UPGRADES.equals(holder.menuId())) {
+                continue;
+            }
+            UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
+            Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+            if (island == null) {
+                continue;
+            }
+            Inventory inv = holder.getInventory();
+            int i = 0;
+            for (com.mystipixel.royalskyblock.upgrade.UpgradeDef def : plugin.upgrades().all()) {
+                if (i >= slots.size()) {
+                    break;
+                }
+                int slot = slots.get(i++);
+                if (plugin.upgrades().pendingFor(island, def) != null) {
+                    inv.setItem(slot, upgradeIcon(def, island)); // only the ticking icons
+                }
+            }
+        }
+    }
+
     private void fillUpgrades(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);

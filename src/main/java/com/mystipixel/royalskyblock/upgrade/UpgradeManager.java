@@ -57,6 +57,11 @@ public final class UpgradeManager {
         return pending.get(pkey(island.id(), def.key()));
     }
 
+    /** Whether anything is cooking anywhere — a cheap guard so idle ticks do no work. */
+    public boolean hasAnyPending() {
+        return !pending.isEmpty();
+    }
+
     // ── purchasing (pay cost + wait, or pay skip cost to finish now) ────────────────
 
     /** Start the next tier: charge the base cost and begin the timer (or finish instantly). */
