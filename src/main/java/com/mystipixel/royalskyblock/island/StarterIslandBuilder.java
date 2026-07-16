@@ -83,7 +83,9 @@ public final class StarterIslandBuilder {
                                           @Nullable ConfigurationSection chestCfg, Logger logger) {
         Block block = world.getBlockAt(x, y, z);
         block.setType(Material.CHEST, false);
-        BlockState state = block.getState();
+        // getState(false) = a LIVE (non-snapshot) state: inventory writes go straight to the real
+        // tile entity. A plain getState() snapshot does not persist container contents via update().
+        BlockState state = block.getState(false);
         if (!(state instanceof Chest chest)) {
             return;
         }
@@ -99,7 +101,7 @@ public final class StarterIslandBuilder {
                 chest.getBlockInventory().addItem(item);
             }
         }
-        chest.update();
+        chest.update(true, false);
     }
 
     /** Parse a {@code MATERIAL:AMOUNT} line into an ItemStack, or {@code null} (logged) if invalid. */

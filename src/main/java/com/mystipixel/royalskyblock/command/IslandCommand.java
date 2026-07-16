@@ -422,6 +422,10 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleSchematic(sender, args);
             return;
         }
+        if (action.equals("chesttest")) {
+            handleChestTest(sender);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
     }
@@ -447,6 +451,65 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         } else {
             sender.sendMessage(Text.color("&c" + error));
         }
+    }
+
+    /** Diagnostic: place a chest with items, save+unload+reload the world, count items each step —
+     *  tells us whether an empty starter chest is a placement bug or an ASP persistence bug. */
+    private void handleChestTest(CommandSender sender) {
+        if (!plugin.isWorldBackendReady()) {
+            sender.sendMessage(Text.color("&cWorld backend not ready."));
+            return;
+        }
+        String name = "rsb_chesttest";
+        plugin.worlds().createIsland(name)
+                .thenCompose(world -> onMainSupply(() -> {
+                    org.bukkit.block.Block b = world.getBlockAt(0, 101, 0);
+                    b.setType(org.bukkit.Material.CHEST, false);
+                    if (b.getState(false) instanceof org.bukkit.block.Chest chest) {
+                        chest.getBlockInventory().addItem(new org.bukkit.inventory.ItemStack(org.bukkit.Material.DIAMOND, 5));
+                        chest.update(true, false);
+                    }
+                    sender.sendMessage(Text.color("&7[chest] placed; count now = &e" + chestCount(world)));
+                    return world;
+                }))
+                .thenCompose(w -> plugin.worlds().unloadIsland(name, true))
+                .thenCompose(v -> plugin.worlds().loadIsland(name))
+                .thenCompose(world -> onMainSupply(() -> {
+                    sender.sendMessage(Text.color("&7[chest] after save+reload = &e" + chestCount(world)
+                            + " &7(5 = persists ✔, 0 = ASP drops container contents)"));
+                    return world;
+                }))
+                .thenCompose(w -> plugin.worlds().deleteIsland(name))
+                .whenComplete((ignored, error) -> {
+                    if (error != null) {
+                        onMain(() -> sender.sendMessage(Text.color("&c[chest] FAILED: " + rootMessage(error))));
+                    }
+                });
+    }
+
+    private static int chestCount(org.bukkit.World world) {
+        if (world.getBlockAt(0, 101, 0).getState() instanceof org.bukkit.block.Chest chest) {
+            int n = 0;
+            for (org.bukkit.inventory.ItemStack it : chest.getBlockInventory().getContents()) {
+                if (it != null) {
+                    n += it.getAmount();
+                }
+            }
+            return n;
+        }
+        return -1;
+    }
+
+    private <T> java.util.concurrent.CompletableFuture<T> onMainSupply(java.util.function.Supplier<T> supplier) {
+        java.util.concurrent.CompletableFuture<T> f = new java.util.concurrent.CompletableFuture<>();
+        onMain(() -> {
+            try {
+                f.complete(supplier.get());
+            } catch (Throwable t) {
+                f.completeExceptionally(t);
+            }
+        });
+        return f;
     }
 
     private void handleTestWorld(CommandSender sender) {
