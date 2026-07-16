@@ -166,6 +166,21 @@ public final class IslandManager {
         player.teleport(safeLocation(home));
     }
 
+    /** Load the island world and teleport a visitor to its guest spawn (or home if none is set). */
+    public CompletableFuture<Boolean> teleportVisitor(Player player, Island island) {
+        return worlds.loadIsland(island.worldName())
+                .thenCompose(world -> onMain(() -> {
+                    applyBorder(world, island);
+                    Location loc = island.guestOrHomeLocation();
+                    if (loc == null) {
+                        plugin.messages().send(player, "island.world-not-loaded");
+                        return false;
+                    }
+                    player.teleport(safeLocation(loc));
+                    return true;
+                }));
+    }
+
     private Location safeLocation(Location base) {
         int scan = plugin.getConfig().getInt("teleport.safe-scan-height", 8);
         World world = base.getWorld();

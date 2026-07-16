@@ -26,8 +26,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     private static final List<String> ROOT_SUBS = List.of(
             "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
-            "kick", "leave", "members", "sethome", "setwarp",
-            "level", "top", "upgrade", "settings", "delete", "reload", "admin");
+            "kick", "leave", "members", "settings", "setspawn", "sethome", "setguestspawn", "kickall",
+            "level", "top", "upgrade", "delete", "reload", "admin");
 
     private final RoyalSkyblockPlugin plugin;
 
@@ -56,6 +56,9 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "leave" -> handleLeave(sender);
             case "members" -> handleMembers(sender);
             case "settings" -> handleSettings(sender);
+            case "sethome", "setspawn" -> handleSetSpawn(sender, false);
+            case "setguestspawn" -> handleSetSpawn(sender, true);
+            case "kickall" -> handleKickAll(sender);
             case "delete" -> handleDelete(sender, args);
             case "admin" -> handleAdmin(sender, args);
             default -> sender.sendMessage(Text.color("&e/is " + args[0] + " &7isn't wired up yet — coming soon."));
@@ -159,7 +162,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 return;
             }
         }
-        plugin.islands().teleportToIsland(player, island).whenComplete((ok, error) -> onMain(() -> {
+        plugin.islands().teleportVisitor(player, island).whenComplete((ok, error) -> onMain(() -> {
             if (error != null) {
                 plugin.messages().send(player, "visit.failed", "error", rootMessage(error));
             } else {
@@ -307,6 +310,79 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             // not an index
         }
         return null;
+    }
+
+    /** Set the island home ({@code setspawn}/{@code sethome}) or the guest spawn ({@code setguestspawn}). */
+    private void handleSetSpawn(CommandSender sender, boolean guest) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = active == null ? null : plugin.islands().getIslandByProfile(active);
+        if (island == null) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        if (!player.getWorld().getName().equals(island.worldName())) {
+            plugin.messages().send(player, "island.not-on-island");
+            return;
+        }
+        if (!isIslandManager(player, island)) {
+            plugin.messages().send(player, "island.no-permission-manage");
+            return;
+        }
+        org.bukkit.Location l = player.getLocation();
+        if (guest) {
+            island.setGuestHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
+        } else {
+            island.setHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
+        }
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+        plugin.messages().send(player, guest ? "island.guest-spawn-set" : "island.spawn-set");
+    }
+
+    private void handleKickAll(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        Island island = active == null ? null : plugin.islands().getIslandByProfile(active);
+        if (island == null) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        if (!isIslandManager(player, island)) {
+            plugin.messages().send(player, "island.no-permission-manage");
+            return;
+        }
+        org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        int kicked = 0;
+        if (world != null && profile != null) {
+            org.bukkit.Location spawn = plugin.islands().resolveSpawnLocation();
+            for (Player online : new ArrayList<>(world.getPlayers())) {
+                if (!profile.isMember(online.getUniqueId())) {
+                    if (spawn != null) {
+                        online.teleport(spawn);
+                    }
+                    kicked++;
+                }
+            }
+        }
+        plugin.messages().send(player, "island.kicked-guests", "count", String.valueOf(kicked));
+    }
+
+    /** True if the player owns or co-owns the island's profile. */
+    private boolean isIslandManager(Player player, Island island) {
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        if (profile == null) {
+            return false;
+        }
+        var role = profile.roleOf(player.getUniqueId());
+        return role == com.mystipixel.royalskyblock.island.IslandRole.OWNER
+                || role == com.mystipixel.royalskyblock.island.IslandRole.CO_OWNER;
     }
 
     private void handleSettings(CommandSender sender) {

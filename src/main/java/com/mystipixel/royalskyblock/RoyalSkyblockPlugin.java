@@ -11,6 +11,7 @@ import com.mystipixel.royalskyblock.island.WorldEditSchematics;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
+import com.mystipixel.royalskyblock.listener.FlowLimiterListener;
 import com.mystipixel.royalskyblock.message.MessageManager;
 import com.mystipixel.royalskyblock.profile.GamemodeManager;
 import com.mystipixel.royalskyblock.profile.PlayerStateService;
@@ -96,6 +97,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new ProfileListener(this), this);
         getServer().getPluginManager().registerEvents(new CommandGateListener(this), this);
+        getServer().getPluginManager().registerEvents(new FlowLimiterListener(this), this);
         getServer().getPluginManager().registerEvents(guiManager, this);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "

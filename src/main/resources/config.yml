@@ -129,6 +129,14 @@ spawn:
   yaw: 0.0
   pitch: 0.0
 
+# ── Anti-crash: liquid flow limiter ───────────────────────────────────────────
+flow-limiter:
+  enabled: true
+  # Max water/lava flow events per world per second before further flow is blocked for the rest of
+  # that second. Defuses lag machines (someone flooding an island to crash the server). Each island
+  # is its own world, so this budget is effectively per-island.
+  max-per-second: 800
+
 # ── Teleport safety ──────────────────────────────────────────────────────────
 teleport:
   # Scan upward for a safe (non-suffocating, solid-footed) spot before dropping a

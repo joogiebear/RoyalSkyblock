@@ -31,6 +31,11 @@ public final class Island {
     private double homeX, homeY, homeZ;
     private float homeYaw, homePitch;
 
+    // Guest spawn (where visitors land), in island-world coordinates. Unset -> visitors use home.
+    private boolean hasGuestHome;
+    private double guestX, guestY, guestZ;
+    private float guestYaw, guestPitch;
+
     /** Upgrade tier per upgrade key (e.g. "size" -> 3). Populated in the upgrades phase. */
     private final Map<String, Integer> upgrades = new ConcurrentHashMap<>();
 
@@ -153,5 +158,49 @@ public final class Island {
             return null;
         }
         return new Location(world, homeX, homeY, homeZ, homeYaw, homePitch);
+    }
+
+    // ── guest spawn ────────────────────────────────────────────────────────────────
+
+    public boolean hasGuestHome() {
+        return hasGuestHome;
+    }
+
+    public void setGuestHome(double x, double y, double z, float yaw, float pitch) {
+        this.hasGuestHome = true;
+        this.guestX = x;
+        this.guestY = y;
+        this.guestZ = z;
+        this.guestYaw = yaw;
+        this.guestPitch = pitch;
+    }
+
+    /** Where a visitor should land: the guest spawn if set, otherwise the island home. */
+    public @Nullable Location guestOrHomeLocation() {
+        if (!hasGuestHome) {
+            return homeLocation();
+        }
+        World world = Bukkit.getWorld(worldName);
+        return world == null ? null : new Location(world, guestX, guestY, guestZ, guestYaw, guestPitch);
+    }
+
+    public String serializeGuestHome() {
+        return hasGuestHome ? guestX + "," + guestY + "," + guestZ + "," + guestYaw + "," + guestPitch : "";
+    }
+
+    public void loadGuestHome(String serialized) {
+        hasGuestHome = false;
+        if (serialized == null || serialized.isBlank()) {
+            return;
+        }
+        String[] p = serialized.split(",");
+        if (p.length == 5) {
+            try {
+                setGuestHome(Double.parseDouble(p[0]), Double.parseDouble(p[1]), Double.parseDouble(p[2]),
+                        Float.parseFloat(p[3]), Float.parseFloat(p[4]));
+            } catch (NumberFormatException ignored) {
+                hasGuestHome = false;
+            }
+        }
     }
 }

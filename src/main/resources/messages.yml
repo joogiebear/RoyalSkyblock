@@ -19,6 +19,11 @@ island:
   no-permission-create: "&cYou don't have permission to create an island."
   worlds-unavailable: "&cIsland worlds are unavailable — the server isn't running Advanced Slime Paper yet."
   world-not-loaded: "&cYour island world isn't loaded yet — try again in a moment."
+  not-on-island: "&cStand on your island to set that."
+  no-permission-manage: "&cOnly the island owner can do that."
+  spawn-set: "&aIsland spawn set to where you're standing."
+  guest-spawn-set: "&aGuest spawn set to where you're standing."
+  kicked-guests: "&aKicked &e%count% &aguest(s) from your island."
 
 home:
   no-island: "&cYou don't have an island yet. Use &e/is create&c."
