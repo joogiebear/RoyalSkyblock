@@ -1,10 +1,14 @@
 package com.mystipixel.royalskyblock.island;
 
+import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.Chest;
+import org.bukkit.block.data.Ageable;
+import org.bukkit.block.data.BlockData;
+import org.bukkit.block.data.type.Farmland;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.inventory.ItemStack;
 import org.jetbrains.annotations.Nullable;
@@ -14,9 +18,9 @@ import java.util.Locale;
 import java.util.logging.Logger;
 
 /**
- * Builds a starter island directly in code, driven by the {@code island.starter} config section, so
- * admins can tune the platform, tree, and starter chest without a schematic library. A later phase can
- * swap this for WorldEdit {@code .schem} loading behind the same call.
+ * Generates a starter island in code (no schematic needed): a grass platform with a couple of oak
+ * trees, a small contained pond, a hydrated crop farm (wheat/carrots/potatoes), sugar cane, and a
+ * starter chest. Driven by the {@code island.starter} config for the platform blocks + chest contents.
  *
  * <p>All block writes touch the world, so this must run on the server thread.
  */
@@ -25,35 +29,91 @@ public final class StarterIslandBuilder {
     private StarterIslandBuilder() {
     }
 
-    /**
-     * Paste the starter island centred on {@code (x, z)} with its surface at {@code y}, using the
-     * given {@code island.starter} config (may be {@code null} → sensible defaults).
-     */
+    /** Paste the starter island centred on {@code (x, z)} with its surface at {@code y}. */
     public static void paste(World world, int x, int y, int z, @Nullable ConfigurationSection cfg, Logger logger) {
-        int radius = cfg != null ? Math.max(0, cfg.getInt("platform-radius", 3)) : 3;
+        int radius = Math.max(6, cfg != null ? cfg.getInt("platform-radius", 6) : 6);
         Material platform = material(cfg, "platform-block", Material.GRASS_BLOCK, logger);
         Material sub = material(cfg, "sub-block", Material.DIRT, logger);
-        boolean tree = cfg == null || cfg.getBoolean("tree", true);
+        boolean trees = cfg == null || cfg.getBoolean("tree", true);
         boolean bedrock = cfg == null || cfg.getBoolean("bedrock-anchor", true);
 
+        // ── platform ──
         for (int dx = -radius; dx <= radius; dx++) {
             for (int dz = -radius; dz <= radius; dz++) {
                 world.getBlockAt(x + dx, y, z + dz).setType(platform, false);
                 world.getBlockAt(x + dx, y - 1, z + dz).setType(sub, false);
                 world.getBlockAt(x + dx, y - 2, z + dz).setType(sub, false);
+                world.getBlockAt(x + dx, y - 3, z + dz).setType(sub, false);
             }
         }
         if (bedrock) {
-            world.getBlockAt(x, y - 3, z).setType(Material.BEDROCK, false);
-        }
-        if (tree) {
-            plantTree(world, x + 2, y + 1, z + 2);
+            world.getBlockAt(x, y - 4, z).setType(Material.BEDROCK, false);
         }
 
+        // ── pond (3x3 contained water, +x/+z quadrant) ──
+        for (int dx = 2; dx <= 4; dx++) {
+            for (int dz = 2; dz <= 4; dz++) {
+                world.getBlockAt(x + dx, y, z + dz).setType(Material.WATER, false);
+            }
+        }
+        // sugar cane on the grass rim next to the pond
+        placeSugarCane(world, x + 1, y + 1, z + 3, 2);
+
+        // ── crop farm (+x/-z quadrant): a water source ringed by hydrated farmland + crops ──
+        world.getBlockAt(x + 3, y, z - 3).setType(Material.WATER, false);
+        Material[] crops = {Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS};
+        int c = 0;
+        for (int dx = 2; dx <= 4; dx++) {
+            for (int dz = -4; dz <= -2; dz++) {
+                if (dx == 3 && dz == -3) {
+                    continue; // the water source
+                }
+                farmland(world, x + dx, y, z + dz);
+                plantCrop(world, x + dx, y + 1, z + dz, crops[c++ % crops.length]);
+            }
+        }
+
+        // ── trees (two oaks, -x quadrants) ──
+        if (trees) {
+            plantTree(world, x - 3, y + 1, z - 3);
+            plantTree(world, x - 4, y + 1, z + 3);
+        }
+
+        // ── a little decoration ──
+        world.getBlockAt(x - 2, y + 1, z + 1).setType(Material.POPPY, false);
+        world.getBlockAt(x - 1, y + 1, z + 2).setType(Material.DANDELION, false);
+        world.getBlockAt(x + radius, y + 1, z).setType(Material.TORCH, false);
+        world.getBlockAt(x - radius, y + 1, z).setType(Material.TORCH, false);
+
+        // ── starter chest near spawn ──
         ConfigurationSection chestCfg = cfg != null ? cfg.getConfigurationSection("chest") : null;
-        boolean chestEnabled = chestCfg == null || chestCfg.getBoolean("enabled", true);
-        if (chestEnabled) {
-            placeStarterChest(world, x - 1, y + 1, z - 1, chestCfg, logger);
+        if (chestCfg == null || chestCfg.getBoolean("enabled", true)) {
+            placeStarterChest(world, x - 1, y + 1, z, chestCfg, logger);
+        }
+    }
+
+    private static void farmland(World world, int x, int y, int z) {
+        Block block = world.getBlockAt(x, y, z);
+        BlockData data = Bukkit.createBlockData(Material.FARMLAND);
+        if (data instanceof Farmland farmland) {
+            farmland.setMoisture(farmland.getMaximumMoisture());
+        }
+        block.setBlockData(data, false);
+    }
+
+    private static void plantCrop(World world, int x, int y, int z, Material crop) {
+        Block block = world.getBlockAt(x, y, z);
+        BlockData data = Bukkit.createBlockData(crop);
+        if (data instanceof Ageable ageable) {
+            // Mostly grown so a new player can harvest + replant right away.
+            ageable.setAge(Math.max(0, ageable.getMaximumAge() - 1));
+        }
+        block.setBlockData(data, false);
+    }
+
+    private static void placeSugarCane(World world, int x, int y, int z, int height) {
+        for (int i = 0; i < height; i++) {
+            world.getBlockAt(x, y + i, z).setType(Material.SUGAR_CANE, false);
         }
     }
 
@@ -83,13 +143,10 @@ public final class StarterIslandBuilder {
                                           @Nullable ConfigurationSection chestCfg, Logger logger) {
         Block block = world.getBlockAt(x, y, z);
         block.setType(Material.CHEST, false);
-        // getState(false) = a LIVE (non-snapshot) state: inventory writes go straight to the real
-        // tile entity. A plain getState() snapshot does not persist container contents via update().
-        BlockState state = block.getState(false);
-        if (!(state instanceof Chest chest)) {
+        // Live (non-snapshot) state so inventory writes actually persist.
+        if (!(block.getState(false) instanceof Chest chest)) {
             return;
         }
-
         List<String> lines = chestCfg != null ? chestCfg.getStringList("items") : List.of();
         if (lines.isEmpty()) {
             lines = List.of("ICE:2", "LAVA_BUCKET:1", "OAK_SAPLING:2", "MELON_SLICE:1",
@@ -104,7 +161,6 @@ public final class StarterIslandBuilder {
         chest.update(true, false);
     }
 
-    /** Parse a {@code MATERIAL:AMOUNT} line into an ItemStack, or {@code null} (logged) if invalid. */
     private static @Nullable ItemStack parseItem(String line, Logger logger) {
         if (line == null || line.isBlank()) {
             return null;

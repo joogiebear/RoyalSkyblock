@@ -81,7 +81,9 @@ island:
     # used instead. Save one in-game with: /is admin schematic save <name>
     schematic: default
     # ── Built-in generator (fallback when there's no schematic) ──
-    platform-radius: 3           # 3 => a 7x7 platform
+    # Generates a grass platform with two oak trees, a contained pond, a hydrated crop farm
+    # (wheat/carrots/potatoes/beetroot), sugar cane, and the starter chest below.
+    platform-radius: 6           # 6 => a 13x13 platform (minimum 6 to fit the features)
     platform-block: GRASS_BLOCK  # top surface
     sub-block: DIRT              # two layers beneath the surface
     tree: true                  # plant a starter oak
