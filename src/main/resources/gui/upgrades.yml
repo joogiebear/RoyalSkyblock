@@ -1,27 +1,52 @@
 # ┌──────────────────────────────────────────────────────────────────────────┐
 # │  RoyalSkyblock — island upgrades                                          │
-# │  The 0 slots are filled at runtime with one icon per upgrade. Left-click   │
-# │  to start (pay cost + wait), right-click to skip an in-progress one.        │
+# │                                                                            │
+# │  A slot with `content: <upgrade-key>` is rendered with that upgrade's live │
+# │  icon (current/next tier, cost, skip cost, timer) — place them at whatever │
+# │  row/column you like. Left-click an upgrade to start it, right-click to     │
+# │  skip an in-progress one. Keys come from upgrades.yml (size / guest-limit / │
+# │  coop-slots).                                                              │
 # └──────────────────────────────────────────────────────────────────────────┘
 
 title: "&6&lIsland Upgrades"
-rows: 3
+rows: 6
 
 pages:
   - page: 1
     mask:
       items:
-        - gray_stained_glass_pane
+        - black_stained_glass_pane
       pattern:
         - "111111111"
-        - "100000001"   # 0 = an upgrade icon (filled dynamically)
+        - "111111111"
+        - "111111111"
+        - "111111111"
+        - "111111111"
         - "111111111"
 
 slots:
-  - item: arrow name:"&7« Back"
+  # ── the upgrades (pinned; rearrange freely) ──
+  - content: size
     row: 3
-    column: 1
+    column: 3
+  - content: guest-limit
+    row: 3
+    column: 5
+  - content: coop-slots
+    row: 3
+    column: 7
+
+  # ── navigation ──
+  - item: arrow name:"&fBack"
+    row: 6
+    column: 4
     left-click:
       - id: open_menu
         args:
           menu: main
+
+  - item: barrier name:"&cClose"
+    row: 6
+    column: 5
+    left-click:
+      - id: close_inventory

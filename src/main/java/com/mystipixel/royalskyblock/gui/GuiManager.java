@@ -189,27 +189,11 @@ public final class GuiManager implements Listener {
         if (template == null) {
             return;
         }
-        List<Integer> slots = template.contentSlots();
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (!(player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder holder)
-                    || !UPGRADES.equals(holder.menuId())) {
-                continue;
-            }
-            UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
-            Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
-            if (island == null) {
-                continue;
-            }
-            Inventory inv = holder.getInventory();
-            int i = 0;
-            for (com.mystipixel.royalskyblock.upgrade.UpgradeDef def : plugin.upgrades().all()) {
-                if (i >= slots.size()) {
-                    break;
-                }
-                int slot = slots.get(i++);
-                if (plugin.upgrades().pendingFor(island, def) != null) {
-                    inv.setItem(slot, upgradeIcon(def, island)); // only the ticking icons
-                }
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder holder
+                    && UPGRADES.equals(holder.menuId())) {
+                // Re-render (cheap: a few icons) so pinned/auto slots + countdowns stay correct.
+                fillUpgrades(player, template, holder.getInventory(), holder);
             }
         }
     }
@@ -224,13 +208,17 @@ public final class GuiManager implements Listener {
         IslandRole role = profile == null ? IslandRole.VISITOR : profile.roleOf(player.getUniqueId());
         boolean canEdit = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
 
-        List<Integer> slots = template.contentSlots();
-        int i = 0;
+        Map<String, Integer> named = template.namedContentSlots();
+        List<Integer> auto = template.contentSlots();
+        int autoIndex = 0;
         for (com.mystipixel.royalskyblock.upgrade.UpgradeDef def : plugin.upgrades().all()) {
-            if (i >= slots.size()) {
-                break;
+            Integer slot = named.get(def.key().toLowerCase(Locale.ROOT));
+            if (slot == null) {
+                if (autoIndex >= auto.size()) {
+                    continue; // no pinned slot and no auto slot left
+                }
+                slot = auto.get(autoIndex++);
             }
-            int slot = slots.get(i++);
             inv.setItem(slot, upgradeIcon(def, island));
             if (canEdit) {
                 holder.putAction(slot, (viewer, right) -> {

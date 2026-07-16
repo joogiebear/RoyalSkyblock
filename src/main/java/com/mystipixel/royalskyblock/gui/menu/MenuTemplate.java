@@ -8,6 +8,7 @@ import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -93,7 +94,8 @@ public final class MenuTemplate {
 
     private static MenuSlot parseSlot(Map<?, ?> raw, int size) {
         Object itemObj = raw.get("item");
-        if (itemObj == null) {
+        String content = raw.get("content") == null ? null : String.valueOf(raw.get("content"));
+        if (itemObj == null && content == null) {
             return null;
         }
         int index = slotIndex(raw, size);
@@ -101,10 +103,22 @@ public final class MenuTemplate {
             return null;
         }
         String id = raw.get("id") == null ? null : String.valueOf(raw.get("id"));
-        return new MenuSlot(index, id,
-                ItemSpec.parse(String.valueOf(itemObj)), stringList(raw.get("lore")),
+        // A content slot without its own item gets a placeholder; code renders the real icon over it.
+        ItemSpec item = ItemSpec.parse(itemObj == null ? "barrier" : String.valueOf(itemObj));
+        return new MenuSlot(index, id, content, item, stringList(raw.get("lore")),
                 MenuEffect.parseList(castMapList(raw.get("left-click"))),
                 MenuEffect.parseList(castMapList(raw.get("right-click"))));
+    }
+
+    /** Slots that pin a named dynamic entry ({@code content: <key>}) → their 0-based index. */
+    public Map<String, Integer> namedContentSlots() {
+        Map<String, Integer> map = new LinkedHashMap<>();
+        for (MenuSlot slot : slots) {
+            if (slot.content() != null) {
+                map.put(slot.content().toLowerCase(java.util.Locale.ROOT), slot.index());
+            }
+        }
+        return map;
     }
 
     /**

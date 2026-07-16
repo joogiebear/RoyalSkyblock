@@ -1,18 +1,36 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — upgrades                                                  │
-# │  Each upgrade has an effect + ordered tiers. A tier is bought by paying    │
-# │  `cost` and waiting `time`, OR paying `skip-cost` to finish instantly.     │
-# │  `currency` values reference the config `currencies:` section (coins/gems).│
-# │  time: 2d / 4h / 30m / 45s / 0 (0 or omitted = instant).                   │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ╔════════════════════════════════════════════════════════════════════════════╗
+# ║  RoyalSkyblock — Upgrades                                                    ║
+# ╠════════════════════════════════════════════════════════════════════════════╣
+# ║  Each top-level key is one upgrade track. Add, remove, or retune freely —    ║
+# ║  the upgrades menu (gui/upgrades.yml) renders whatever is defined here.       ║
+# ║                                                                              ║
+# ║  Fields per upgrade:                                                          ║
+# ║    display-name : shown in the menu (& colour codes)                          ║
+# ║    icon         : the menu item                                               ║
+# ║    description  : one-line summary in the icon lore                            ║
+# ║    effect       : what a tier changes —                                       ║
+# ║                     radius       → island size (world-border half-size)        ║
+# ║                     guest_slots  → extra concurrent /visit guests             ║
+# ║                     coop_slots   → extra coop members                          ║
+# ║                                                                              ║
+# ║  Fields per tier (1, 2, 3, ...):                                              ║
+# ║    value      : the effect number at that tier (radius, or +slots)            ║
+# ║    cost       : pay this, then wait `time` for it to finish                    ║
+# ║    skip-cost  : pay this instead to finish instantly                          ║
+# ║    time       : the wait — 2d / 4h / 30m / 45s / 0 (0 = instant)              ║
+# ║                                                                              ║
+# ║  cost / skip-cost = { currency: <name>, amount: <number> } where <name> is    ║
+# ║  a key from the `currencies:` section of config.yml (e.g. coins, gems).       ║
+# ╚════════════════════════════════════════════════════════════════════════════╝
 
 size:
   display-name: "&a&lIsland Size"
   icon: grass_block
   description: "Expand your island by adding buildable space on each side."
-  effect: radius            # value = island radius (world border half-size)
+  effect: radius
   tiers:
-    1:  { value: 84,  cost: { currency: gems, amount: 0 },   skip-cost: { currency: gems, amount: 144 }, time: 2d }
+    #     value (radius)   cost                       skip-cost                   wait
+    1:  { value: 84,  cost: { currency: gems, amount: 0   }, skip-cost: { currency: gems, amount: 144 }, time: 2d }
     2:  { value: 88,  cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 288 }, time: 4d }
     3:  { value: 92,  cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 432 }, time: 6d }
     4:  { value: 96,  cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 576 }, time: 8d }
@@ -27,11 +45,12 @@ guest-limit:
   display-name: "&b&lGuest Limit"
   icon: player_head
   description: "Allow extra guests to /visit your island at the same time."
-  effect: guest_slots       # value = extra concurrent visitors
+  effect: guest_slots
   tiers:
-    1: { value: 1, cost: { currency: gems, amount: 0 },  skip-cost: { currency: gems, amount: 288 },  time: 2d }
-    2: { value: 2, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 576 },  time: 4d }
-    3: { value: 3, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 864 },  time: 6d }
+    #     +slots          cost                       skip-cost                    wait
+    1: { value: 1, cost: { currency: gems, amount: 0  }, skip-cost: { currency: gems, amount: 288  }, time: 2d }
+    2: { value: 2, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 576  }, time: 4d }
+    3: { value: 3, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 864  }, time: 6d }
     4: { value: 4, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 1152 }, time: 8d }
     5: { value: 5, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 2304 }, time: 16d }
 
@@ -39,8 +58,9 @@ coop-slots:
   display-name: "&d&lCoop Slots"
   icon: cyan_bed
   description: "Add extra members you can invite to this profile."
-  effect: coop_slots        # value = extra coop members
+  effect: coop_slots
   tiers:
+    #     +members        cost                        skip   wait
     1: { value: 1, cost: { currency: gems, amount: 600 }, skip-cost: { currency: gems, amount: 0 }, time: 0 }
     2: { value: 2, cost: { currency: gems, amount: 600 }, skip-cost: { currency: gems, amount: 0 }, time: 0 }
     3: { value: 3, cost: { currency: gems, amount: 600 }, skip-cost: { currency: gems, amount: 0 }, time: 0 }
