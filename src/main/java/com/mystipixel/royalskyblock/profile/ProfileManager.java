@@ -277,7 +277,8 @@ public final class ProfileManager {
             return "You have no active profile.";
         }
         if (active.gamemode() != Gamemode.COOP) {
-            return "Only Coop profiles can have members — create one with /is profile create coop.";
+            return "You're on '" + active.name() + "' (" + active.gamemode().name().toLowerCase(Locale.ROOT)
+                    + "). Switch to a Coop profile to invite members.";
         }
         IslandRole role = active.roleOf(inviter.getUniqueId());
         if (role != IslandRole.OWNER && role != IslandRole.CO_OWNER) {
