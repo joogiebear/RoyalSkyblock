@@ -243,7 +243,7 @@ public final class GuiManager implements Listener {
                 plugin.messages().send(viewer, "upgrade.started", "upgrade", def.displayName(),
                         "time", next != null ? formatDuration(next.timeSeconds()) : "?");
             }
-            case COMPLETED -> plugin.messages().send(viewer, "upgrade.completed",
+            case COMPLETED -> plugin.messages().send(viewer, skip ? "upgrade.skipped" : "upgrade.completed",
                     "upgrade", def.displayName(), "tier", String.valueOf(island.upgradeTier(def.key())));
             case MAXED -> plugin.messages().send(viewer, "upgrade.maxed", "upgrade", def.displayName());
             case IN_PROGRESS -> plugin.messages().send(viewer, "upgrade.in-progress", "upgrade", def.displayName(),

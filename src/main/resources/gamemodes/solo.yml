@@ -1,6 +1,17 @@
-# Solo — standard Skyblock. Everything enabled.
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Gamemode: SOLO
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Classic Skyblock — everything enabled. One file per gamemode; these drive the
+#  profile icons and the create-profile menu.
+#
+#  Fields:
+#    display-name      – shown on the profile icon / button (& colour codes)
+#    description       – lore line under the name
+#    icon              – material for the profile icon
+#    blocked-commands  – command words (no slash) refused on this gamemode; [] = none
+# ═══════════════════════════════════════════════════════════════════════════════
+
 display-name: "&a&lSOLO"
 description: "&7Classic Skyblock — trade, sell, and build freely."
 icon: grass_block
-# Commands blocked on this gamemode (command word only, no slash). Empty = nothing blocked.
 blocked-commands: []

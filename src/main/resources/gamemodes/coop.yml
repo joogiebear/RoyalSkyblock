@@ -1,4 +1,16 @@
-# Coop — a shared island and economy with invited members.
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Gamemode: COOP
+# ═══════════════════════════════════════════════════════════════════════════════
+#  A shared island and economy with invited members (see the `coop:` section of
+#  config.yml for member limits and invite timeout).
+#
+#  Fields:
+#    display-name      – shown on the profile icon / button (& colour codes)
+#    description       – lore line under the name
+#    icon              – material for the profile icon
+#    blocked-commands  – command words (no slash) refused on this gamemode; [] = none
+# ═══════════════════════════════════════════════════════════════════════════════
+
 display-name: "&b&lCOOP"
 description: "&7Share one island and economy with friends."
 icon: player_head

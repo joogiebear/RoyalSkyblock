@@ -1,8 +1,10 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock                                                             │
-# │  Scalable per-island Skyblock on Advanced Slime Paper.                     │
-# │  One island = one slime world, loaded on demand, unloaded when empty.      │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Main Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Scalable per-island Skyblock on Advanced Slime Paper — one island = one slime
+#  world, loaded on demand and unloaded when empty. Sections below are grouped by
+#  system; reload most values with /is reload (world/storage changes need a restart).
+# ═══════════════════════════════════════════════════════════════════════════════
 
 # ── Island storage ───────────────────────────────────────────────────────────
 # Where island METADATA lives (owner, members, level, upgrades). This is the same

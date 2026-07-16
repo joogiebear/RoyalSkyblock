@@ -1,8 +1,10 @@
-# ┌──────────────────────────────────────────────────────────────────────────┐
-# │  RoyalSkyblock — messages                                                 │
-# │  All player-facing text. Colours use & codes; placeholders use %token%.    │
-# │  Reload with /is reload.                                                   │
-# └──────────────────────────────────────────────────────────────────────────┘
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Messages
+# ═══════════════════════════════════════════════════════════════════════════════
+#  All player-facing text lives here. Colours use & codes; placeholders use the
+#  %token% form (e.g. %player%, %error%). The `prefix` is prepended to chat
+#  feedback; headers and help lines are sent without it. Reload with /is reload.
+# ═══════════════════════════════════════════════════════════════════════════════
 
 prefix: "&6&lRoyalSkyblock &8» &r"
 
