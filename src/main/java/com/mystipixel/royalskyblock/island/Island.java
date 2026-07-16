@@ -99,6 +99,35 @@ public final class Island {
         return new HashMap<>(upgrades);
     }
 
+    /** Serialize tiers as {@code key=tier,key=tier} for the {@code upgrades} column. */
+    public String serializeUpgrades() {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, Integer> e : upgrades.entrySet()) {
+            if (sb.length() > 0) {
+                sb.append(',');
+            }
+            sb.append(e.getKey()).append('=').append(e.getValue());
+        }
+        return sb.toString();
+    }
+
+    public void loadUpgrades(String serialized) {
+        upgrades.clear();
+        if (serialized == null || serialized.isBlank()) {
+            return;
+        }
+        for (String pair : serialized.split(",")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0) {
+                try {
+                    upgrades.put(pair.substring(0, eq).trim(), Integer.parseInt(pair.substring(eq + 1).trim()));
+                } catch (NumberFormatException ignored) {
+                    // skip malformed
+                }
+            }
+        }
+    }
+
     // ── settings ──────────────────────────────────────────────────────────────────
 
     public boolean isEnabled(IslandSetting setting) {

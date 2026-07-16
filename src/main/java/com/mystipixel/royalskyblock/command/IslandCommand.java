@@ -162,6 +162,21 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 return;
             }
         }
+        // Guest limit: count non-members already on the island (if its world is loaded).
+        org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
+        if (world != null && !player.hasPermission("royalskyblock.bypass")) {
+            Profile prof = plugin.profiles().getProfile(island.profileId());
+            int visitors = 0;
+            for (Player p : world.getPlayers()) {
+                if (prof == null || !prof.isMember(p.getUniqueId())) {
+                    visitors++;
+                }
+            }
+            if (visitors >= plugin.upgrades().guestLimit(island)) {
+                plugin.messages().send(player, "visit.full", "player", targetName);
+                return;
+            }
+        }
         plugin.islands().teleportVisitor(player, island).whenComplete((ok, error) -> onMain(() -> {
             if (error != null) {
                 plugin.messages().send(player, "visit.failed", "error", rootMessage(error));
@@ -528,8 +543,13 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleChestTest(sender);
             return;
         }
+        if (action.equals("upgrade")) {
+            handleUpgradeAdmin(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
+        sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
     }
 
     private void handleSchematic(CommandSender sender, String[] args) {
@@ -612,6 +632,42 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             }
         });
         return f;
+    }
+
+    private void handleUpgradeAdmin(CommandSender sender, String[] args) {
+        if (!(sender instanceof Player player)) {
+            plugin.messages().send(sender, "general.players-only");
+            return;
+        }
+        if (args.length < 4) {
+            sender.sendMessage(Text.color("&cUsage: &e/is admin upgrade <key> <tier>"));
+            return;
+        }
+        com.mystipixel.royalskyblock.upgrade.UpgradeDef def = plugin.upgrades().get(args[2]);
+        if (def == null) {
+            sender.sendMessage(Text.color("&cUnknown upgrade '" + args[2] + "'. Try: size, guest-limit, coop-slots."));
+            return;
+        }
+        int tier;
+        try {
+            tier = Math.max(0, Math.min(def.maxTier(), Integer.parseInt(args[3])));
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Text.color("&cTier must be a number (0-" + def.maxTier() + ")."));
+            return;
+        }
+        com.mystipixel.royalskyblock.island.Island island = islandOf(player);
+        if (island == null) {
+            plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        plugin.upgrades().setTier(island, def, tier);
+        sender.sendMessage(Text.color("&aSet &e" + def.key() + " &ato tier &e" + tier
+                + " &7(value " + def.valueAt(tier) + ")."));
+    }
+
+    private com.mystipixel.royalskyblock.island.@org.jetbrains.annotations.Nullable Island islandOf(Player player) {
+        java.util.UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        return active == null ? null : plugin.islands().getIslandByProfile(active);
     }
 
     private void handleTestWorld(CommandSender sender) {

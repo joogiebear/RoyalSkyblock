@@ -290,7 +290,9 @@ public final class ProfileManager {
         if (active.isMember(target.getUniqueId())) {
             return target.getName() + " is already on this profile.";
         }
-        int max = plugin.getConfig().getInt("coop.max-members", 4);
+        Island island = plugin.islands().getIslandByProfile(active.id());
+        int max = island != null ? plugin.upgrades().coopMemberCap(island)
+                : plugin.getConfig().getInt("coop.max-members", 4);
         if (active.memberCount() >= max) {
             return "This profile is full (" + max + " members).";
         }

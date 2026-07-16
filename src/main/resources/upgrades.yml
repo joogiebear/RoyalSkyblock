@@ -1,0 +1,46 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — upgrades                                                  │
+# │  Each upgrade has an effect + ordered tiers. A tier is bought by paying    │
+# │  `cost` and waiting `time`, OR paying `skip-cost` to finish instantly.     │
+# │  `currency` values reference the config `currencies:` section (coins/gems).│
+# │  time: 2d / 4h / 30m / 45s / 0 (0 or omitted = instant).                   │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+size:
+  display-name: "&a&lIsland Size"
+  icon: grass_block
+  description: "Expand your island by adding buildable space on each side."
+  effect: radius            # value = island radius (world border half-size)
+  tiers:
+    1:  { value: 84,  cost: { currency: gems, amount: 0 },   skip-cost: { currency: gems, amount: 144 }, time: 2d }
+    2:  { value: 88,  cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 288 }, time: 4d }
+    3:  { value: 92,  cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 432 }, time: 6d }
+    4:  { value: 96,  cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 576 }, time: 8d }
+    5:  { value: 100, cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 720 }, time: 10d }
+    6:  { value: 104, cost: { currency: gems, amount: 175 }, skip-cost: { currency: gems, amount: 720 }, time: 10d }
+    7:  { value: 108, cost: { currency: gems, amount: 200 }, skip-cost: { currency: gems, amount: 720 }, time: 10d }
+    8:  { value: 112, cost: { currency: gems, amount: 200 }, skip-cost: { currency: gems, amount: 720 }, time: 10d }
+    9:  { value: 116, cost: { currency: gems, amount: 200 }, skip-cost: { currency: gems, amount: 720 }, time: 10d }
+    10: { value: 120, cost: { currency: gems, amount: 200 }, skip-cost: { currency: gems, amount: 720 }, time: 10d }
+
+guest-limit:
+  display-name: "&b&lGuest Limit"
+  icon: player_head
+  description: "Allow extra guests to /visit your island at the same time."
+  effect: guest_slots       # value = extra concurrent visitors
+  tiers:
+    1: { value: 1, cost: { currency: gems, amount: 0 },  skip-cost: { currency: gems, amount: 288 },  time: 2d }
+    2: { value: 2, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 576 },  time: 4d }
+    3: { value: 3, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 864 },  time: 6d }
+    4: { value: 4, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 1152 }, time: 8d }
+    5: { value: 5, cost: { currency: gems, amount: 50 }, skip-cost: { currency: gems, amount: 2304 }, time: 16d }
+
+coop-slots:
+  display-name: "&d&lCoop Slots"
+  icon: cyan_bed
+  description: "Add extra members you can invite to this profile."
+  effect: coop_slots        # value = extra coop members
+  tiers:
+    1: { value: 1, cost: { currency: gems, amount: 600 }, skip-cost: { currency: gems, amount: 0 }, time: 0 }
+    2: { value: 2, cost: { currency: gems, amount: 600 }, skip-cost: { currency: gems, amount: 0 }, time: 0 }
+    3: { value: 3, cost: { currency: gems, amount: 600 }, skip-cost: { currency: gems, amount: 0 }, time: 0 }

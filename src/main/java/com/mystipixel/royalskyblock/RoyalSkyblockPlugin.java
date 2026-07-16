@@ -17,6 +17,7 @@ import com.mystipixel.royalskyblock.message.MessageManager;
 import com.mystipixel.royalskyblock.profile.GamemodeManager;
 import com.mystipixel.royalskyblock.profile.PlayerStateService;
 import com.mystipixel.royalskyblock.profile.ProfileManager;
+import com.mystipixel.royalskyblock.upgrade.UpgradeManager;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 
 import java.util.Map;
@@ -46,6 +47,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private PlayerStateService stateService;
     private GamemodeManager gamemodeManager;
     private CurrencyService currencyService;
+    private UpgradeManager upgradeManager;
     private EcoProfileBridge ecoBridge;
     private MessageManager messageManager;
     private GuiManager guiManager;
@@ -81,6 +83,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.stateService = new PlayerStateService(this, storage);
         this.gamemodeManager = new GamemodeManager(this);
         this.currencyService = new CurrencyService(this);
+        this.upgradeManager = new UpgradeManager(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.guiManager = new GuiManager(this);
 
@@ -128,7 +131,12 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         messageManager.reload();
         gamemodeManager.reload();
         currencyService.reload();
+        upgradeManager.reload();
         guiManager.reload();
+    }
+
+    public UpgradeManager upgrades() {
+        return upgradeManager;
     }
 
     public GamemodeManager gamemodes() {
