@@ -1,0 +1,66 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — new profile: pick a gamemode                              │
+# │  Each button runs `is profile create <mode>`, which creates the profile,   │
+# │  its island, and switches you to it.                                       │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+title: "&6&lNew Profile"
+rows: 3
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - gray_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "111111111"
+        - "111111111"
+
+slots:
+  - item: grass_block name:"&a&lSOLO"
+    lore:
+      - "&7Classic Skyblock — trade, sell,"
+      - "&7and build freely."
+      - ""
+      - "&eClick to create!"
+    row: 2
+    column: 3
+    left-click:
+      - id: player_command
+        args:
+          command: "is profile create solo"
+
+  - item: player_head name:"&b&lCOOP"
+    lore:
+      - "&7Share one island and economy"
+      - "&7with friends."
+      - ""
+      - "&eClick to create!"
+    row: 2
+    column: 5
+    left-click:
+      - id: player_command
+        args:
+          command: "is profile create coop"
+
+  - item: iron_block name:"&7&lIRONMAN"
+    lore:
+      - "&7Fully self-sufficient — no auction"
+      - "&7house, bazaar, or trading."
+      - ""
+      - "&eClick to create!"
+    row: 2
+    column: 7
+    left-click:
+      - id: player_command
+        args:
+          command: "is profile create ironman"
+
+  - item: arrow name:"&7« Back"
+    row: 3
+    column: 1
+    left-click:
+      - id: open_menu
+        args:
+          menu: profiles

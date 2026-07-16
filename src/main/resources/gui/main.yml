@@ -73,13 +73,13 @@ slots:
       - "&7Switch between your profiles"
       - "&7(Solo, Coop, Ironman)."
       - ""
-      - "&8Coming with the profile system."
+      - "&eClick to manage!"
     row: 4
     column: 3
     left-click:
-      - id: message
+      - id: open_menu
         args:
-          message: "&7Profiles are coming soon."
+          menu: profiles
 
   - item: anvil name:"&6&lIsland Upgrades"
     lore:

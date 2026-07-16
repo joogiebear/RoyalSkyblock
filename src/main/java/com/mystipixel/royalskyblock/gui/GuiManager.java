@@ -5,8 +5,10 @@ import com.mystipixel.royalskyblock.gui.menu.MenuEffect;
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot;
 import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
 import com.mystipixel.royalskyblock.hooks.EcoHook;
+import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.Bukkit;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -14,12 +16,16 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
+import java.util.function.Consumer;
 
 /**
  * Loads, renders, and drives the {@code gui/*.yml} menus in the shared EcoMenus dialect. Buttons run
@@ -34,8 +40,10 @@ public final class GuiManager implements Listener {
     /** Menu ids ↔ gui/<id>.yml file names ↔ the {@code open_menu} effect's {@code menu} arg. */
     public static final String MAIN = "main";
     public static final String CONFIRM_DELETE = "confirm-delete";
+    public static final String PROFILES = "profiles";
+    public static final String CREATE_PROFILE = "create-profile";
 
-    private static final String[] MENUS = {MAIN, CONFIRM_DELETE};
+    private static final String[] MENUS = {MAIN, CONFIRM_DELETE, PROFILES, CREATE_PROFILE};
 
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
@@ -77,7 +85,56 @@ public final class GuiManager implements Listener {
             ItemStack item = slot.item().build(ecoHook, placeholders, slot.lore());
             inv.setItem(slot.index(), item);
         }
+        fillDynamic(menuId, player, template, inv, holder);
         player.openInventory(inv);
+    }
+
+    /** Fill data-driven menus (currently the profile list) into their mask content slots. */
+    private void fillDynamic(String menuId, Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+        if (!menuId.equals(PROFILES)) {
+            return;
+        }
+        List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
+        UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
+        List<Integer> slots = template.contentSlots();
+        for (int i = 0; i < profiles.size() && i < slots.size(); i++) {
+            Profile profile = profiles.get(i);
+            int slot = slots.get(i);
+            inv.setItem(slot, profileIcon(profile, active));
+            holder.putAction(slot, viewer -> {
+                viewer.closeInventory();
+                plugin.profiles().switchProfile(viewer, profile.id());
+            });
+        }
+    }
+
+    private ItemStack profileIcon(Profile profile, UUID active) {
+        var ruleset = plugin.gamemodes().ruleset(profile.gamemode());
+        Material material = Material.matchMaterial(ruleset.icon().toUpperCase(Locale.ROOT));
+        if (material == null || !material.isItem()) {
+            material = Material.GRASS_BLOCK;
+        }
+        boolean isActive = profile.id().equals(active);
+        boolean hasIsland = plugin.islands().getIslandByProfile(profile.id()) != null;
+
+        ItemStack item = new ItemStack(material);
+        ItemMeta meta = item.getItemMeta();
+        if (meta != null) {
+            String title = "&e&l" + profile.name() + " &r" + ruleset.displayName() + (isActive ? " &a(active)" : "");
+            meta.displayName(noItalic(title));
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            lore.add(noItalic(ruleset.description()));
+            lore.add(noItalic("&7Island: " + (hasIsland ? "&ayes" : "&cno")));
+            lore.add(noItalic(""));
+            lore.add(noItalic(isActive ? "&8You're on this profile." : "&eClick to switch!"));
+            meta.lore(lore);
+            item.setItemMeta(meta);
+        }
+        return item;
+    }
+
+    private static net.kyori.adventure.text.Component noItalic(String legacy) {
+        return Text.color(legacy).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
     }
 
     /** Placeholders available to every menu. Extended as systems come online (level, profile, ...). */
@@ -102,6 +159,11 @@ public final class GuiManager implements Listener {
         int raw = event.getRawSlot();
         MenuTemplate template = byId.get(holder.menuId());
         if (template == null || raw < 0 || raw >= template.size()) {
+            return;
+        }
+        Consumer<Player> dynamic = holder.action(raw);
+        if (dynamic != null) {
+            runNextTick(() -> dynamic.accept(player));
             return;
         }
         MenuSlot slot = template.slotAt(raw);

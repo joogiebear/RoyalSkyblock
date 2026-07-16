@@ -143,6 +143,11 @@ public final class MenuTemplate {
         return slots;
     }
 
+    /** Inventory indices marked {@code 0} in the mask — where dynamic content (e.g. profile icons) go. */
+    public List<Integer> contentSlots() {
+        return contentSlots;
+    }
+
     public MenuSlot slotAt(int index) {
         for (MenuSlot slot : slots) {
             if (slot.index() == index) {

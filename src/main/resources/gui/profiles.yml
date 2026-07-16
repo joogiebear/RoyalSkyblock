@@ -1,0 +1,40 @@
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │  RoyalSkyblock — profile switcher                                          │
+# │  The 0 slots in the mask are filled at runtime with one icon per profile;  │
+# │  clicking an icon switches to that profile.                                │
+# └──────────────────────────────────────────────────────────────────────────┘
+
+title: "&6&lYour Profiles"
+rows: 5
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - gray_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "111111111"
+        - "100000001"   # 0 = a profile icon slot (filled dynamically)
+        - "111111111"
+        - "111111111"
+
+slots:
+  - item: arrow name:"&7« Back"
+    row: 5
+    column: 1
+    left-click:
+      - id: open_menu
+        args:
+          menu: main
+
+  - item: nether_star name:"&a&lCreate New Profile"
+    lore:
+      - "&7Start a fresh profile — its own"
+      - "&7island, inventory, and progression."
+    row: 5
+    column: 5
+    left-click:
+      - id: open_menu
+        args:
+          menu: create-profile
