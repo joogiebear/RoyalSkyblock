@@ -136,6 +136,9 @@ flow-limiter:
   # that second. Defuses lag machines (someone flooding an island to crash the server). Each island
   # is its own world, so this budget is effectively per-island.
   max-per-second: 800
+  # When a player with royalskyblock.bypass empties a bucket in a world, the limiter is paused there
+  # for this many seconds — so admin/builder liquid work isn't throttled.
+  admin-bypass-seconds: 30
 
 # ── Teleport safety ──────────────────────────────────────────────────────────
 teleport:

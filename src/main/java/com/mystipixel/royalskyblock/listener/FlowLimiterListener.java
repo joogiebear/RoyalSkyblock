@@ -7,6 +7,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
+import org.bukkit.event.player.PlayerBucketEmptyEvent;
 
 import java.util.Map;
 import java.util.UUID;
@@ -25,9 +26,19 @@ public final class FlowLimiterListener implements Listener {
     private final RoyalSkyblockPlugin plugin;
     private final Map<UUID, long[]> counters = new ConcurrentHashMap<>();  // world -> [second, count]
     private final Map<UUID, Long> lastWarn = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> bypassUntil = new ConcurrentHashMap<>();  // world -> bypass-until millis
 
     public FlowLimiterListener(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /** A bypass-permission holder pouring liquid opens a grace window so admin builds aren't throttled. */
+    @EventHandler(ignoreCancelled = true)
+    public void onBucket(PlayerBucketEmptyEvent event) {
+        if (event.getPlayer().hasPermission("royalskyblock.bypass")) {
+            long seconds = plugin.getConfig().getLong("flow-limiter.admin-bypass-seconds", 30);
+            bypassUntil.put(event.getBlock().getWorld().getUID(), System.currentTimeMillis() + seconds * 1000L);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
@@ -40,6 +51,10 @@ public final class FlowLimiterListener implements Listener {
             return; // only throttle liquids
         }
         World world = event.getBlock().getWorld();
+        Long bypass = bypassUntil.get(world.getUID());
+        if (bypass != null && bypass > System.currentTimeMillis()) {
+            return; // an admin is actively pouring here
+        }
         int max = Math.max(1, plugin.getConfig().getInt("flow-limiter.max-per-second", 800));
         long second = System.currentTimeMillis() / 1000L;
 
