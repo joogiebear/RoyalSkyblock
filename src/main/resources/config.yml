@@ -175,13 +175,15 @@ currencies:
     type: vault
     display-name: "coins"
 
-  # EcoBits gems (needs EcoBits + PlaceholderAPI):
+  # EcoBits gems (needs EcoBits + PlaceholderAPI). IMPORTANT: replace "gems" below with YOUR
+  # EcoBits currency id (the `id:` in EcoBits/config.yml — often e.g. "skyblockgem"), in all three
+  # places. EcoBits syntax is: ecobits <give|take> <player> <currency-id> <amount>.
   gems:
     type: command
     display-name: "gems"
     balance-placeholder: "%ecobits_gems%"
-    take-command: "ecobits remove %player% %amount% gems"
-    give-command: "ecobits give %player% %amount% gems"
+    take-command: "ecobits take %player% gems %amount%"
+    give-command: "ecobits give %player% gems %amount%"
 
   # More examples — uncomment/edit for your setup:
   #
