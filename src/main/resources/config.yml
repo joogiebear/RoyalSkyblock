@@ -157,26 +157,45 @@ coop:
 
 # ── Currencies (used by upgrade costs) ────────────────────────────────────────
 # Define named currencies; upgrades reference them by key. Two kinds:
-#   type: vault    -> your server's Vault economy (works with any economy plugin)
-#   type: command  -> universal: read the balance from a PlaceholderAPI placeholder for the
-#                     affordability check, and charge with a console command. %player% and %amount%
-#                     are substituted. Works with EcoBits gems, any currency plugin, even block/item
-#                     costs (via a command that removes them).
+#   type: vault    -> your server's Vault economy (works with any economy plugin).
+#   type: command  -> ANYTHING ELSE. Affordability is checked with a PlaceholderAPI balance placeholder;
+#                     charging/refunding run console commands. %player% and %amount% are substituted.
+#                     This makes any currency plug in: EcoBits gems, PlayerPoints, a token plugin, an
+#                     item/block economy — anything that exposes a balance placeholder + give/take command.
 #
-# 'coins' (Vault) is the DEFAULT that upgrades.yml uses, so upgrades work out of the box with just
-# Vault. 'gems' below is an OPTIONAL example command-currency (EcoBits) — it only works if you run
-# EcoBits (or you edit its commands/placeholder). To charge gems for an upgrade, set that upgrade's
-# `currency: gems` in upgrades.yml.
+# Define as many currencies as you like, then point each upgrade at one with `currency:` in upgrades.yml
+# (and the bank uses Vault). 'coins' (Vault) is the DEFAULT so upgrades work out of the box on any Vault
+# server; the rest below are EXAMPLES — keep, edit, or delete them to match what your server runs.
 currencies:
   coins:
     type: vault
     display-name: "coins"
+
+  # EcoBits gems (needs EcoBits + PlaceholderAPI):
   gems:
     type: command
     display-name: "gems"
     balance-placeholder: "%ecobits_gems%"
     take-command: "ecobits remove %player% %amount% gems"
     give-command: "ecobits give %player% %amount% gems"
+
+  # More examples — uncomment/edit for your setup:
+  #
+  # PlayerPoints:
+  #   tokens:
+  #     type: command
+  #     display-name: "tokens"
+  #     balance-placeholder: "%playerpoints_points%"
+  #     take-command: "points take %player% %amount%"
+  #     give-command: "points give %player% %amount%"
+  #
+  # Any placeholder + command currency (blocks, crystals, whatever your plugin exposes):
+  #   crystals:
+  #     type: command
+  #     display-name: "crystals"
+  #     balance-placeholder: "%yourplugin_crystals%"
+  #     take-command: "yourplugin take %player% crystals %amount%"
+  #     give-command: "yourplugin give %player% crystals %amount%"
 
 # ── Spawn / hub (where players go when they leave or lose an island) ──────────
 # When a player's island is deleted (and later: when they leave one, or an island
