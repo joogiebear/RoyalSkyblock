@@ -85,8 +85,11 @@ public final class CropSimulator implements Listener {
         for (int cx = minCx; cx <= maxCx; cx++) {
             for (int cz = minCz; cz <= maxCz; cz++) {
                 // getChunkAt loads it if needed. For a slime world that's a memory read, not disk.
+                // includeMaxblocky MUST be true: scan() uses getHighestBlockYAt to skip the empty
+                // sky above each column, and a snapshot taken without the height map throws on the
+                // first call rather than returning a default.
                 Chunk chunk = world.getChunkAt(cx, cz);
-                snapshots.add(chunk.getChunkSnapshot(false, false, false));
+                snapshots.add(chunk.getChunkSnapshot(true, false, false));
             }
         }
         if (snapshots.isEmpty()) {
@@ -103,8 +106,19 @@ public final class CropSimulator implements Listener {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             List<Pending> pending = new ArrayList<>();
             int found = 0;
-            for (ChunkSnapshot snap : snapshots) {
-                found += scan(snap, loY, hiY, offline, secondsPerStage, pending);
+            try {
+                for (ChunkSnapshot snap : snapshots) {
+                    found += scan(snap, loY, hiY, offline, secondsPerStage, pending);
+                }
+            } catch (Throwable t) {
+                // Without this the scheduler swallows the scan into a generic "generated an
+                // exception" warning naming no island and no cause, while the island's offline time
+                // is already spent — the catch-up clears the stamp before firing, so a thrown scan
+                // silently costs the player everything they were owed. Say what was lost.
+                plugin.getLogger().severe("Catch-up scan failed for " + world.getName() + " — "
+                        + offline + "s of offline growth was dropped: " + t);
+                t.printStackTrace();
+                return;
             }
             int cropsFound = found;
             plugin.getServer().getScheduler().runTask(plugin,
