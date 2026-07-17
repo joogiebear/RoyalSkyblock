@@ -60,6 +60,12 @@ world:
   # paid back on the next visit by the simulation section below.
   unload-grace-seconds: 60
 
+  # How many islands may be unloaded in one pass (the check runs every 5 seconds).
+  # Unloading halts a world's chunk system and I/O on the main thread — milliseconds each, but a
+  # server-wide logout would otherwise try to halt every island in a single tick. Longest-empty go
+  # first, the rest wait for the next pass.
+  max-unloads-per-tick: 2
+
   # Default world properties applied to every new island world.
   properties:
     difficulty: normal          # peaceful | easy | normal | hard

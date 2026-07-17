@@ -4,7 +4,10 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,8 +39,14 @@ public final class IslandUnloadService {
     /** Main thread, on a timer. Cheap: it only walks the islands that are actually loaded. */
     public void tick() {
         long graceMillis = Math.max(0, plugin.getConfig().getLong("world.unload-grace-seconds", 60)) * 1000L;
+        int budget = Math.max(1, plugin.getConfig().getInt("world.max-unloads-per-tick", 2));
         long now = System.currentTimeMillis();
 
+        // Collect first, then unload the longest-empty ones up to the budget. Unloading a world halts
+        // its chunk system and I/O on the main thread — individually milliseconds, but a server-wide
+        // logout (restart warning, network hiccup) would otherwise empty every island at once and try
+        // to halt them all in a single tick. The rest simply wait for the next pass a few seconds on.
+        List<Ready> ready = new ArrayList<>();
         for (World world : Bukkit.getWorlds()) {
             String name = world.getName();
             Island island = plugin.islands().getIslandByWorld(world);
@@ -55,8 +64,24 @@ public final class IslandUnloadService {
             if (now - since < graceMillis) {
                 continue;
             }
-            unload(island, world, now);
+            ready.add(new Ready(island, world, since));
         }
+        if (ready.isEmpty()) {
+            return;
+        }
+        // Longest-empty first, so a backlog drains fairly instead of starving whoever left earliest.
+        ready.sort(Comparator.comparingLong(Ready::emptySince));
+        for (int i = 0; i < Math.min(budget, ready.size()); i++) {
+            unload(ready.get(i).island(), ready.get(i).world(), now);
+        }
+        if (ready.size() > budget && plugin.getConfig().getBoolean("settings.debug", false)) {
+            plugin.getLogger().info("Unload queue: " + ready.size() + " islands empty, unloading "
+                    + budget + " this pass.");
+        }
+    }
+
+    /** An island past its grace period, with when it emptied (for fair ordering). */
+    private record Ready(Island island, World world, long emptySince) {
     }
 
     private void unload(Island island, World world, long now) {
