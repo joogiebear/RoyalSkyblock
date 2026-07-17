@@ -190,11 +190,22 @@ public final class Storage {
 
     /** Best-effort ADD COLUMN; ignores the "already exists" error so it's safe to run every boot. */
     private void addColumnIfMissing(String table, String column, String definition) {
-        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
-            s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
-            plugin.getLogger().info("Migrated " + table + ": added column " + column + ".");
-        } catch (SQLException ignored) {
-            // column already exists — nothing to do
+        try (Connection c = dataSource.getConnection()) {
+            try (ResultSet rs = c.getMetaData().getColumns(null, null, table, column)) {
+                if (rs.next()) {
+                    return;                     // already there
+                }
+            }
+            try (Statement s = c.createStatement()) {
+                s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+                plugin.getLogger().info("Migrated " + table + ": added column " + column + ".");
+            }
+        } catch (SQLException e) {
+            // Previously every failure here was swallowed as "column already exists", so a migration
+            // that genuinely failed looked identical to one that wasn't needed. Ask the metadata
+            // first, then let a real failure be loud — a half-migrated schema breaks every read.
+            plugin.getLogger().severe("Migration failed: could not add " + table + "." + column
+                    + " — " + e.getMessage());
         }
     }
 
@@ -212,9 +223,18 @@ public final class Storage {
         return queryIsland("WHERE profile_id = ?", profileId.toString());
     }
 
+    /**
+     * The columns {@link #readIsland} expects, in one place. These used to be spelled out at each
+     * query site, and adding unloaded_at to only some of them produced a schema that had the column
+     * and reads that never asked for it — every island load failed with "Column not found" while the
+     * migration cheerfully reported success. One constant, one place to change.
+     */
+    private static final String ISLAND_COLUMNS =
+            "id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, "
+            + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at";
+
     private @Nullable Island queryIsland(String where, String param) {
-        String sql = "SELECT id, profile_id, world_name, created_at, radius, level, "
-                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level FROM islands " + where;
+        String sql = "SELECT " + ISLAND_COLUMNS + " FROM islands " + where;
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, param);
             try (ResultSet rs = st.executeQuery()) {
@@ -246,8 +266,7 @@ public final class Storage {
     /** All islands (for the visit browser). Filtering happens in the caller. */
     public List<Island> getAllIslands() {
         List<Island> out = new ArrayList<>();
-        String sql = "SELECT id, profile_id, world_name, created_at, radius, level, "
-                + "home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level FROM islands";
+        String sql = "SELECT " + ISLAND_COLUMNS + " FROM islands";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql);
              ResultSet rs = st.executeQuery()) {
             while (rs.next()) {
