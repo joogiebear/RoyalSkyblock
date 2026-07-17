@@ -1,3 +1,24 @@
+## 2026.29.3 — 2026-07-17
+
+### ✨ Features
+- scale custom-mob strength by island level (`65dee82`)
+- %royalskyblock_island_level% — level of the island you're IN (`8b106f7`)
+- /is admin loadtest — island lifecycle benchmark (`b5b92b8`)
+- per-simulator catch-up logging + accept any air for stacking plants (`8dfc7d0`)
+- BlockSimulator registry, and cane/cactus catch-up (`1be36d0`)
+- unload empty islands and pay back the missed time (`34afc73`)
+
+### 🐛 Fixes
+- save an island the moment it empties, not 60s later (`961e138`)
+- section index is measured from the world's min height (`3101f76`)
+- take chunk snapshots with the height map (`a3b8c6c`)
+- scan the island's own chunks, not the loaded ones (`623fb08`)
+- SELECT the unloaded_at column the reader expects (`af73a32`)
+- pass the Modrinth payload as a file, not inline (`6630430`)
+
+### ⚡ Performance
+- cap islands unloaded per pass (`58eb6fd`)
+
 ## 2026.29.2 — 2026-07-17
 
 ### ✨ Features
