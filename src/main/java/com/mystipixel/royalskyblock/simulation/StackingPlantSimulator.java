@@ -72,7 +72,10 @@ public final class StackingPlantSimulator implements BlockSimulator {
         for (int i = 1; i <= grow; i++) {
             int y = block.y() + i;
             // Never grow into the unknown or into someone's build: only ever fill air we can see.
-            if (!ctx.inScan(block.x(), y, block.z()) || ctx.typeAt(block.x(), y, block.z()) != Material.AIR) {
+            // Accept ANY air — an island floating in a void world reports VOID_AIR / CAVE_AIR above
+            // the surface, not plain AIR, and checking == AIR would silently refuse to grow there.
+            Material above = ctx.typeAt(block.x(), y, block.z());
+            if (!ctx.inScan(block.x(), y, block.z()) || above == null || !above.isAir()) {
                 break;
             }
             ctx.set(block.x(), y, block.z(), plugin.getServer().createBlockData(type));

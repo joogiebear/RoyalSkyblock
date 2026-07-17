@@ -153,6 +153,8 @@ public final class IslandScanner implements Listener {
                         seen++;
                         SimBlock block = new SimBlock(baseX + x, y, baseZ + z, snap.getBlockData(x, y, z));
                         for (BlockSimulator sim : sims) {
+                            ctx.sawBlock(sim.name());
+                            ctx.currentSim = sim.name();   // attributes set() calls to this simulator
                             try {
                                 sim.simulate(block, ctx);
                             } catch (Throwable t) {
@@ -160,6 +162,8 @@ public final class IslandScanner implements Listener {
                                 plugin.getLogger().warning("Simulator " + sim.name() + " failed on "
                                         + type + " at " + block.x() + "," + block.y() + "," + block.z()
                                         + ": " + t);
+                            } finally {
+                                ctx.currentSim = null;
                             }
                         }
                     }
@@ -184,11 +188,19 @@ public final class IslandScanner implements Listener {
             changed++;
         }
         if (debug) {
-            // Report the zero case too: silence is indistinguishable from a broken scan, which is
-            // exactly how this feature hid three separate bugs.
+            // Report the zero case too, and break it down per simulator: silence is indistinguishable
+            // from a broken scan, and a merged count can't tell "cane never seen" from "cane seen but
+            // didn't grow" — the two problems that kept the cane test inconclusive.
+            StringBuilder perSim = new StringBuilder();
+            for (BlockSimulator sim : all) {
+                int[] s = ctx.statsBySim.getOrDefault(sim.name(), new int[2]);
+                perSim.append(perSim.length() == 0 ? "" : ", ")
+                        .append(sim.name()).append("(saw ").append(s[0])
+                        .append(", queued ").append(s[1]).append(')');
+            }
             plugin.getLogger().info("Catch-up: changed " + changed + " of " + ctx.queued.size()
                     + " queued (" + blocksSeen + " blocks seen) in " + ctx.world.getName()
-                    + " for " + ctx.offline + "s offline.");
+                    + " for " + ctx.offline + "s offline — " + perSim + ".");
         }
     }
 
@@ -214,6 +226,16 @@ public final class IslandScanner implements Listener {
         private final int loY;
         private final int hiY;
         private final Map<Pos, BlockData> queued = new HashMap<>();
+
+        // Per-simulator diagnostics. "cane grew 0 of 3 seen" is a completely different problem from
+        // "crops grew 0 of 0 seen", and the merged count can't tell them apart — which is exactly why
+        // the cane test kept being inconclusive. Single-threaded (one async scan task), so plain maps.
+        private final Map<String, int[]> statsBySim = new HashMap<>();   // name -> {seen, queued}
+        private String currentSim;
+
+        void sawBlock(String sim) {
+            statsBySim.computeIfAbsent(sim, k -> new int[2])[0]++;
+        }
 
         Context(World world, long offline, Map<Long, ChunkSnapshot> snapshots, int loY, int hiY) {
             this.world = world;
@@ -262,6 +284,9 @@ public final class IslandScanner implements Listener {
         public void set(int x, int y, int z, BlockData data) {
             synchronized (queued) {
                 queued.put(new Pos(x, y, z), data);
+            }
+            if (currentSim != null) {
+                statsBySim.computeIfAbsent(currentSim, k -> new int[2])[1]++;
             }
         }
 
