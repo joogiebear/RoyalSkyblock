@@ -57,6 +57,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private UpgradeManager upgradeManager;
     private LevelService levelService;
     private com.mystipixel.royalskyblock.perk.PerkService perkService;
+    private com.mystipixel.royalskyblock.island.IslandUnloadService unloadService;
     private BankLevelManager bankLevels;
     private BankService bankService;
     private BorderService borderService;
@@ -101,6 +102,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.upgradeManager = new UpgradeManager(this);
         this.levelService = new LevelService(this);
         this.perkService = new com.mystipixel.royalskyblock.perk.PerkService(this);
+        this.unloadService = new com.mystipixel.royalskyblock.island.IslandUnloadService(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.vaultHook = resolveVault();
         this.bankLevels = new BankLevelManager(this);
@@ -158,6 +160,13 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         // Level-gated perks tick (self-guards to a no-op when perks are disabled).
         long perkPeriod = perkService.refreshSeconds() * 20L;
         getServer().getScheduler().runTaskTimer(this, () -> perkService.tick(), perkPeriod, perkPeriod);
+        // Drop empty island worlds. Without this an island ticks forever once visited, so the
+        // server's cost scales with islands-ever-visited instead of players online.
+        getServer().getScheduler().runTaskTimer(this, () -> unloadService.tick(), 200L, 100L);
+        // Native offline simulation. Anything else that should catch up (minions, etc.) listens to
+        // IslandCatchupEvent instead of being wired in here.
+        getServer().getPluginManager().registerEvents(
+                new com.mystipixel.royalskyblock.simulation.CropSimulator(this), this);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
@@ -229,6 +238,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public LevelService levels() {
         return levelService;
+    }
+
+    public com.mystipixel.royalskyblock.island.IslandUnloadService unloads() {
+        return unloadService;
     }
 
     public com.mystipixel.royalskyblock.perk.PerkService perks() {

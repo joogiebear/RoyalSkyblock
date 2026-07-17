@@ -132,7 +132,8 @@ public final class Storage {
                         + "guest_home " + (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT '', "
                         + "upgrades " + (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT '', "
                         + "reward_level " + integer + " NOT NULL DEFAULT 0, "
-                        + "perk_level " + integer + " NOT NULL DEFAULT 0)",
+                        + "perk_level " + integer + " NOT NULL DEFAULT 0, "
+                        + "unloaded_at " + big + " NOT NULL DEFAULT 0)",
                 "CREATE TABLE IF NOT EXISTS profiles ("
                         + "id " + txt36 + " PRIMARY KEY, owner " + txt36 + " NOT NULL, "
                         + "name " + txt32 + " NOT NULL, gamemode " + txt16 + " NOT NULL, "
@@ -178,6 +179,7 @@ public final class Storage {
         addColumnIfMissing("islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
         addColumnIfMissing("islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         addColumnIfMissing("islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing("islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
         // Per-profile personal bank snapshot (only used when RoyalBank is the backend).
         addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
         addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
@@ -237,6 +239,7 @@ public final class Storage {
         island.loadUpgrades(rs.getString("upgrades"));
         island.setRewardLevel(rs.getInt("reward_level"));
         island.setPerkLevel(rs.getInt("perk_level"));
+        island.setUnloadedAt(rs.getLong("unloaded_at"));
         return island;
     }
 
@@ -258,14 +261,14 @@ public final class Storage {
 
     public boolean saveIsland(Island island) {
         String sql = mysql()
-                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
+                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
                 + "radius=VALUES(radius), level=VALUES(level), home_x=VALUES(home_x), home_y=VALUES(home_y), home_z=VALUES(home_z), "
-                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings), guest_home=VALUES(guest_home), upgrades=VALUES(upgrades), reward_level=VALUES(reward_level), perk_level=VALUES(perk_level)"
-                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
+                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings), guest_home=VALUES(guest_home), upgrades=VALUES(upgrades), reward_level=VALUES(reward_level), perk_level=VALUES(perk_level), unloaded_at=VALUES(unloaded_at)"
+                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
                 + "radius=excluded.radius, level=excluded.level, home_x=excluded.home_x, home_y=excluded.home_y, home_z=excluded.home_z, "
-                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings, guest_home=excluded.guest_home, upgrades=excluded.upgrades, reward_level=excluded.reward_level, perk_level=excluded.perk_level";
+                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings, guest_home=excluded.guest_home, upgrades=excluded.upgrades, reward_level=excluded.reward_level, perk_level=excluded.perk_level, unloaded_at=excluded.unloaded_at";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, island.id().toString());
             st.setString(2, island.profileId().toString());
@@ -283,6 +286,7 @@ public final class Storage {
             st.setString(14, island.serializeUpgrades());
             st.setInt(15, island.rewardLevel());
             st.setInt(16, island.perkLevel());
+            st.setLong(17, island.unloadedAt());
             st.executeUpdate();
             return true;
         } catch (SQLException e) {

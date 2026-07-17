@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.island;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.api.IslandCatchupEvent;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 import org.bukkit.Location;
@@ -147,9 +148,50 @@ public final class IslandManager {
 
     // ── teleport ─────────────────────────────────────────────────────────────────
 
+    /**
+     * Load an island's world and settle the time it spent unloaded. Every path that brings an island
+     * back must go through here, not {@code worlds.loadIsland} directly — an island loaded without
+     * its catch-up silently loses whatever should have happened while it slept.
+     */
+    private CompletableFuture<World> loadWithCatchup(Island island) {
+        return worlds.loadIsland(island.worldName()).thenCompose(world -> onMain(() -> {
+            plugin.unloads().forget(island.worldName());
+            fireCatchup(island, world);
+            return world;
+        }));
+    }
+
+    /**
+     * Fire {@link IslandCatchupEvent} for the offline window, then clear the stamp so a second load
+     * can't pay the same time twice. Main thread.
+     */
+    private void fireCatchup(Island island, World world) {
+        long unloadedAt = island.unloadedAt();
+        if (unloadedAt <= 0) {
+            return;                             // never unloaded, or already settled
+        }
+        island.setUnloadedAt(0);
+        runAsync(() -> storage.saveIsland(island));
+
+        if (!plugin.getConfig().getBoolean("simulation.enabled", true)) {
+            return;
+        }
+        long raw = Math.max(0, (System.currentTimeMillis() - unloadedAt) / 1000L);
+        if (raw < 60) {
+            return;                             // a hub round-trip owes the island nothing
+        }
+        long cap = Math.max(0, plugin.getConfig().getLong("simulation.max-offline-hours", 24)) * 3600L;
+        long simulated = cap > 0 ? Math.min(raw, cap) : raw;
+        if (simulated <= 0) {
+            return;
+        }
+        plugin.getServer().getPluginManager().callEvent(
+                new IslandCatchupEvent(island, world, simulated, raw));
+    }
+
     /** Load the island's world (if needed) and teleport the player to its home. */
     public CompletableFuture<Boolean> teleportToIsland(Player player, Island island) {
-        return worlds.loadIsland(island.worldName())
+        return loadWithCatchup(island)
                 .thenCompose(world -> onMain(() -> {
                     applyBorder(world, island);
                     teleportTo(player, island);
@@ -168,7 +210,7 @@ public final class IslandManager {
 
     /** Load the island world and teleport a visitor to its guest spawn (or home if none is set). */
     public CompletableFuture<Boolean> teleportVisitor(Player player, Island island) {
-        return worlds.loadIsland(island.worldName())
+        return loadWithCatchup(island)
                 .thenCompose(world -> onMain(() -> {
                     applyBorder(world, island);
                     Location loc = island.guestOrHomeLocation();

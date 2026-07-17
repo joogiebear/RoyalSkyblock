@@ -32,6 +32,13 @@ public final class Island {
     /** Highest integer level whose perk unlock-commands have already run (perks are opt-in). */
     private int perkLevel;
 
+    /**
+     * Epoch millis when this island's world was last unloaded, or 0 while it is loaded (or has never
+     * been unloaded). An unloaded world does not tick, so this is the clock that offline simulation
+     * reads on the next load to work out how much time it owes the island.
+     */
+    private long unloadedAt;
+
     private double homeX, homeY, homeZ;
     private float homeYaw, homePitch;
 
@@ -103,6 +110,15 @@ public final class Island {
 
     public void setPerkLevel(int perkLevel) {
         this.perkLevel = perkLevel;
+    }
+
+    /** Epoch millis of the last unload, or 0 if the world is loaded / has never unloaded. */
+    public long unloadedAt() {
+        return unloadedAt;
+    }
+
+    public void setUnloadedAt(long unloadedAt) {
+        this.unloadedAt = unloadedAt;
     }
 
     // ── upgrades ────────────────────────────────────────────────────────────────

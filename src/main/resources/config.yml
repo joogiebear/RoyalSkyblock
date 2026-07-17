@@ -51,8 +51,13 @@ world:
   # Islands are named "<prefix><owner-uuid>" in the data source.
   world-name-prefix: "island_"
 
-  # Keep an island world loaded this long (seconds) after its last player leaves
-  # before unloading it back to the data source. 0 = unload immediately.
+  # Keep an island world loaded this long (seconds) after its last player leaves before unloading it
+  # back to the data source. 0 = unload as soon as it empties. The grace period means a hub round-trip
+  # or a quick relog doesn't pay the save/load cost twice.
+  #
+  # An unloaded island does not tick: no crop growth, no furnaces, no mobs, no minions. That is the
+  # whole point — the server only pays for islands someone is standing on — and the time it missed is
+  # paid back on the next visit by the simulation section below.
   unload-grace-seconds: 60
 
   # Default world properties applied to every new island world.
@@ -219,6 +224,38 @@ spawn:
   z: 0.5
   yaw: 0.0
   pitch: 0.0
+
+# ── Offline simulation (catch-up) ─────────────────────────────────────────────
+# Islands unload when empty (see world.unload-grace-seconds), so nothing on them ticks while the
+# owner is away. On the next visit RoyalSkyblock fast-forwards what that time should have produced.
+#
+# Crops are handled natively below. ANYTHING ELSE that should catch up — minions especially — hooks
+# the IslandCatchupEvent API instead of being configured here; it receives the island, the world and
+# the (already-clamped) offline seconds, and pays its own dues. That keeps RoyalSkyblock from needing
+# to know a minion plugin exists.
+simulation:
+  enabled: true
+
+  # Never simulate more than this many hours, however long the island actually sat unloaded.
+  # Crops self-cap (they can only reach ripe), so this mainly bounds what minion-style listeners are
+  # told — otherwise an island untouched for a year would mint a year of output on one login.
+  # 0 = no cap (not recommended once minions are in).
+  max-offline-hours: 24
+
+  crops:
+    enabled: true
+    # Expected real seconds for one growth stage on a normal (hydrated, lit) farm. Vanilla grows crops
+    # on random ticks, so this is an average, not a schedule: each stage is rolled independently, which
+    # is why a field planted together still ripens unevenly. ~130s ≈ vanilla wheat's ~15 min to ripe.
+    # Lower = more generous catch-up.
+    seconds-per-stage: 130
+    # Vertical band to scan. Islands paste at y=100, so this covers the buildable area without walking
+    # all 384 blocks of world height on every visit. Widen it if players build farms far above/below.
+    scan-y-min: 60
+    scan-y-max: 180
+    # NOTE: only age-based crops are simulated — wheat, carrots, potatoes, beetroot, nether wart,
+    # cocoa, sweet berries. Sugar cane, cactus and bamboo grow by PLACING blocks, and melon/pumpkin
+    # stems spawn fruit in a neighbouring block; those still only grow while someone is on the island.
 
 # ── Anti-crash: liquid flow limiter ───────────────────────────────────────────
 flow-limiter:
