@@ -909,6 +909,13 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
      * {@code island_<uuid>} worlds and the profile/DB system, and every one is deleted at the end even
      * on partial failure. Capped so a fat-fingered count can't OOM a live server.
      */
+    /** Load-test output goes to the runner AND the console — the runner is usually a player whose
+     *  chat isn't in the log, and the whole point of the benchmark is the numbers. */
+    private void loadTestReport(CommandSender sender, String msg) {
+        sender.sendMessage(Text.color("&e[loadtest] &7" + msg));
+        plugin.getLogger().info("[loadtest] " + msg);
+    }
+
     private void handleLoadTest(CommandSender sender, String[] args) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
@@ -966,11 +973,10 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                             loaded++;
                         }
                     }
-                    sender.sendMessage(Text.color("&a[loadtest] loaded &f" + loaded + "/" + count
-                            + "&a in &f" + loadMs + "ms&a (&f" + (loadMs / Math.max(1, count))
-                            + "ms&a avg/island)"));
-                    sender.sendMessage(Text.color("&a[loadtest] heap: &f+" + human(heapAfter - heapBefore)
-                            + "&a total, &f~" + human(perIsland) + "&a per island"));
+                    loadTestReport(sender, "loaded " + loaded + "/" + count + " in " + loadMs
+                            + "ms (" + (loadMs / Math.max(1, count)) + "ms avg/island)");
+                    loadTestReport(sender, "heap: +" + human(heapAfter - heapBefore)
+                            + " total, ~" + human(perIsland) + " per island");
                     if (error != null) {
                         sender.sendMessage(Text.color("&c[loadtest] some loads failed: " + rootMessage(error)));
                     }
@@ -1000,12 +1006,11 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                             leaked++;
                         }
                     }
-                    sender.sendMessage(Text.color("&a[loadtest] unloaded + deleted &f" + names.size()
-                            + "&a in &f" + teardownMs + "ms&a. Leaked: &f" + leaked));
-                    sender.sendMessage(Text.color("&e[loadtest] done in " + totalMs + "ms total. "
-                            + (leaked == 0 ? "&aClean." : "&cCHECK: " + leaked + " worlds still loaded!")));
-                    plugin.getLogger().info("[loadtest] " + names.size() + " islands, total " + totalMs
-                            + "ms, teardown " + teardownMs + "ms, leaked " + leaked);
+                    loadTestReport(sender, "unloaded + deleted " + names.size() + " in " + teardownMs
+                            + "ms. Leaked: " + leaked);
+                    loadTestReport(sender, "DONE — " + names.size() + " islands, " + totalMs
+                            + "ms total (incl. hold), teardown " + teardownMs + "ms, leaked " + leaked
+                            + (leaked == 0 ? " — clean." : " — CHECK: worlds still loaded!"));
                 }));
     }
 
