@@ -683,6 +683,10 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleTestWorld(sender);
             return;
         }
+        if (action.equals("loadtest")) {
+            handleLoadTest(sender, args);
+            return;
+        }
         if (action.equals("schematic")) {
             handleSchematic(sender, args);
             return;
@@ -706,6 +710,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
         sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7— island border colour"));
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
+        sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7— island load/unload + heap benchmark"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
         sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
     }
@@ -890,6 +895,132 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         return active == null ? null : plugin.islands().getIslandByProfile(active);
     }
 
+    /**
+     * {@code /is admin loadtest <count> [holdSeconds]} — the island-machinery load test.
+     *
+     * <p>online-mode blocks real bots, so we can't fake N player connections. What we CAN measure —
+     * and what's actually RoyalSkyblock-specific — is the island lifecycle: create/load N slime worlds
+     * concurrently, hold them, then unload+delete. It reports load time and heap cost per island, so
+     * "cost scales with players not islands" stops being a claim. It does NOT measure the catch-up
+     * scan (the test worlds are empty — that path is proven separately) nor real player presence
+     * (mobs, movement, redstone), which is general Paper perf and needs real players.
+     *
+     * <p>Throwaway worlds are named {@code rsb_loadtest_<n>}, entirely separate from real
+     * {@code island_<uuid>} worlds and the profile/DB system, and every one is deleted at the end even
+     * on partial failure. Capped so a fat-fingered count can't OOM a live server.
+     */
+    private void handleLoadTest(CommandSender sender, String[] args) {
+        if (!plugin.isWorldBackendReady()) {
+            sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
+            return;
+        }
+        int count;
+        try {
+            count = Integer.parseInt(args.length >= 3 ? args[2] : "10");
+        } catch (NumberFormatException e) {
+            sender.sendMessage(Text.color("&cUsage: &e/is admin loadtest <count> [holdSeconds]"));
+            return;
+        }
+        if (count < 1 || count > 64) {
+            sender.sendMessage(Text.color("&ccount must be 1–64 (this is a live server — start small)."));
+            return;
+        }
+        long holdSeconds = 3;
+        if (args.length >= 4) {
+            try {
+                holdSeconds = Math.max(0, Math.min(60, Long.parseLong(args[3])));
+            } catch (NumberFormatException ignored) {
+                // keep default
+            }
+        }
+        runLoadTest(sender, count, holdSeconds);
+    }
+
+    private void runLoadTest(CommandSender sender, int count, long holdSeconds) {
+        Runtime rt = Runtime.getRuntime();
+        System.gc();
+        long heapBefore = rt.totalMemory() - rt.freeMemory();
+        long batchStart = System.currentTimeMillis();
+
+        sender.sendMessage(Text.color("&e[loadtest] creating + loading &f" + count
+                + "&e slime worlds concurrently... watch console TPS."));
+
+        List<String> names = new ArrayList<>();
+        List<java.util.concurrent.CompletableFuture<Void>> loads = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            String name = "rsb_loadtest_" + i;
+            names.add(name);
+            loads.add(plugin.worlds().createIsland(name).thenAccept(w -> { }));
+        }
+
+        java.util.concurrent.CompletableFuture.allOf(loads.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .whenComplete((ignored, error) -> onMain(() -> {
+                    long loadMs = System.currentTimeMillis() - batchStart;
+                    System.gc();
+                    long heapAfter = rt.totalMemory() - rt.freeMemory();
+                    long perIsland = (heapAfter - heapBefore) / count;
+
+                    int loaded = 0;
+                    for (String n : names) {
+                        if (plugin.worlds().isLoaded(n)) {
+                            loaded++;
+                        }
+                    }
+                    sender.sendMessage(Text.color("&a[loadtest] loaded &f" + loaded + "/" + count
+                            + "&a in &f" + loadMs + "ms&a (&f" + (loadMs / Math.max(1, count))
+                            + "ms&a avg/island)"));
+                    sender.sendMessage(Text.color("&a[loadtest] heap: &f+" + human(heapAfter - heapBefore)
+                            + "&a total, &f~" + human(perIsland) + "&a per island"));
+                    if (error != null) {
+                        sender.sendMessage(Text.color("&c[loadtest] some loads failed: " + rootMessage(error)));
+                    }
+
+                    long hold = holdSeconds * 20L;
+                    sender.sendMessage(Text.color("&7[loadtest] holding " + holdSeconds
+                            + "s, then unloading through the throttle..."));
+                    plugin.getServer().getScheduler().runTaskLater(plugin,
+                            () -> teardownLoadTest(sender, names, batchStart), hold);
+                }));
+    }
+
+    private void teardownLoadTest(CommandSender sender, List<String> names, long batchStart) {
+        long start = System.currentTimeMillis();
+        List<java.util.concurrent.CompletableFuture<Void>> deletes = new ArrayList<>();
+        for (String n : names) {
+            deletes.add(plugin.worlds().deleteIsland(n));
+        }
+        java.util.concurrent.CompletableFuture.allOf(deletes.toArray(new java.util.concurrent.CompletableFuture[0]))
+                .whenComplete((ignored, error) -> onMain(() -> {
+                    long teardownMs = System.currentTimeMillis() - start;
+                    long totalMs = System.currentTimeMillis() - batchStart;
+                    // Confirm nothing leaked — a load test that orphans worlds is worse than none.
+                    int leaked = 0;
+                    for (String n : names) {
+                        if (plugin.worlds().isLoaded(n)) {
+                            leaked++;
+                        }
+                    }
+                    sender.sendMessage(Text.color("&a[loadtest] unloaded + deleted &f" + names.size()
+                            + "&a in &f" + teardownMs + "ms&a. Leaked: &f" + leaked));
+                    sender.sendMessage(Text.color("&e[loadtest] done in " + totalMs + "ms total. "
+                            + (leaked == 0 ? "&aClean." : "&cCHECK: " + leaked + " worlds still loaded!")));
+                    plugin.getLogger().info("[loadtest] " + names.size() + " islands, total " + totalMs
+                            + "ms, teardown " + teardownMs + "ms, leaked " + leaked);
+                }));
+    }
+
+    /** Bytes → human string, for heap readouts. */
+    private static String human(long bytes) {
+        if (Math.abs(bytes) < 1024) {
+            return bytes + "B";
+        }
+        double kb = bytes / 1024.0;
+        if (Math.abs(kb) < 1024) {
+            return String.format("%.1fKB", kb);
+        }
+        return String.format("%.1fMB", kb / 1024.0);
+    }
+
     private void handleTestWorld(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
@@ -994,7 +1125,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return filter(names, args[1], sender);
         }
         if (args.length == 2 && sub.equals("admin") && sender.hasPermission("royalskyblock.admin")) {
-            return filter(List.of("status", "border", "testworld", "schematic", "upgrade", "chesttest"), args[1], sender);
+            return filter(List.of("status", "border", "testworld", "loadtest", "schematic", "upgrade", "chesttest"), args[1], sender);
         }
         if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("border")) {
             return filter(List.of("blue", "red", "green", "off"), args[2], sender);
