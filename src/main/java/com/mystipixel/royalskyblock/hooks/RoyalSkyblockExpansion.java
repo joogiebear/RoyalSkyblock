@@ -27,8 +27,10 @@ import java.util.UUID;
  *   <tr><td>{@code has_island}</td><td>true/false — the player owns/belongs to an island</td></tr>
  *   <tr><td>{@code on_island}</td><td>true/false — standing on ANY island world (gate eco effects to islands)</td></tr>
  *   <tr><td>{@code on_own_island}</td><td>true/false — standing on their OWN island</td></tr>
- *   <tr><td>{@code level}</td><td>island level, whole number with grouping</td></tr>
- *   <tr><td>{@code level_raw}</td><td>island level, raw</td></tr>
+ *   <tr><td>{@code level}</td><td>the player's OWN island level, whole number with grouping</td></tr>
+ *   <tr><td>{@code level_raw}</td><td>the player's OWN island level, raw</td></tr>
+ *   <tr><td>{@code island_level}</td><td>level of the island world the player is IN (0 off-island) — use this to scale things by where the player is, e.g. mob spawns</td></tr>
+ *   <tr><td>{@code island_level_raw}</td><td>as {@code island_level}, raw</td></tr>
  *   <tr><td>{@code rank}</td><td>leaderboard position (1 = highest), or {@code -}</td></tr>
  *   <tr><td>{@code size}</td><td>buildable size as {@code NxN}</td></tr>
  *   <tr><td>{@code radius}</td><td>protection radius</td></tr>
@@ -122,6 +124,21 @@ public final class RoyalSkyblockExpansion extends PlaceholderExpansion {
                 return island != null ? formatWhole(island.level()) : "0";
             case "level_raw":
                 return island != null ? String.valueOf(island.level()) : "0";
+            case "island_level":
+            case "island_level_raw": {
+                // Level of the island world the player is standing IN, NOT their own profile's island.
+                // 'level' answers "my island's level" (wrong when visiting); this answers "the level of
+                // wherever I am" — which is what mob-spawn / effect scaling on an island actually wants,
+                // since a mob spawns near a player in that world. Returns 0 off any island.
+                if (!player.isOnline()) {
+                    return "0";
+                }
+                Island world = plugin.islands().getIslandByWorld(player.getPlayer().getWorld());
+                if (world == null) {
+                    return "0";
+                }
+                return params.endsWith("_raw") ? String.valueOf(world.level()) : formatWhole(world.level());
+            }
             case "rank": {
                 if (island == null) {
                     return "-";
