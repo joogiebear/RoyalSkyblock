@@ -277,6 +277,21 @@ simulation:
   # block and saplings generate a whole tree, both of which can overwrite what a player built. They
   # still grow normally while someone is on the island.
 
+# ── EcoMobs strength bridge (optional; only active if EcoMobs is installed) ────
+# Scales EcoMobs custom mobs' health and damage by the level of the island they spawn on. EcoMobs
+# can't read island level in its OWN spawn conditions (it evaluates them against a location with no
+# player, so %royalskyblock_island_level% won't resolve there) — so RoyalSkyblock does it after the
+# mob spawns, reading the level straight from its island world. No effect off an island.
+ecomobs:
+  enabled: true
+  # multiplier = 1 + island_level * scale, clamped to [1, max-multiplier]. Island level is a sum of
+  # block values (reaches the hundreds/thousands), so these are per-point and small. At 0.002 a
+  # level-500 island makes mobs 2x tougher. Damage scales slower than health by default, so higher
+  # islands get tankier without becoming one-shot machines — tune to taste.
+  health-scale-per-level: 0.002
+  damage-scale-per-level: 0.0015
+  max-multiplier: 5.0
+
 # ── Anti-crash: liquid flow limiter ───────────────────────────────────────────
 flow-limiter:
   enabled: true

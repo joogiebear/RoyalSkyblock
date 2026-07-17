@@ -172,6 +172,14 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         islandScanner.register(new com.mystipixel.royalskyblock.simulation.StackingPlantSimulator(this));
         getServer().getPluginManager().registerEvents(islandScanner, this);
 
+        // EcoMobs strength bridge — soft hook. Only register when EcoMobs is present, so the bridge
+        // class (which references EcoMobs types) is never loaded otherwise.
+        if (getServer().getPluginManager().isPluginEnabled("EcoMobs")) {
+            getServer().getPluginManager().registerEvents(
+                    new com.mystipixel.royalskyblock.hooks.EcoMobsStrengthBridge(this), this);
+            getLogger().info("EcoMobs detected — island-level mob strength scaling active.");
+        }
+
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
