@@ -60,7 +60,16 @@ public final class IslandUnloadService {
             if (Boolean.TRUE.equals(unloading.get(name))) {
                 continue;
             }
-            long since = emptySince.computeIfAbsent(name, k -> now);
+            Long since = emptySince.get(name);
+            if (since == null) {
+                // Just emptied. Persist now rather than waiting out the grace period: until the
+                // unload saves it, everything since the last ~5-minute autosave exists only in
+                // memory, and a crash in that window costs the player work they'd already done and
+                // logged off believing was safe. Cheap — a slime world is one small blob.
+                emptySince.put(name, now);
+                saveNow(island, world);
+                continue;
+            }
             if (now - since < graceMillis) {
                 continue;
             }
@@ -82,6 +91,21 @@ public final class IslandUnloadService {
 
     /** An island past its grace period, with when it emptied (for fair ordering). */
     private record Ready(Island island, World world, long emptySince) {
+    }
+
+    /**
+     * Persist an island's blocks without unloading it — the island keeps ticking through its grace
+     * period, so this isn't the last word, just a floor under how much a crash can cost.
+     */
+    private void saveNow(Island island, World world) {
+        plugin.worlds().saveIsland(world.getName()).whenComplete((ignored, error) -> {
+            if (error != null) {
+                plugin.getLogger().warning("Could not save island " + world.getName()
+                        + " after it emptied: " + error.getMessage());
+            } else if (plugin.getConfig().getBoolean("settings.debug", false)) {
+                plugin.getLogger().info("Saved island " + world.getName() + " (now empty).");
+            }
+        });
     }
 
     private void unload(Island island, World world, long now) {
