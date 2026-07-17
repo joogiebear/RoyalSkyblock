@@ -1,3 +1,15 @@
+## 2026.29.2 — 2026-07-17
+
+### ✨ Features
+- on_island / on_own_island for gating eco effects to islands (`01435c5`)
+- route bedless respawns to spawn (hub), respect beds (`e3f921e`)
+- teleport players to spawn on join (skip island-loggers) (`1919a8e`)
+- PlaceholderAPI expansion (%royalskyblock_...%) (`5653bb9`)
+
+### 🐛 Fixes
+- defer boot config check to first tick (`2699b96`)
+- correct EcoBits currency example syntax (`d0b95df`)
+
 ## 2026.29.1 — 2026-07-16
 
 _Maintenance release._
