@@ -105,10 +105,11 @@ public final class CropSimulator implements Listener {
 
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
             List<Pending> pending = new ArrayList<>();
+            int[] total = {0};
             int found = 0;
             try {
                 for (ChunkSnapshot snap : snapshots) {
-                    found += scan(snap, loY, hiY, offline, secondsPerStage, pending);
+                    found += scan(snap, loY, hiY, offline, secondsPerStage, pending, total);
                 }
             } catch (Throwable t) {
                 // Without this the scheduler swallows the scan into a generic "generated an
@@ -121,31 +122,39 @@ public final class CropSimulator implements Listener {
                 return;
             }
             int cropsFound = found;
+            int cropsTotal = total[0];
             plugin.getServer().getScheduler().runTask(plugin,
-                    () -> apply(world, pending, offline, cropsFound, debug));
+                    () -> apply(world, pending, offline, cropsFound, cropsTotal, debug));
         });
     }
 
-    /** @return how many growable crops were seen (not how many grew) — the number that explains a no-op */
+    /**
+     * @param total counts every crop found, ripe or not — "0 of 0" was ambiguous between "no crops
+     *              here" and "all of them are already grown", which are opposite diagnoses
+     * @return how many growable (age &lt; max) crops were seen
+     */
     private int scan(ChunkSnapshot snap, int loY, int hiY, long offline, double secondsPerStage,
-                     List<Pending> out) {
+                     List<Pending> out, int[] total) {
         int baseX = snap.getX() << 4;
         int baseZ = snap.getZ() << 4;
         int found = 0;
         for (int x = 0; x < 16; x++) {
             for (int z = 0; z < 16; z++) {
+                // getHighestBlockYAt already bounds the top of the column, which is the scan's real
+                // cost. There was an isSectionEmpty() skip here to also jump the empty space below;
+                // it indexed sections as y >> 4, but sections are numbered from the world's MINIMUM
+                // height, so in a -64 world a crop at y=100 sits in section 10 while y>>4 gives 6 —
+                // empty void — and every crop was skipped. The saving was ~40 iterations per column
+                // against a palette lookup; not worth a second silent miss.
                 int highest = Math.min(hiY, snap.getHighestBlockYAt(x, z));
                 for (int y = loY; y <= highest; y++) {
-                    if (snap.isSectionEmpty(y >> 4)) {
-                        y = ((y >> 4) + 1) * 16 - 1;   // jump to the next section
-                        continue;
-                    }
                     if (!isCrop(snap.getBlockType(x, y, z))) {
                         continue;
                     }
+                    total[0]++;
                     BlockData data = snap.getBlockData(x, y, z);
                     if (!(data instanceof Ageable age) || age.getAge() >= age.getMaximumAge()) {
-                        continue;
+                        continue;               // already ripe — counted, but nothing to do
                     }
                     found++;
                     int grown = GrowthModel.stagesGrown(offline, secondsPerStage,
@@ -160,7 +169,8 @@ public final class CropSimulator implements Listener {
         return found;
     }
 
-    private void apply(World world, List<Pending> pending, long offline, int cropsFound, boolean debug) {
+    private void apply(World world, List<Pending> pending, long offline, int cropsFound,
+                       int cropsTotal, boolean debug) {
         int changed = 0;
         for (Pending p : pending) {
             Block block = world.getBlockAt(p.x(), p.y(), p.z());
@@ -180,7 +190,8 @@ public final class CropSimulator implements Listener {
             // Always report, including the zero case: a silent no-op is indistinguishable from a
             // broken scan, and that is exactly how the first version of this hid a real bug.
             plugin.getLogger().info("Catch-up: grew " + changed + " of " + cropsFound
-                    + " growable crops in " + world.getName() + " for " + offline + "s offline.");
+                    + " growable (" + cropsTotal + " crops seen) in " + world.getName()
+                    + " for " + offline + "s offline.");
         }
     }
 
