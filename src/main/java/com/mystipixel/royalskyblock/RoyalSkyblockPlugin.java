@@ -58,6 +58,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private LevelService levelService;
     private com.mystipixel.royalskyblock.perk.PerkService perkService;
     private com.mystipixel.royalskyblock.island.IslandUnloadService unloadService;
+    private com.mystipixel.royalskyblock.simulation.IslandScanner islandScanner;
     private BankLevelManager bankLevels;
     private BankService bankService;
     private BorderService borderService;
@@ -103,6 +104,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.levelService = new LevelService(this);
         this.perkService = new com.mystipixel.royalskyblock.perk.PerkService(this);
         this.unloadService = new com.mystipixel.royalskyblock.island.IslandUnloadService(this);
+        this.islandScanner = new com.mystipixel.royalskyblock.simulation.IslandScanner(this);
         this.profileManager = new ProfileManager(this, storage, stateService);
         this.vaultHook = resolveVault();
         this.bankLevels = new BankLevelManager(this);
@@ -163,10 +165,12 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         // Drop empty island worlds. Without this an island ticks forever once visited, so the
         // server's cost scales with islands-ever-visited instead of players online.
         getServer().getScheduler().runTaskTimer(this, () -> unloadService.tick(), 200L, 100L);
-        // Native offline simulation. Anything else that should catch up (minions, etc.) listens to
-        // IslandCatchupEvent instead of being wired in here.
-        getServer().getPluginManager().registerEvents(
-                new com.mystipixel.royalskyblock.simulation.CropSimulator(this), this);
+        // Offline simulation. The scanner walks a returning island once and dispatches its blocks to
+        // registered BlockSimulators; addons register their own the same way these do. Anything that
+        // isn't block-shaped (minions) listens to IslandCatchupEvent directly instead.
+        islandScanner.register(new com.mystipixel.royalskyblock.simulation.AgeCropSimulator(this));
+        islandScanner.register(new com.mystipixel.royalskyblock.simulation.StackingPlantSimulator(this));
+        getServer().getPluginManager().registerEvents(islandScanner, this);
 
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
@@ -242,6 +246,15 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public com.mystipixel.royalskyblock.island.IslandUnloadService unloads() {
         return unloadService;
+    }
+
+    /**
+     * Offline-simulation registry. Register a {@link com.mystipixel.royalskyblock.api.BlockSimulator}
+     * from your onEnable to teach RoyalSkyblock how a block catches up on time its island spent
+     * unloaded; register nothing for a material and that material simply doesn't grow.
+     */
+    public com.mystipixel.royalskyblock.simulation.IslandScanner simulators() {
+        return islandScanner;
     }
 
     public com.mystipixel.royalskyblock.perk.PerkService perks() {

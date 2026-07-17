@@ -242,6 +242,11 @@ simulation:
   # 0 = no cap (not recommended once minions are in).
   max-offline-hours: 24
 
+  # Vertical band the scan walks, shared by every simulator. Islands paste at y=100, so this covers
+  # the buildable area without walking all 384 blocks of world height on every visit.
+  scan-y-min: 60
+  scan-y-max: 180
+
   crops:
     enabled: true
     # Expected real seconds for one growth stage on a normal (hydrated, lit) farm. Vanilla grows crops
@@ -249,13 +254,22 @@ simulation:
     # is why a field planted together still ripens unevenly. ~130s ≈ vanilla wheat's ~15 min to ripe.
     # Lower = more generous catch-up.
     seconds-per-stage: 130
-    # Vertical band to scan. Islands paste at y=100, so this covers the buildable area without walking
-    # all 384 blocks of world height on every visit. Widen it if players build farms far above/below.
-    scan-y-min: 60
-    scan-y-max: 180
-    # NOTE: only age-based crops are simulated — wheat, carrots, potatoes, beetroot, nether wart,
-    # cocoa, sweet berries. Sugar cane, cactus and bamboo grow by PLACING blocks, and melon/pumpkin
-    # stems spawn fruit in a neighbouring block; those still only grow while someone is on the island.
+    # Covers the age-based crops: wheat, carrots, potatoes, beetroot, nether wart, cocoa, berries.
+
+  # Sugar cane and cactus — the backbone of most skyblock farms. These don't ripen, they stack, so
+  # they're tuned per BLOCK grown rather than per growth stage.
+  stacking-plants:
+    enabled: true
+    # Expected real seconds to add one block to a column. Vanilla cane/cactus grow roughly every
+    # 18 minutes on average; lower this to be more generous.
+    seconds-per-block: 1080
+    # Tallest a column may reach. Vanilla is 3. Growth never places into anything but air, so a farm
+    # built under a ceiling stays under its ceiling regardless of this.
+    max-height: 3
+
+  # NOTE: melon/pumpkin stems and saplings are NOT simulated — stems spawn fruit in a neighbouring
+  # block and saplings generate a whole tree, both of which can overwrite what a player built. They
+  # still grow normally while someone is on the island.
 
 # ── Anti-crash: liquid flow limiter ───────────────────────────────────────────
 flow-limiter:
