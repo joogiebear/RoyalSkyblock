@@ -231,14 +231,6 @@ spawn:
   yaw: 0.0
   pitch: 0.0
 
-# ── Gameplay rules ────────────────────────────────────────────────────────────
-gameplay:
-  # Keep every player's hunger bar full at all times, everywhere they can be (islands + hub), so
-  # food never drains and nobody needs to eat. There is no vanilla gamerule for this — RoyalSkyblock
-  # pins the food level on the food-change event. Set false to restore normal vanilla hunger.
-  # Reloadable live with /is reload.
-  disable-hunger: true
-
 # ── Offline simulation (catch-up) ─────────────────────────────────────────────
 # Islands unload when empty (see world.unload-grace-seconds), so nothing on them ticks while the
 # owner is away. On the next visit RoyalSkyblock fast-forwards what that time should have produced.
