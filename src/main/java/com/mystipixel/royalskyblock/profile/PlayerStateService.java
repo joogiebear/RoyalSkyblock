@@ -35,9 +35,24 @@ public final class PlayerStateService {
         if (profileId == null) {
             return;
         }
+        byte[] inventory = serialize(player.getInventory().getContents());
+        byte[] enderChest = serialize(player.getEnderChest().getContents());
+
+        // A null blob means serialization failed (an item Bukkit can't write — a foreign plugin item,
+        // version drift). Persisting it would be destructive: load() treats null as "empty profile" and
+        // clears the inventory, so one bad item would silently wipe everything on the next login.
+        // Keep the last good row instead — a stale save is recoverable, a wipe is not.
+        if (inventory == null || enderChest == null) {
+            plugin.getLogger().severe("Refusing to save profile " + profileId + " for " + player.getName()
+                    + ": item serialization failed, so the previous save is being kept. "
+                    + "This session's inventory changes are NOT saved — check the error above for the item.");
+            plugin.eco().save(player.getUniqueId(), profileId);   // progression is unaffected, still save it
+            return;
+        }
+
         ProfileData data = new ProfileData(
-                serialize(player.getInventory().getContents()),
-                serialize(player.getEnderChest().getContents()),
+                inventory,
+                enderChest,
                 player.getLevel(),
                 player.getExp(),
                 player.getHealth(),
