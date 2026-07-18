@@ -1,3 +1,17 @@
+## 2026.29.5 — 2026-07-18
+
+### ✨ Features
+- intimidation targeting bridge — weak mobs ignore the player (`96cbf5e`)
+- pluggable, player-driven island mob spawning (`495a6a9`)
+- %royalskyblock_profile_id% — stable active-profile id (`4b0dfd3`)
+
+### 🐛 Fixes
+- stop witches — clear target and block damage from intimidated mobs (`d97723e`)
+- disable vanilla hostiles alongside tiered mobs; show intimidation state (`a9ac128`)
+- save online players + loaded islands on shutdown (onDisable) (`d9b5a91`)
+- resolve EcoSkills combat skill lazily (registry empty at startup) (`c6542c7`)
+- soft-depend EcoMobs + EcoSkills so they load before RoyalSkyblock (`e805327`)
+
 ## 2026.29.4 — 2026-07-18
 
 ### ✨ Features
