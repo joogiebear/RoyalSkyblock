@@ -743,7 +743,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     private void handleMobSpawnAdmin(CommandSender sender, String[] args) {
         com.mystipixel.royalskyblock.island.IslandMobSpawnService svc = plugin.mobSpawns();
         if (svc == null) {
-            sender.sendMessage(Text.color("&cIsland mob spawning is off (island-mobs.enabled: false)."));
+            sender.sendMessage(Text.color("&cIsland mob spawning isn't running — it's disabled, or its "
+                    + "provider wasn't available at startup. Check the console log at boot."));
             return;
         }
         String sub = args.length >= 3 ? args[2].toLowerCase(Locale.ROOT) : "status";
