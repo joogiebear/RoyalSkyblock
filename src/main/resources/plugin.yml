@@ -22,7 +22,7 @@ softdepend:
 commands:
   island:
     description: RoyalSkyblock island command.
-    usage: /island [create|home|go|visit|invite|kick|leave|sethome|setwarp|level|top|upgrade|settings|reload|admin]
+    usage: /island [create|home|visit|menu|profile|manage|members|invite|kick|leave|bank|level|top|upgrade|perks|settings|admin]
     aliases: [is, sb, skyblock]
   bank:
     description: Open your bank (personal + coop).

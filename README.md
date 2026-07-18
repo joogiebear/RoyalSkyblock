@@ -93,10 +93,11 @@ Aliases for `/island`: `/is`, `/sb`, `/skyblock`.
 
 | Node | Default | Grants |
 |---|---|---|
-| `royalskyblock.use` / `.create` / `.home` / `.visit` / `.invite` / `.upgrade` / `.settings` | true | Normal player actions |
+| `royalskyblock.use` / `.create` / `.home` / `.visit` / `.invite` / `.upgrade` / `.settings` / `.bank` | true | Normal player actions |
 | `royalskyblock.admin` | op | `/is reload`, `/is admin …` |
 | `royalskyblock.bypass` | op | Ignore island build protection / flow limiter |
 | `royalskyblock.gamemode.bypass` | false | Ignore gamemode command rules (e.g. Ironman blocked commands). **Not** given to ops. |
+| `royalskyblock.playmode.bypass` | op | Ignore the per-world gamemode enforcement |
 
 ## Graceful degradation
 

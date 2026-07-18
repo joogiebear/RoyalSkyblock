@@ -67,8 +67,8 @@ _Maintenance release._
 - show island size as NxN in the upgrades menu (`fa4e4c6`)
 - per-player island border — scales with size, colour, admin-bypass (`e8a474b`)
 - optional level-gated perks (off by default) (`63f626f`)
-- Phase 4 — graceful degradation & config validation (`22786f7`)
-- Phase 3 — in-game admin experience (`e229cf5`)
+- graceful degradation & config validation (`22786f7`)
+- in-game admin experience (`e229cf5`)
 - native self-contained bank — no RoyalBank required (`f8256e5`)
 - per-profile personal banks + full coop bank + bank hub (`51e9c62`)
 - shared coop bank via RoyalBank (Vault fallback) (`d64b25a`)
@@ -93,7 +93,7 @@ _Maintenance release._
 - configurable starter island + per-island world border (`696a203`)
 - eco per-profile data bridge (spike) (`5740340`)
 - build protection + /is visit (`c7e76fc`)
-- RoyalSkyblock Phase 1 foundation — per-island SlimeWorld backend (`5610e62`)
+- RoyalSkyblock foundation — per-island SlimeWorld backend (`5610e62`)
 
 ### 🐛 Fixes
 - world-border max is 59,999,968 not 60,000,000 (`95765a1`)
@@ -110,11 +110,11 @@ _Maintenance release._
 
 ### 📝 Documentation
 - document currency versatility + more examples (`fbd32a2`)
-- Phase 5 — message audit + beta changelog (`136e265`)
-- Phase 1 — truth & first-run orientation (`0aa4e0c`)
+- message audit + beta changelog (`136e265`)
+- truth & first-run orientation (`0aa4e0c`)
 
 ### 🔧 Other
-- Phase 2 — config coherence & sane defaults (`237767b`)
+- config coherence & sane defaults (`237767b`)
 - accept cap re-check, clickable invites, join notices, cleanup (`9920699`)
 - invite error names your current profile + gamemode (`a3138ed`)
 

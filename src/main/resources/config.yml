@@ -98,7 +98,7 @@ island:
   # Base number of guests that can /visit at once (before the guest-limit upgrade adds more).
   base-guest-limit: 3
 
-  # Max members on a fresh island (owner counts as one). Upgradeable in Phase 3.
+  # Max members on a fresh island (owner counts as one). Raised by island upgrades.
   starting-member-limit: 4
 
   # Cooldown (seconds) between an island reset and the next allowed reset.

@@ -71,7 +71,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             case "kickall" -> handleKickAll(sender);
             case "delete" -> handleDelete(sender, args);
             case "admin" -> handleAdmin(sender, args);
-            default -> sender.sendMessage(Text.color("&e/is " + args[0] + " &7isn't wired up yet — coming soon."));
+            default -> sender.sendMessage(Text.color("&cUnknown subcommand &e/is " + args[0]
+                    + "&c. Try &e/is help&c."));
         }
         return true;
     }
