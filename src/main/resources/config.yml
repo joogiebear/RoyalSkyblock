@@ -429,3 +429,15 @@ settings:
   bstats: true
   # Print extra timing/debug lines to console.
   debug: false
+
+# ── Profiles ──────────────────────────────────────────────────────────────────
+profile:
+  # Hotbar slots (1-9) owned by another plugin, left out of the per-profile inventory.
+  #
+  # A profile swap replaces the whole inventory, so an item another plugin pins to a slot
+  # would otherwise be saved into whichever profile was active and handed back on a
+  # different one — duplicating it, or losing it. List the slot here and RoyalSkyblock
+  # saves everything else and leaves that square alone.
+  #
+  # Example: RoyalJoin's menu item in the far-right slot.
+  externally-managed-hotbar-slots: []

@@ -9,6 +9,7 @@ import org.bukkit.util.io.BukkitObjectOutputStream;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -21,6 +22,7 @@ import java.util.UUID;
 public final class PlayerStateService {
 
     private static final double DEFAULT_MAX_HEALTH = 20.0;
+    private static final int[] EMPTY_SLOTS = new int[0];
 
     private final RoyalSkyblockPlugin plugin;
     private final Storage storage;
@@ -35,7 +37,13 @@ public final class PlayerStateService {
         if (profileId == null) {
             return;
         }
-        byte[] inventory = serialize(player.getInventory().getContents());
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot : externallyManagedSlots()) {
+            if (slot < contents.length) {
+                contents[slot] = null;
+            }
+        }
+        byte[] inventory = serialize(contents);
         byte[] enderChest = serialize(player.getEnderChest().getContents());
 
         // A null blob means serialization failed (an item Bukkit can't write — a foreign plugin item,
@@ -81,11 +89,18 @@ public final class PlayerStateService {
             data = ProfileData.fresh();
         }
 
-        if (data.inventory() == null) {
-            player.getInventory().clear();
-        } else {
-            player.getInventory().setContents(deserialize(data.inventory(), player.getInventory().getSize()));
+        int size = player.getInventory().getSize();
+        ItemStack[] restored = data.inventory() == null
+                ? new ItemStack[size]
+                : deserialize(data.inventory(), size);
+        // Whatever another plugin put in these slots stays put: they were never saved, so restoring
+        // over them would either delete the item or hand back a stale copy alongside a fresh one.
+        for (int slot : externallyManagedSlots()) {
+            if (slot < restored.length) {
+                restored[slot] = player.getInventory().getItem(slot);
+            }
         }
+        player.getInventory().setContents(restored);
         if (data.enderChest() == null) {
             player.getEnderChest().clear();
         } else {
@@ -100,6 +115,27 @@ public final class PlayerStateService {
 
         plugin.eco().load(player.getUniqueId(), profileId);
         player.updateInventory();
+    }
+
+    /**
+     * Inventory slots owned by another plugin, excluded from the profile snapshot.
+     *
+     * <p>A per-profile inventory and a plugin that pins an item to a slot are otherwise in direct
+     * conflict: the pinned item gets captured into whichever profile was active, then handed back on a
+     * different one, so it either duplicates or disappears. Naming the slot here settles the ownership
+     * question — RoyalSkyblock saves everything else and leaves that square alone.
+     *
+     * <p>Configured as hotbar positions 1-9, matching how menus and RoyalJoin place things.
+     */
+    private int[] externallyManagedSlots() {
+        List<Integer> configured = plugin.getConfig().getIntegerList("profile.externally-managed-hotbar-slots");
+        if (configured.isEmpty()) {
+            return EMPTY_SLOTS;
+        }
+        return configured.stream()
+                .filter(slot -> slot >= 1 && slot <= 9)
+                .mapToInt(slot -> slot - 1)
+                .toArray();
     }
 
     // ── serialization ────────────────────────────────────────────────────────────
