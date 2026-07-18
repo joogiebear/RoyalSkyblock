@@ -53,3 +53,6 @@ permissions:
   royalskyblock.gamemode.bypass:
     description: Bypass gamemode command rules (e.g. Ironman blocked commands). Not granted to ops by default.
     default: false
+  royalskyblock.playmode.bypass:
+    description: Exempt from island gamemode enforcement (island.world-rules), so you keep your own gamemode (e.g. creative to build).
+    default: op

@@ -16,6 +16,7 @@ import com.mystipixel.royalskyblock.island.NoOpSchematics;
 import com.mystipixel.royalskyblock.island.SchematicService;
 import com.mystipixel.royalskyblock.island.WorldEditSchematics;
 import com.mystipixel.royalskyblock.level.LevelService;
+import com.mystipixel.royalskyblock.listener.IslandRulesListener;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
@@ -25,6 +26,7 @@ import com.mystipixel.royalskyblock.profile.GamemodeManager;
 import com.mystipixel.royalskyblock.profile.PlayerStateService;
 import com.mystipixel.royalskyblock.profile.ProfileManager;
 import com.mystipixel.royalskyblock.upgrade.UpgradeManager;
+import com.mystipixel.royalskyblock.world.IslandWorldRules;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 
 import java.util.Map;
@@ -49,6 +51,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private Storage storage;
     private IslandWorldService worldService;
     private IslandManager islandManager;
+    private IslandWorldRules worldRules;
     private SchematicService schematicService;
     private ProfileManager profileManager;
     private PlayerStateService stateService;
@@ -97,6 +100,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         this.worldService = aspAvailable() ? new AspIslandWorldService(this) : new NoOpIslandWorldService();
         this.schematicService = worldEditAvailable() ? new WorldEditSchematics(this) : new NoOpSchematics();
         this.islandManager = new IslandManager(this, storage, worldService);
+        this.worldRules = new IslandWorldRules(this);
         this.stateService = new PlayerStateService(this, storage);
         this.gamemodeManager = new GamemodeManager(this);
         this.currencyService = new CurrencyService(this);
@@ -127,6 +131,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         registerCommands();
         getServer().getPluginManager().registerEvents(new ProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new ProfileListener(this), this);
+        getServer().getPluginManager().registerEvents(new IslandRulesListener(this), this);
         getServer().getPluginManager().registerEvents(new CommandGateListener(this), this);
         getServer().getPluginManager().registerEvents(new FlowLimiterListener(this), this);
         getServer().getPluginManager().registerEvents(guiManager, this);
@@ -366,6 +371,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public IslandManager islands() {
         return islandManager;
+    }
+
+    public IslandWorldRules worldRules() {
+        return worldRules;
     }
 
     public SchematicService schematics() {

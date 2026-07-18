@@ -45,6 +45,14 @@ public final class ConfigValidator {
             warnings.add("island.border.color '" + borderColor + "' is invalid — use off, blue, red, or green.");
         }
 
+        if (cfg.getBoolean("island.world-rules.enforce-gamemode", true)) {
+            String gm = cfg.getString("island.world-rules.gamemode", "survival");
+            if (com.mystipixel.royalskyblock.world.IslandWorldRules.parseGameMode(gm) == null) {
+                warnings.add("island.world-rules.gamemode '" + gm + "' is not a valid gamemode — "
+                        + "use survival, creative, adventure, or spectator.");
+            }
+        }
+
         String spawnWorld = cfg.getString("spawn.world", "world");
         if (Bukkit.getWorld(spawnWorld) == null) {
             warnings.add("spawn.world '" + spawnWorld + "' is not a loaded world — players who leave or delete an "

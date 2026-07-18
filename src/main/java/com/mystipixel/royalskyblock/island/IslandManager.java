@@ -136,6 +136,7 @@ public final class IslandManager {
                     island.setRadius(startingRadius);
                     island.setHome(hx, hy, hz, yaw, pitch);
                     applyBorder(world, island);
+                    plugin.worldRules().applyGameRules(world);
                     return island;
                 }))
                 .thenApply(island -> {
@@ -156,6 +157,7 @@ public final class IslandManager {
     private CompletableFuture<World> loadWithCatchup(Island island) {
         return worlds.loadIsland(island.worldName()).thenCompose(world -> onMain(() -> {
             plugin.unloads().forget(island.worldName());
+            plugin.worldRules().applyGameRules(world);
             fireCatchup(island, world);
             return world;
         }));

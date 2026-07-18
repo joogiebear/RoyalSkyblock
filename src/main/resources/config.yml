@@ -144,6 +144,30 @@ island:
     # Log where the border applies/clears per player (troubleshooting "I don't see a border").
     debug: false
 
+  # ── World rules (gamemode + gamerules for every island) ──────────────────────
+  # Island worlds are created on demand and are NOT managed by Multiverse, so RoyalSkyblock
+  # applies these itself — gamerules when an island loads, the gamemode when a player enters
+  # one. Everything here is editable; nothing is hardcoded.
+  world-rules:
+    # Minecraft gamemode players are put in while on an island: survival | adventure | creative
+    # | spectator. (This is the MC gamemode — separate from a profile's Solo/Coop/Ironman type.)
+    # Set enforce-gamemode false to leave gamemode untouched. Give staff/builders the
+    # royalskyblock.playmode.bypass permission so they can stay in creative, etc.
+    enforce-gamemode: true
+    gamemode: survival
+    # Gamerules set on every island world when it loads. Keys accept the Minecraft 26.2 ids
+    # (keep_inventory), the classic names (keepInventory), or a minecraft: prefix — all resolve.
+    # Add or remove ANY valid gamerule freely; unknown names are skipped with a warning.
+    gamerules:
+      keep_inventory: true              # don't drop items on death
+      mob_griefing: false               # creepers/endermen don't wreck the island
+      advance_weather: false            # no rain
+      show_advancement_messages: false  # no "made the advancement" spam
+      # Deliberately left at vanilla defaults (uncomment to override):
+      #   advance_time: true            # islands cycle day/night
+      #   fall_damage: true             # survival — fall damage applies
+      #   spawn_monsters: true          # mobs spawn on unlit islands at night
+
 # ── Profiles (Hypixel-style saves: each has its own island, inventory & progression) ─
 profiles:
   # How many profiles a player may have.
