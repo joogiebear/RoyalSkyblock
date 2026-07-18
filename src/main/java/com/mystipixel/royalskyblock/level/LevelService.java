@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -41,8 +42,24 @@ public final class LevelService {
     private final Map<UUID, Long> lastScan = new ConcurrentHashMap<>();
     /** island ids with a scan in flight — never run two at once for the same island. */
     private final java.util.Set<UUID> scanning = ConcurrentHashMap.newKeySet();
-    /** island id → the block counts from its last scan (for the level breakdown GUI). */
-    private final Map<UUID, Map<Material, Long>> breakdowns = new ConcurrentHashMap<>();
+    /**
+     * island id → the block counts from its last scan (for the level breakdown GUI).
+     *
+     * <p>Least-recently-used and capped: each entry holds a count per material, so keeping one for every
+     * island ever scanned would grow without limit on a busy server. Only the island whose breakdown is
+     * actually being viewed matters, and anything evicted is rebuilt by the next scan, so dropping the
+     * coldest entries costs nothing but a recalculation.
+     */
+    private final Map<UUID, Map<Material, Long>> breakdowns = Collections.synchronizedMap(
+            new LinkedHashMap<>(16, 0.75f, true) {
+                @Override
+                protected boolean removeEldestEntry(Map.Entry<UUID, Map<Material, Long>> eldest) {
+                    return size() > MAX_CACHED_BREAKDOWNS;
+                }
+            });
+
+    /** How many islands' block breakdowns to keep. Generous next to how many are viewed at once. */
+    private static final int MAX_CACHED_BREAKDOWNS = 200;
 
     public LevelService(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;

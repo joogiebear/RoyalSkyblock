@@ -19,6 +19,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -350,30 +353,97 @@ public final class Storage {
         return profile;
     }
 
+    /**
+     * Every profile a player owns, with members and island ids filled in.
+     *
+     * <p>Three queries regardless of how many profiles they have. Loading members and the island one
+     * profile at a time meant a login cost {@code 1 + 2N} round trips, which is slow anywhere and
+     * genuinely painful against a remote database.
+     */
     public List<Profile> getProfilesByOwner(UUID owner) {
         List<Profile> out = new ArrayList<>();
+        Map<UUID, Profile> byId = new HashMap<>();
         String sql = "SELECT id, owner, name, gamemode, created_at FROM profiles WHERE owner = ? ORDER BY created_at";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             try (ResultSet rs = st.executeQuery()) {
                 while (rs.next()) {
-                    out.add(readProfile(rs));
+                    Profile p = readProfile(rs);
+                    out.add(p);
+                    byId.put(p.id(), p);
                 }
             }
-            for (Profile p : out) {
-                loadMembers(c, p);
+            if (!out.isEmpty()) {
+                loadMembersFor(c, byId);
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not load profiles for " + owner + ": " + e.getMessage());
         }
-        // Island lookups AFTER the connection above is released (see getProfile) to avoid nesting.
-        for (Profile p : out) {
-            Island island = getIslandByProfile(p.id());
-            if (island != null) {
-                p.setIslandId(island.id());
-            }
+        // Island lookup AFTER the connection above is released (see getProfile) to avoid nesting.
+        if (!byId.isEmpty()) {
+            attachIslandIds(byId);
         }
         return out;
+    }
+
+    /** Members for several profiles in one query, sorted into the profiles they belong to. */
+    private void loadMembersFor(Connection c, Map<UUID, Profile> profiles) throws SQLException {
+        String sql = "SELECT profile_id, uuid, name, role, joined_at FROM profile_members WHERE profile_id IN ("
+                + placeholders(profiles.size()) + ")";
+        try (PreparedStatement st = c.prepareStatement(sql)) {
+            bindUuids(st, profiles.keySet());
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    Profile profile = profiles.get(UUID.fromString(rs.getString("profile_id")));
+                    if (profile == null) {
+                        continue;
+                    }
+                    IslandRole role;
+                    try {
+                        role = IslandRole.valueOf(rs.getString("role"));
+                    } catch (IllegalArgumentException bad) {
+                        role = IslandRole.MEMBER;
+                    }
+                    profile.putMember(new ProfileMember(UUID.fromString(rs.getString("uuid")),
+                            rs.getString("name"), role, rs.getLong("joined_at")));
+                }
+            }
+        }
+    }
+
+    /**
+     * Set each profile's island id in one query. Only the two id columns are read — the full island
+     * row is loaded on demand elsewhere, and pulling all of it here just to keep one field was waste.
+     */
+    private void attachIslandIds(Map<UUID, Profile> profiles) {
+        String sql = "SELECT id, profile_id FROM islands WHERE profile_id IN ("
+                + placeholders(profiles.size()) + ")";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            bindUuids(st, profiles.keySet());
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    Profile profile = profiles.get(UUID.fromString(rs.getString("profile_id")));
+                    if (profile != null) {
+                        profile.setIslandId(UUID.fromString(rs.getString("id")));
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load island ids for " + profiles.size()
+                    + " profile(s): " + e.getMessage());
+        }
+    }
+
+    /** {@code "?, ?, ?"} for an IN clause of {@code count} values. */
+    private static String placeholders(int count) {
+        return String.join(", ", java.util.Collections.nCopies(count, "?"));
+    }
+
+    private static void bindUuids(PreparedStatement st, Collection<UUID> ids) throws SQLException {
+        int index = 1;
+        for (UUID id : ids) {
+            st.setString(index++, id.toString());
+        }
     }
 
     /** Profile ids a player is a member of (coop), including ones they don't own. */

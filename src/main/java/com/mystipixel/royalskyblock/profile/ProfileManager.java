@@ -102,8 +102,65 @@ public final class ProfileManager {
     // ── join / quit state handling ────────────────────────────────────────────────
 
     /** On join: ensure the player has a profile, then load its state onto them. Main thread. */
+    /** What {@link #preload} gathered off-thread, waiting to be applied when the player joins. */
+    private record Preloaded(List<Profile> profiles, UUID active, ProfileData data) {
+    }
+
+    private final Map<UUID, Preloaded> preloaded = new ConcurrentHashMap<>();
+
+    /**
+     * Read a joining player's profiles and saved state <em>before</em> they enter the world.
+     *
+     * <p>Called from {@code AsyncPlayerPreLoginEvent}, which already runs off the server thread and
+     * fires while the player is still connecting. Doing it here instead of in the join handler keeps
+     * roughly nine database round trips — profiles, members and island per profile, the active id, and
+     * the inventory blob — off the main thread entirely. Because it completes before the player exists
+     * in the world, there is no window where they are online holding the wrong inventory.
+     *
+     * <p>Best-effort: if anything fails, or the event never fires, {@link #handleJoin} silently falls
+     * back to loading synchronously, exactly as before.
+     */
+    public void preload(UUID uuid) {
+        try {
+            List<Profile> profiles = storage.getProfilesByOwner(uuid);
+            UUID active = storage.getActiveProfile(uuid);
+            ProfileData data = null;
+            if (!profiles.isEmpty()) {
+                UUID resolved = active != null && profiles.stream().anyMatch(p -> p.id().equals(active))
+                        ? active : profiles.get(0).id();
+                data = storage.getProfileData(resolved, uuid);
+            }
+            preloaded.put(uuid, new Preloaded(profiles, active, data));
+        } catch (Exception e) {
+            preloaded.remove(uuid);
+            plugin.getLogger().warning("Profile preload failed for " + uuid
+                    + "; falling back to loading on join: " + e.getMessage());
+        }
+    }
+
+    private boolean debug() {
+        return plugin.getConfig().getBoolean("settings.debug", false);
+    }
+
+    /** Drop a preload for a player who never actually joined (failed login, kick at the door). */
+    public void discardPreload(UUID uuid) {
+        preloaded.remove(uuid);
+    }
+
     public void handleJoin(Player player) {
         UUID uuid = player.getUniqueId();
+        Preloaded ready = preloaded.remove(uuid);
+        if (ready != null) {
+            if (debug()) {
+                plugin.getLogger().info("Profile load for " + player.getName() + " served from preload (no queries on join).");
+            }
+            applyPreloaded(player, ready);
+            return;
+        }
+        if (debug()) {
+            plugin.getLogger().info("Profile load for " + player.getName()
+                    + " falling back to synchronous queries (no preload available).");
+        }
         List<Profile> profiles = storage.getProfilesByOwner(uuid);
         UUID active = storage.getActiveProfile(uuid);
 
@@ -125,6 +182,40 @@ public final class ProfileManager {
         }
         activeProfile.put(uuid, active);
         state.load(player, active);
+    }
+
+    /**
+     * Apply preloaded state on the main thread. Mirrors the synchronous path exactly, but every read
+     * has already happened; the only queries left are the rare corrections (a brand-new player, or an
+     * active id that no longer points at a real profile).
+     */
+    private void applyPreloaded(Player player, Preloaded ready) {
+        UUID uuid = player.getUniqueId();
+        List<Profile> profiles = ready.profiles();
+        for (Profile p : profiles) {
+            profileCache.put(p.id(), p);
+        }
+
+        if (profiles.isEmpty()) {
+            Profile created = createDefaultProfile(player);
+            storage.setActiveProfile(uuid, created.id());
+            activeProfile.put(uuid, created.id());
+            state.save(player, created.id());     // seed the new profile with what they're carrying
+            return;
+        }
+
+        UUID saved = ready.active();
+        UUID active = saved;
+        boolean activeValid = saved != null && profiles.stream().anyMatch(p -> p.id().equals(saved));
+        if (!activeValid) {
+            active = profiles.get(0).id();
+            storage.setActiveProfile(uuid, active);
+            activeProfile.put(uuid, active);
+            state.load(player, active);           // preloaded blob was for a different profile
+            return;
+        }
+        activeProfile.put(uuid, active);
+        state.load(player, active, ready.data());
     }
 
     /** On quit: save the player's live state into their active profile. Main thread. */

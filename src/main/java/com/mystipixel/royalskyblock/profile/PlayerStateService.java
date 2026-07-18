@@ -65,10 +65,18 @@ public final class PlayerStateService {
 
     /** Load {@code profileId}'s saved data (or a fresh slate) onto the player, plus its eco shadow. */
     public void load(Player player, UUID profileId) {
+        load(player, profileId, null);
+    }
+
+    /**
+     * Apply a profile's saved state. {@code preloaded} is the row already read off-thread by
+     * {@code ProfileManager.preload}; pass null to read it here (the fallback path).
+     */
+    public void load(Player player, UUID profileId, ProfileData preloaded) {
         if (profileId == null) {
             return;
         }
-        ProfileData data = storage.getProfileData(profileId, player.getUniqueId());
+        ProfileData data = preloaded != null ? preloaded : storage.getProfileData(profileId, player.getUniqueId());
         if (data == null) {
             data = ProfileData.fresh();
         }

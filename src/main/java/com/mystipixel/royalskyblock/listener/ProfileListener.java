@@ -7,7 +7,9 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 
@@ -21,6 +23,26 @@ public final class ProfileListener implements Listener {
 
     public ProfileListener(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * Read the connecting player's profile data while they are still logging in. This event runs off
+     * the server thread, so the database work costs the server nothing; by the time {@link #onJoin}
+     * fires the state is in memory and applying it is instant.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onPreLogin(AsyncPlayerPreLoginEvent event) {
+        if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+            plugin.profiles().preload(event.getUniqueId());
+        }
+    }
+
+    /** Another plugin denied the login after we preloaded — drop the data so it can't go stale. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onLogin(PlayerLoginEvent event) {
+        if (event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
+            plugin.profiles().discardPreload(event.getPlayer().getUniqueId());
+        }
     }
 
     @EventHandler(priority = EventPriority.NORMAL)

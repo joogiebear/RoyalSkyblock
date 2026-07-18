@@ -6,9 +6,9 @@ import org.bukkit.World;
 
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Unloads island worlds once nobody is left on them.
@@ -28,9 +28,9 @@ public final class IslandUnloadService {
     private final RoyalSkyblockPlugin plugin;
 
     /** worldName -> epoch millis it first became empty. Present only while empty. */
-    private final Map<String, Long> emptySince = new HashMap<>();
+    private final Map<String, Long> emptySince = new ConcurrentHashMap<>();
     /** Worlds with an unload in flight, so a slow save can't be started twice. */
-    private final Map<String, Boolean> unloading = new HashMap<>();
+    private final Map<String, Boolean> unloading = new ConcurrentHashMap<>();
 
     public IslandUnloadService(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -120,7 +120,10 @@ public final class IslandUnloadService {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin,
                 () -> plugin.storage().saveIsland(island));
 
-        plugin.worlds().unloadIsland(name, true).whenComplete((ignored, error) -> {
+        // The unload future completes on whichever thread finished the save, so the callback hops back
+        // to the server thread before touching the island model. The bookkeeping maps are concurrent
+        // for the same reason: they are written here and read by the main-thread tick.
+        plugin.worlds().unloadIsland(name, true).whenComplete((ignored, error) -> onMain(() -> {
             unloading.remove(name);
             if (error != null) {
                 // Leave it loaded and let the next tick retry — losing an island's blocks to a
@@ -133,7 +136,19 @@ public final class IslandUnloadService {
             if (plugin.getConfig().getBoolean("settings.debug", false)) {
                 plugin.getLogger().info("Unloaded empty island " + name + ".");
             }
-        });
+        }));
+    }
+
+    /**
+     * Run on the server thread, or inline if we are already there. Falls back to inline during shutdown
+     * too: Bukkit refuses to schedule for a disabling plugin, so a scheduled task would be dropped.
+     */
+    private void onMain(Runnable action) {
+        if (plugin.getServer().isPrimaryThread() || !plugin.isEnabled()) {
+            action.run();
+        } else {
+            plugin.getServer().getScheduler().runTask(plugin, action);
+        }
     }
 
     /** Called when an island is loaded, so a stale "empty since" can't unload a world someone just entered. */

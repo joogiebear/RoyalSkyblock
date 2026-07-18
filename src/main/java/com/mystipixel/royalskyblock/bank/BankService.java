@@ -14,7 +14,9 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RoyalSkyblock's native bank. Accounts are keyed by an opaque id (personal per-profile or shared coop),
@@ -27,8 +29,17 @@ import java.util.UUID;
  */
 public final class BankService {
 
+    /** Short enough that an out-of-band edit surfaces quickly; long enough to absorb per-tick reads. */
+    private static final long CACHE_TTL_MILLIS = 5_000L;
+    /** Only bother sweeping expired entries once the map is big enough to be worth walking. */
+    private static final int CACHE_SWEEP_AT = 256;
+
+    private record Cached(BankAccount account, long expiresAt) {
+    }
+
     private final RoyalSkyblockPlugin plugin;
     private final BankLevelManager levels;
+    private final Map<String, Cached> cache = new ConcurrentHashMap<>();
     private VaultHook vault;
 
     public BankService(RoyalSkyblockPlugin plugin, BankLevelManager levels, VaultHook vault) {
@@ -55,9 +66,50 @@ public final class BankService {
 
     // ── reads ─────────────────────────────────────────────────────────────────────
 
+    /**
+     * The account, from cache when it is still warm.
+     *
+     * <p>Reads outnumber writes heavily here — the balance placeholder is rendered for every player on
+     * every scoreboard/tab refresh, and the bank menu re-reads on each redraw — so hitting the database
+     * for each one put a blocking query on the server thread many times a second. Every write in this
+     * class refreshes the cached copy (see {@link #persist}), so a cache hit is current, not merely
+     * recent; the short expiry is only a backstop for anything that edits the table from outside.
+     */
     public BankAccount account(String id) {
+        Cached hit = cache.get(id);
+        long now = System.currentTimeMillis();
+        if (hit != null && now < hit.expiresAt()) {
+            return hit.account();
+        }
         BankAccount stored = plugin.storage().getBankAccount(id);
-        return stored != null ? stored : new BankAccount(id, 0.0, levels.getStartingLevel(), 0L);
+        BankAccount result = stored != null ? stored : new BankAccount(id, 0.0, levels.getStartingLevel(), 0L);
+        cache.put(id, new Cached(result, now + CACHE_TTL_MILLIS));
+        if (cache.size() > CACHE_SWEEP_AT) {
+            cache.values().removeIf(entry -> now >= entry.expiresAt());
+        }
+        return result;
+    }
+
+    /**
+     * Write an account plus its transaction row, keeping the cache in step. Returns false if the write
+     * failed, in which case callers must undo whatever they already did (refund, claw back).
+     */
+    private boolean persist(BankAccount account, String type, double amount, double balance, String note) {
+        if (!plugin.storage().saveBankAccountWithTxn(account, type, amount, balance, note)) {
+            cache.remove(account.id());   // unknown DB state — force the next read to go to source
+            return false;
+        }
+        cache.put(account.id(), new Cached(account, System.currentTimeMillis() + CACHE_TTL_MILLIS));
+        return true;
+    }
+
+    /** Drop a cached account, so an external change (an admin edit, a reload) is picked up at once. */
+    public void invalidate(String id) {
+        if (id == null) {
+            cache.clear();
+        } else {
+            cache.remove(id);
+        }
     }
 
     public double balance(String id) {
@@ -104,7 +156,7 @@ public final class BankService {
         if (!vault.withdraw(purse, charge)) {
             return "&cDeposit failed.";
         }
-        if (!plugin.storage().saveBankAccountWithTxn(account.withBalance(principal), "DEPOSIT", charge,
+        if (!persist(account.withBalance(principal), "DEPOSIT", charge,
                 principal, purse.getName() + " deposited")) {
             vault.deposit(purse, charge); // refund
             return "&cDeposit could not be saved; your money was refunded.";
@@ -127,7 +179,7 @@ public final class BankService {
         }
         vault.deposit(purse, amount);
         double newBalance = round(account.balance() - amount);
-        if (!plugin.storage().saveBankAccountWithTxn(account.withBalance(newBalance), "WITHDRAW", amount,
+        if (!persist(account.withBalance(newBalance), "WITHDRAW", amount,
                 newBalance, purse.getName() + " withdrew")) {
             vault.withdraw(purse, amount); // claw back
             return "&cWithdrawal could not be saved and was reverted; please try again.";
@@ -156,7 +208,7 @@ public final class BankService {
         if (!vault.withdraw(purse, next.upgradeMoneyCost())) {
             return "&cUpgrade payment failed.";
         }
-        if (!plugin.storage().saveBankAccountWithTxn(account.withLevel(next.level()), "UPGRADE",
+        if (!persist(account.withLevel(next.level()), "UPGRADE",
                 next.upgradeMoneyCost(), account.balance(), "Upgraded to " + next.name())) {
             vault.deposit(purse, next.upgradeMoneyCost()); // refund; items not yet removed
             return "&cUpgrade could not be saved. Your money was refunded; please try again.";
@@ -169,9 +221,10 @@ public final class BankService {
 
     public long interestSecondsRemaining(String id) {
         long cooldown = levels.config().getLong("settings.interest-cooldown-hours", 24) * 3600L;
-        long next = account(id).lastInterest() + cooldown;
+        long lastInterest = account(id).lastInterest();
+        long next = lastInterest + cooldown;
         long now = Instant.now().getEpochSecond();
-        return account(id).lastInterest() <= 0 || now >= next ? 0 : next - now;
+        return lastInterest <= 0 || now >= next ? 0 : next - now;
     }
 
     /** Pay accrued interest into the account (capped at the level max). Returns null on success/no-op. */
@@ -195,7 +248,7 @@ public final class BankService {
             return "&eYour bank is full, so no interest could be paid.";
         }
         BankAccount updated = account.withBalance(newBalance).withLastInterest(now);
-        if (!plugin.storage().saveBankAccountWithTxn(updated, "INTEREST", paid, newBalance, "Interest")) {
+        if (!persist(updated, "INTEREST", paid, newBalance, "Interest")) {
             return "&cInterest could not be saved; please try again.";
         }
         return null;
