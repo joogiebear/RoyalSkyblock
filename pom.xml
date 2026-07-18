@@ -111,14 +111,18 @@
             <version>2026.28</version>
             <scope>provided</scope>
         </dependency>
-        <!-- EcoMobs API for the optional strength bridge. provided + soft-hooked: RoyalSkyblock loads
-             and runs fine without EcoMobs installed; the listener only registers when it's present. -->
+        <!-- EcoMobs API for the optional strength bridge + island mob spawning. provided + soft-hooked:
+             RoyalSkyblock loads and runs fine without EcoMobs installed. -->
         <dependency>
             <groupId>com.willfp</groupId>
             <artifactId>EcoMobs</artifactId>
             <version>2026.27</version>
             <scope>provided</scope>
         </dependency>
+        <!-- EcoSkills is read by REFLECTION (see EcoSkillsCombatSource), not a compile dependency:
+             its published POM drags in per-version NMS submodules that aren't resolvable, and reflection
+             keeps the hook genuinely soft (absent = mobs fall back to level 1). -->
+        <!-- (no EcoSkills artifact) -->
         <!-- WorldEdit API (FAWE implements it). Soft-dependency for schematic paste/save; every
              com.sk89q.worldedit.* type is only touched when WorldEdit/FAWE is present at runtime. -->
         <dependency>

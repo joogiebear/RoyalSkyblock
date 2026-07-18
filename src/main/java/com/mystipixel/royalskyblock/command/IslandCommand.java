@@ -707,7 +707,12 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleBorderAdmin(sender, args);
             return;
         }
+        if (action.equals("mobspawn")) {
+            handleMobSpawnAdmin(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
+        sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7— island mob spawning"));
         sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7— island border colour"));
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
         sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7— island load/unload + heap benchmark"));
@@ -735,6 +740,39 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     }
 
     /** In-game version of the boot status panel: which dependencies are active + config health. */
+    private void handleMobSpawnAdmin(CommandSender sender, String[] args) {
+        com.mystipixel.royalskyblock.island.IslandMobSpawnService svc = plugin.mobSpawns();
+        if (svc == null) {
+            sender.sendMessage(Text.color("&cIsland mob spawning is off (island-mobs.enabled: false)."));
+            return;
+        }
+        String sub = args.length >= 3 ? args[2].toLowerCase(Locale.ROOT) : "status";
+        if (sub.equals("test")) {
+            if (!(sender instanceof Player player)) {
+                sender.sendMessage(Text.color("&cThat can only be run by a player on an island."));
+                return;
+            }
+            if (args.length < 4) {
+                sender.sendMessage(Text.color("&e/is admin mobspawn test <family> [level]"));
+                return;
+            }
+            int level = 1;
+            if (args.length >= 5) {
+                try {
+                    level = Integer.parseInt(args[4]);
+                } catch (NumberFormatException ignored) {
+                    // keep default
+                }
+            }
+            sender.sendMessage(Text.color("&7Mob test: &f" + svc.testSpawn(player, args[3], level)));
+            return;
+        }
+        sender.sendMessage(Text.color("&6Island mobs &7— provider &f" + svc.providerId() + " &7("
+                + (svc.providerAvailable() ? "&aavailable" : "&cunavailable") + "&7), &f"
+                + svc.familyCount() + " &7families, enabled=&f" + svc.enabled()));
+        sender.sendMessage(Text.color("&8» &e/is admin mobspawn test <family> [level] &7— force-spawn near you"));
+    }
+
     private void handleAdminStatus(CommandSender sender) {
         String worldSrc = plugin.getConfig().getString("world.slime-data-source", "file");
         String storage = plugin.getConfig().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);

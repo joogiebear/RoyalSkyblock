@@ -335,6 +335,42 @@ ecomobs:
   damage-scale-per-level: 0.0015
   max-multiplier: 5.0
 
+# ── Island mob spawning (optional; needs a mob provider like EcoMobs) ──────────
+# RoyalSkyblock spawns night mobs on islands and picks the tier from the player's Combat skill.
+# It's PLAYER-DRIVEN — each pass only looks at online players on islands, never scans every island —
+# so it's cheap and never keeps an island loaded. It spawns via the provider's API (SpawnReason COMMAND),
+# so turn OFF vanilla hostiles on islands with the spawn_monsters gamerule (island.world-rules) to avoid
+# doubling up. Per-island toggle: the MOB_SPAWNS island setting (on by default).
+island-mobs:
+  enabled: false                 # off until your provider mobs are configured
+  provider: ecomobs              # ecomobs (mythicmobs / leveledmobs can be added later)
+  combat-skill: combat           # EcoSkills skill id that sets the tier
+  scan-interval-ticks: 200       # how often a spawn pass runs (200 = every 10s)
+  only-night: true               # only spawn during the night
+  first-night-grace-ticks: 24000 # no spawns until an island is this old (24000 = 1 MC day)
+  require-low-light: true
+  max-light-level: 7
+  require-member-present: true    # a visitor alone on an island won't trigger spawns
+  owner-combat-level: false       # false = scale to the present player; true = always the island owner
+  combat-level-cap: 15            # tier is min(combat level, this)
+  spawn-radius-min: 12            # spawn between this and max blocks from the player
+  spawn-radius-max: 28
+  max-mobs-per-island: 12         # our tagged mobs alive on an island at once
+  max-spawns-per-scan-per-island: 3
+  spawn-attempts: 6               # tries to find a valid spot per spawn (bounded — no island scan)
+  debug: false
+  # Mob id looked up in the provider. %family% and %level% are filled in — e.g. private_island_zombie_7.
+  mob-id-format: "private_island_%family%_%level%"
+  # Weighted families to pick from. Each needs matching provider mobs <family>_1 .. <family>_<cap>.
+  families:
+    zombie:      { weight: 35, enabled: true }
+    skeleton:    { weight: 25, enabled: true }
+    spider:      { weight: 15, enabled: true }
+    cave_spider: { weight: 8,  enabled: true }
+    slime:       { weight: 8,  enabled: true }
+    enderman:    { weight: 6,  enabled: true }
+    witch:       { weight: 3,  enabled: true }
+
 # ── Anti-crash: liquid flow limiter ───────────────────────────────────────────
 flow-limiter:
   enabled: true

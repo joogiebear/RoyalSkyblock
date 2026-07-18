@@ -53,6 +53,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private IslandWorldService worldService;
     private IslandManager islandManager;
     private IslandWorldRules worldRules;
+    private com.mystipixel.royalskyblock.island.IslandMobSpawnService mobSpawnService;
     private SchematicService schematicService;
     private ProfileManager profileManager;
     private PlayerStateService stateService;
@@ -187,6 +188,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
             getLogger().info("EcoMobs detected — island-level mob strength scaling active.");
         }
 
+        startIslandMobSpawning();
+
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
@@ -248,6 +251,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         borderService.reload();
         borderService.refreshAll(); // re-apply borders live (colour/size/toggle changes)
         guiManager.reload();
+        if (mobSpawnService != null) {
+            mobSpawnService.reloadSettings(); // toggling island-mobs.enabled on/off still needs a restart
+        }
         new ConfigValidator(this).validate();
     }
 
@@ -377,6 +383,50 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     public IslandWorldRules worldRules() {
         return worldRules;
+    }
+
+    public com.mystipixel.royalskyblock.island.IslandMobSpawnService mobSpawns() {
+        return mobSpawnService;
+    }
+
+    /**
+     * Stand up island mob spawning if it's enabled and a usable provider is installed. Soft in every
+     * direction: no EcoMobs -> skip; no EcoSkills -> mobs fall back to level 1; disabled -> nothing runs.
+     */
+    private void startIslandMobSpawning() {
+        if (!getConfig().getBoolean("island-mobs.enabled", false)) {
+            return;
+        }
+        String providerId = getConfig().getString("island-mobs.provider", "ecomobs").toLowerCase(java.util.Locale.ROOT);
+        com.mystipixel.royalskyblock.hooks.IslandMobProvider provider = null;
+        if (providerId.equals("ecomobs") && getServer().getPluginManager().isPluginEnabled("EcoMobs")) {
+            provider = new com.mystipixel.royalskyblock.hooks.EcoMobsIslandMobProvider();
+        }
+        // future: mythicmobs, leveledmobs — add here, no other change needed.
+        if (provider == null || !provider.available()) {
+            getLogger().warning("island-mobs is enabled but provider '" + providerId
+                    + "' isn't available — island mob spawning is off.");
+            return;
+        }
+
+        com.mystipixel.royalskyblock.hooks.CombatLevelSource combat = offlinePlayer -> 1;
+        String skillId = getConfig().getString("island-mobs.combat-skill", "combat");
+        if (getServer().getPluginManager().isPluginEnabled("EcoSkills")) {
+            com.mystipixel.royalskyblock.hooks.EcoSkillsCombatSource eco =
+                    new com.mystipixel.royalskyblock.hooks.EcoSkillsCombatSource(skillId, 1);
+            if (eco.valid()) {
+                combat = eco;
+            } else {
+                getLogger().warning("EcoSkills has no '" + skillId + "' skill — island mobs default to level 1.");
+            }
+        } else {
+            getLogger().info("EcoSkills not installed — island mobs default to level 1.");
+        }
+
+        this.mobSpawnService = new com.mystipixel.royalskyblock.island.IslandMobSpawnService(this, provider, combat);
+        mobSpawnService.start();
+        getLogger().info("Island mob spawning: provider " + provider.id() + ", "
+                + mobSpawnService.familyCount() + " families.");
     }
 
     public SchematicService schematics() {

@@ -14,7 +14,11 @@ public enum IslandSetting {
 
     /** Whether this island appears in the public Visit browser. */
     LISTED("listed", true, "&aVisit Listing", "book",
-            "Show this island in the public /visit browser.");
+            "Show this island in the public /visit browser."),
+
+    /** Whether RoyalSkyblock spawns night mobs on this island (see island-mobs in config.yml). */
+    MOB_SPAWNS("mob-spawns", true, "&cMob Spawns", "zombie_head",
+            "Spawn combat mobs on your island at night.");
 
     private final String key;
     private final boolean defaultEnabled;
