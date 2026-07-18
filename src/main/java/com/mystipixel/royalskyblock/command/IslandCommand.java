@@ -771,6 +771,9 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&6Island mobs &7— provider &f" + svc.providerId() + " &7("
                 + (svc.providerAvailable() ? "&aavailable" : "&cunavailable") + "&7), &f"
                 + svc.familyCount() + " &7families, enabled=&f" + svc.enabled()));
+        if (sender instanceof Player viewer) {
+            sender.sendMessage(Text.color("&7Intimidation: &f" + plugin.intimidationSummary(viewer)));
+        }
         sender.sendMessage(Text.color("&8» &e/is admin mobspawn test <family> [level] &7— force-spawn near you"));
     }
 

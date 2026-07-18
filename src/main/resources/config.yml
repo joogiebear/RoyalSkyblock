@@ -166,7 +166,12 @@ island:
       # Deliberately left at vanilla defaults (uncomment to override):
       #   advance_time: true            # islands cycle day/night
       #   fall_damage: true             # survival — fall damage applies
-      #   spawn_monsters: true          # mobs spawn on unlit islands at night
+      #   spawn_monsters: true          # vanilla mobs spawn on unlit islands at night
+      #
+      # IMPORTANT if you use island-mobs below: set spawn_monsters: false. Otherwise vanilla hostiles
+      # spawn alongside RoyalSkyblock's tiered mobs — and since vanilla mobs carry no tier tag, the
+      # Intimidation bridge can't calm them, so talismans look broken.
+      #   spawn_monsters: false
 
   # ── Void protection ──────────────────────────────────────────────────────────
   # Falling off an island normally means slow vanilla void-damage ticks — and the higher

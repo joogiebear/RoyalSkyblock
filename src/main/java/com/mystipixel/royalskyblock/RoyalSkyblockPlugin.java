@@ -54,6 +54,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private IslandManager islandManager;
     private IslandWorldRules worldRules;
     private com.mystipixel.royalskyblock.island.IslandMobSpawnService mobSpawnService;
+    private com.mystipixel.royalskyblock.hooks.CombatLevelSource combatSource;
+    private com.mystipixel.royalskyblock.hooks.CombatLevelSource intimidationSource;
     private SchematicService schematicService;
     private ProfileManager profileManager;
     private PlayerStateService stateService;
@@ -420,6 +422,19 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         return mobSpawnService;
     }
 
+    /** Human-readable intimidation state for a player — what /is admin mobspawn status shows. */
+    public String intimidationSummary(org.bukkit.entity.Player player) {
+        if (combatSource == null || intimidationSource == null) {
+            return "intimidation bridge not active";
+        }
+        int combatLevel = combatSource.levelOf(player);
+        int stat = intimidationSource.levelOf(player);
+        int ignore = getConfig().getBoolean("island-mobs.intimidation.cap-to-combat-level", true)
+                ? Math.min(combatLevel, stat) : stat;
+        return "combat " + combatLevel + ", intimidation " + stat
+                + " -> island mobs of level " + ignore + " and below ignore you";
+    }
+
     /**
      * Stand up island mob spawning if it's enabled and a usable provider is installed. Soft in every
      * direction: no EcoMobs -> skip; no EcoSkills -> mobs fall back to level 1; disabled -> nothing runs.
@@ -468,6 +483,8 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
             com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource stat =
                     new com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource(statId, 0);
             if (stat.valid()) {
+                this.combatSource = combat;
+                this.intimidationSource = stat;
                 getServer().getPluginManager().registerEvents(
                         new com.mystipixel.royalskyblock.hooks.IslandMobTargetingBridge(this, combat, stat), this);
                 getLogger().info("Intimidation bridge active (stat: " + statId + ").");
