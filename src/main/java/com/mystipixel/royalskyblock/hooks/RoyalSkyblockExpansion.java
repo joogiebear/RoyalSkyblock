@@ -36,6 +36,7 @@ import java.util.UUID;
  *   <tr><td>{@code radius}</td><td>protection radius</td></tr>
  *   <tr><td>{@code members}</td><td>member count on the active profile</td></tr>
  *   <tr><td>{@code profile}</td><td>active profile name</td></tr>
+ *   <tr><td>{@code profile_id}</td><td>active profile id (stable; used for per-profile scoping)</td></tr>
  *   <tr><td>{@code gamemode}</td><td>active gamemode (Solo / Coop / Ironman)</td></tr>
  *   <tr><td>{@code bank}</td><td>personal bank balance, formatted</td></tr>
  *   <tr><td>{@code bank_raw}</td><td>personal bank balance, raw</td></tr>
@@ -116,6 +117,9 @@ public final class RoyalSkyblockExpansion extends PlaceholderExpansion {
             }
             case "profile":
                 return profile != null ? profile.name() : "";
+            case "profile_id":
+                // Stable per-profile id (used e.g. by RoyalWardrobe to scope wardrobes per profile).
+                return profileId != null ? profileId.toString() : "";
             case "gamemode":
                 return profile != null ? title(profile.gamemode().key()) : "";
             case "members":
