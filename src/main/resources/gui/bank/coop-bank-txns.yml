@@ -9,7 +9,7 @@
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lCoop Bank Ledger"
+title: "&8Skyblock &7» &fCoop Transactions"
 rows: 6
 
 pages:
@@ -27,10 +27,10 @@ pages:
 
 slots:
   # (a dynamic « Back at row 6, col 4 is placed by code — it returns to the right bank)
-  - item: barrier name:"&c&lClose"
+  - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
     row: 6
-    column: 6
+    column: 5
     left-click:
       - id: close

@@ -9,7 +9,7 @@
 #    (a click sound plays automatically — no need to add one per button)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lYour Skyblock"
+title: "&8Skyblock"
 rows: 6
 
 pages:
@@ -138,7 +138,7 @@ slots:
           menu: manage
 
   # ── footer ──
-  - item: barrier name:"&c&lClose"
+  - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
     row: 6

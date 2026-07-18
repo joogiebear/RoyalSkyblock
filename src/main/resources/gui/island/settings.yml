@@ -9,7 +9,7 @@
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lIsland Settings"
+title: "&8Skyblock &7» &fIsland Settings"
 rows: 3
 
 pages:
@@ -34,7 +34,7 @@ slots:
         args:
           menu: main
 
-  - item: barrier name:"&c&lClose"
+  - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
     row: 3

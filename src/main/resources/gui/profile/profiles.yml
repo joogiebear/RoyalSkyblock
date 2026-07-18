@@ -9,7 +9,7 @@
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lYour Profiles"
+title: "&8Skyblock &7» &fProfiles"
 rows: 5
 
 pages:
@@ -49,7 +49,7 @@ slots:
         args:
           menu: create-profile
 
-  - item: barrier name:"&c&lClose"
+  - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
     row: 5

@@ -9,7 +9,7 @@
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lIsland Leaderboard"
+title: "&8Skyblock &7» &fLeaderboard"
 rows: 6
 
 pages:
@@ -57,7 +57,7 @@ slots:
         args:
           menu: main
 
-  - item: barrier name:"&c&lClose"
+  - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
     row: 6

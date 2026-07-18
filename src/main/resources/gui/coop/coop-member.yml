@@ -10,7 +10,7 @@
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&6&lManage Member"
+title: "&8Skyblock &7» &fCoop Member"
 rows: 3
 
 pages:
@@ -35,7 +35,7 @@ slots:
         args:
           menu: coop
 
-  - item: barrier name:"&c&lClose"
+  - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
     row: 3
