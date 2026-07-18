@@ -252,7 +252,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
                     continue;                    // not an island (hub, base world, ...)
                 }
                 try {
-                    worldService.saveIsland(world.getName()).join(); // block until the slime file is written
+                    // Synchronous on purpose: Bukkit won't schedule tasks for a disabling plugin, so
+                    // the async saveIsland() path throws here and the save is silently lost.
+                    worldService.saveIslandNow(world.getName());
                     savedIslands++;
                 } catch (Exception e) {
                     getLogger().warning("Failed to save island " + world.getName() + " on shutdown: " + e.getMessage());

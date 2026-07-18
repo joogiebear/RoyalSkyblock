@@ -44,6 +44,16 @@ public interface IslandWorldService {
     CompletableFuture<Void> saveIsland(String worldName);
 
     /**
+     * Save an island world <em>on the calling thread</em>, bypassing the scheduler entirely.
+     *
+     * <p>Only for {@code onDisable}: Bukkit refuses to schedule tasks for a plugin that is shutting
+     * down, so the async {@link #saveIsland} path throws there and the save is silently lost. This
+     * blocks the shutdown briefly, which is the correct trade — losing an island's blocks is worse
+     * than a slower stop. No-op if the world is not loaded.
+     */
+    void saveIslandNow(String worldName);
+
+    /**
      * Unload an island world, optionally persisting it back to the data source first. No-op if the
      * world is not currently loaded.
      */

@@ -39,6 +39,11 @@ public final class NoOpIslandWorldService implements IslandWorldService {
     }
 
     @Override
+    public void saveIslandNow(String worldName) {
+        // no backend, nothing to save
+    }
+
+    @Override
     public CompletableFuture<Void> unloadIsland(String worldName, boolean save) {
         return unavailable();
     }

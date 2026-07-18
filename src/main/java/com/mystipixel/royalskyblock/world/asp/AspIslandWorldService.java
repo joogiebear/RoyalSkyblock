@@ -103,6 +103,14 @@ public final class AspIslandWorldService implements IslandWorldService {
     }
 
     @Override
+    public void saveIslandNow(String worldName) {
+        SlimeWorldInstance instance = asp.getLoadedWorld(worldName);
+        if (instance != null) {
+            save(instance);                      // calling thread — the scheduler is gone during disable
+        }
+    }
+
+    @Override
     public CompletableFuture<Void> unloadIsland(String worldName, boolean save) {
         SlimeWorldInstance instance = asp.getLoadedWorld(worldName);
         if (instance == null) {
