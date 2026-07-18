@@ -228,6 +228,37 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // Save everyone still online and every loaded island SYNCHRONOUSLY. On shutdown the Bukkit
+        // scheduler is stopping, so the normal async profile saves and the unload-tick's island save
+        // won't run — without this, anyone online at shutdown (or when the server restarts for a
+        // deploy) loses whatever they did since the last periodic save: inventory, eco/skills, blocks.
+        int savedPlayers = 0;
+        int savedIslands = 0;
+        if (profileManager != null) {
+            for (org.bukkit.entity.Player player : getServer().getOnlinePlayers()) {
+                try {
+                    profileManager.handleQuit(player);
+                    savedPlayers++;
+                } catch (Exception e) {
+                    getLogger().warning("Failed to save " + player.getName() + " on shutdown: " + e.getMessage());
+                }
+            }
+        }
+        if (worldService != null && islandManager != null) {
+            for (org.bukkit.World world : getServer().getWorlds()) {
+                if (islandManager.getIslandByWorld(world) == null) {
+                    continue;                    // not an island (hub, base world, ...)
+                }
+                try {
+                    worldService.saveIsland(world.getName()).join(); // block until the slime file is written
+                    savedIslands++;
+                } catch (Exception e) {
+                    getLogger().warning("Failed to save island " + world.getName() + " on shutdown: " + e.getMessage());
+                }
+            }
+        }
+        getLogger().info("Shutdown save: " + savedPlayers + " player(s), " + savedIslands + " island(s).");
+
         if (worldService != null) {
             worldService.shutdown();
         }
