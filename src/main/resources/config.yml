@@ -168,6 +168,25 @@ island:
       #   fall_damage: true             # survival — fall damage applies
       #   spawn_monsters: true          # mobs spawn on unlit islands at night
 
+  # ── Void protection ──────────────────────────────────────────────────────────
+  # Falling off an island normally means slow vanilla void-damage ticks — and the higher
+  # your max health climbs, the longer it drags. Instead, catch the fall below 'below-y'.
+  void:
+    enabled: true
+    # Y treated as "the void". Islands paste at y≈100 (world floor is -64), so anything
+    # well below the island is safe. Raise it to catch the fall sooner — but keep it under
+    # anything players build or mine down to, or they'd be yanked up mid-build.
+    below-y: 0
+    # What happens when a player drops below below-y on an island:
+    #   teleport - pull them back to the island home (recommended — no slow death)
+    #   kill     - kill instantly (still respects keep_inventory) instead of ticking down
+    #   none     - leave vanilla void behaviour alone
+    action: teleport
+    # Damage dealt on a teleport rescue, in hearts. 0 = no penalty. (kill/none ignore this.)
+    damage: 0
+    # Chat line shown on rescue (& colour codes; leave blank for silent).
+    message: "&cYou fell into the void and were pulled back to your island."
+
 # ── Profiles (Hypixel-style saves: each has its own island, inventory & progression) ─
 profiles:
   # How many profiles a player may have.

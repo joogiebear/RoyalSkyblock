@@ -53,6 +53,13 @@ public final class ConfigValidator {
             }
         }
 
+        if (cfg.getBoolean("island.void.enabled", true)) {
+            String voidAction = cfg.getString("island.void.action", "teleport").toLowerCase(Locale.ROOT);
+            if (!Set.of("teleport", "kill", "none").contains(voidAction)) {
+                warnings.add("island.void.action '" + voidAction + "' is invalid — use teleport, kill, or none.");
+            }
+        }
+
         String spawnWorld = cfg.getString("spawn.world", "world");
         if (Bukkit.getWorld(spawnWorld) == null) {
             warnings.add("spawn.world '" + spawnWorld + "' is not a loaded world — players who leave or delete an "

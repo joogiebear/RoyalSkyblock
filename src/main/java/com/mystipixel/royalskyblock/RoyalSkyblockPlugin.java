@@ -17,6 +17,7 @@ import com.mystipixel.royalskyblock.island.SchematicService;
 import com.mystipixel.royalskyblock.island.WorldEditSchematics;
 import com.mystipixel.royalskyblock.level.LevelService;
 import com.mystipixel.royalskyblock.listener.IslandRulesListener;
+import com.mystipixel.royalskyblock.listener.VoidListener;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
@@ -132,6 +133,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ProtectionListener(this), this);
         getServer().getPluginManager().registerEvents(new ProfileListener(this), this);
         getServer().getPluginManager().registerEvents(new IslandRulesListener(this), this);
+        getServer().getPluginManager().registerEvents(new VoidListener(this), this);
         getServer().getPluginManager().registerEvents(new CommandGateListener(this), this);
         getServer().getPluginManager().registerEvents(new FlowLimiterListener(this), this);
         getServer().getPluginManager().registerEvents(guiManager, this);
