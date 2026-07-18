@@ -44,6 +44,7 @@ public final class IslandMobSpawnService {
     private final CombatLevelSource combat;
     private final NamespacedKey mobKey;
     private final NamespacedKey islandKey;
+    private final NamespacedKey levelKey;
 
     private int taskId = -1;
 
@@ -78,6 +79,7 @@ public final class IslandMobSpawnService {
         this.combat = combat;
         this.mobKey = new NamespacedKey(plugin, "island_mob");
         this.islandKey = new NamespacedKey(plugin, "island_id");
+        this.levelKey = new NamespacedKey(plugin, "island_mob_level");
         reloadSettings();
     }
 
@@ -190,7 +192,7 @@ public final class IslandMobSpawnService {
                         .replace("%level%", Integer.toString(level));
                 Entity spawned = provider.spawn(mobId, loc);
                 if (spawned != null) {
-                    tag(spawned, island.id());
+                    tag(spawned, island.id(), level);
                     budget--;
                     if (debug) {
                         plugin.getLogger().info("[island-mobs] spawned " + mobId + " on island " + island.id());
@@ -258,9 +260,11 @@ public final class IslandMobSpawnService {
         return count;
     }
 
-    private void tag(Entity entity, UUID islandId) {
+    /** Mark a spawned mob as ours, with its island and tier. The tier is what the intimidation bridge reads. */
+    private void tag(Entity entity, UUID islandId, int level) {
         entity.getPersistentDataContainer().set(mobKey, PersistentDataType.BYTE, (byte) 1);
         entity.getPersistentDataContainer().set(islandKey, PersistentDataType.STRING, islandId.toString());
+        entity.getPersistentDataContainer().set(levelKey, PersistentDataType.INTEGER, level);
     }
 
     private boolean isMember(Island island, UUID uuid) {
@@ -306,7 +310,7 @@ public final class IslandMobSpawnService {
         if (spawned == null) {
             return "provider had no mob '" + mobId + "'";
         }
-        tag(spawned, island.id());
+        tag(spawned, island.id(), lvl);
         return "spawned " + mobId;
     }
 

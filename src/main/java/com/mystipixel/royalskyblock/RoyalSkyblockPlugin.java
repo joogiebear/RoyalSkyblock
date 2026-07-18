@@ -458,6 +458,23 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         mobSpawnService.start();
         getLogger().info("Island mob spawning: provider " + provider.id() + ", "
                 + mobSpawnService.familyCount() + " families.");
+
+        // Intimidation targeting bridge. The Talismans intimidation chain only GRANTS the stat
+        // (add_stat) — the stat itself has no effects, so this is what actually makes weak island
+        // mobs ignore the player.
+        if (getConfig().getBoolean("island-mobs.intimidation.enabled", true)
+                && getServer().getPluginManager().isPluginEnabled("EcoSkills")) {
+            String statId = getConfig().getString("island-mobs.intimidation.stat", "intimidation");
+            com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource stat =
+                    new com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource(statId, 0);
+            if (stat.valid()) {
+                getServer().getPluginManager().registerEvents(
+                        new com.mystipixel.royalskyblock.hooks.IslandMobTargetingBridge(this, combat, stat), this);
+                getLogger().info("Intimidation bridge active (stat: " + statId + ").");
+            } else {
+                getLogger().warning("Intimidation bridge off — EcoSkills stat '" + statId + "' unavailable.");
+            }
+        }
     }
 
     public SchematicService schematics() {

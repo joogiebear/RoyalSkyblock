@@ -359,6 +359,16 @@ island-mobs:
   max-spawns-per-scan-per-island: 3
   spawn-attempts: 6               # tries to find a valid spot per spawn (bounded — no island scan)
   debug: false
+  # Intimidation: island mobs whose tier is at or below a player's Intimidation stat ignore them.
+  # The Talismans intimidation chain only GRANTS the stat (add_stat) and the stat has no effects of
+  # its own — this bridge is what acts on it. Only mobs RoyalSkyblock spawned are affected.
+  intimidation:
+    enabled: true
+    stat: intimidation           # EcoSkills stat id the talismans grant
+    # Ignore level = min(combat level, stat) — the formula in the talismans' own descriptions.
+    # Set false to use the raw stat regardless of the player's Combat level.
+    cap-to-combat-level: true
+
   # Mob id looked up in the provider. %family% and %level% are filled in — e.g. private_island_zombie_7.
   mob-id-format: "private_island_%family%_%level%"
   # Weighted families to pick from. Each needs matching provider mobs <family>_1 .. <family>_<cap>.
