@@ -1,3 +1,13 @@
+## 2026.29.4 — 2026-07-18
+
+### ✨ Features
+- void protection — catch the fall instead of slow void ticks (`7144f18`)
+- configurable per-island world rules (gamemode + gamerules) (`e48d56f`)
+- disable hunger server-wide (gameplay.disable-hunger, default on) (`4c5d42c`)
+
+### 🔧 Other
+- move hunger control out to the standalone NoHunger plugin (`df8f3b9`)
+
 ## 2026.29.3 — 2026-07-17
 
 ### ✨ Features
