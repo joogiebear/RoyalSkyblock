@@ -2,10 +2,14 @@ package com.mystipixel.royalskyblock.hooks;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import org.bukkit.NamespacedKey;
+import org.bukkit.entity.Entity;
+import org.bukkit.entity.Mob;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.persistence.PersistentDataType;
 
@@ -53,6 +57,41 @@ public final class IslandMobTargetingBridge implements Listener {
         }
         if (mobLevel <= ignoreLevel(player)) {
             event.setCancelled(true);            // too weak to pick a fight with this player
+            clearTarget(event.getEntity());
+        }
+    }
+
+    /**
+     * Second line of defence: an intimidated mob can't damage the player even if it re-acquired a
+     * target through a path that doesn't fire the target event. Witches are the reason this exists —
+     * they're Raiders that re-target aggressively and attack with thrown splash potions, so cancelling
+     * targeting alone doesn't reliably stop them. Projectiles resolve back to whoever fired them.
+     */
+    @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
+    public void onDamage(EntityDamageByEntityEvent event) {
+        if (!plugin.getConfig().getBoolean("island-mobs.intimidation.enabled", true)) {
+            return;
+        }
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+        Entity source = event.getDamager();
+        if (source instanceof Projectile projectile && projectile.getShooter() instanceof Entity shooter) {
+            source = shooter;                    // witch potion, skeleton arrow, ...
+        }
+        Integer mobLevel = source.getPersistentDataContainer().get(levelKey, PersistentDataType.INTEGER);
+        if (mobLevel == null) {
+            return;
+        }
+        if (mobLevel <= ignoreLevel(player)) {
+            event.setCancelled(true);
+            clearTarget(source);
+        }
+    }
+
+    private void clearTarget(Entity entity) {
+        if (entity instanceof Mob mob && mob.getTarget() instanceof Player) {
+            mob.setTarget(null);
         }
     }
 
