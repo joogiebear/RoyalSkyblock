@@ -36,6 +36,10 @@ import java.util.concurrent.ConcurrentHashMap;
 import com.mystipixel.royalskyblock.world.NoOpIslandWorldService;
 import com.mystipixel.royalskyblock.world.asp.AspIslandWorldService;
 import org.bukkit.command.PluginCommand;
+import java.util.Locale;
+
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -46,6 +50,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  * store. Part of the Royal plugin suite and built to the same eco-style config conventions.
  */
 public final class RoyalSkyblockPlugin extends JavaPlugin {
+
+    /** bStats project id. Identifies the plugin, not the server, so it is fixed rather than configurable. */
+    private static final int BSTATS_PLUGIN_ID = 32733;
 
     private static RoyalSkyblockPlugin instance;
 
@@ -192,6 +199,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
         startIslandMobSpawning();
 
+        setupMetrics();
         getLogger().info("RoyalSkyblock enabled — metadata store: "
                 + getConfig().getString("storage.type", "sqlite").toUpperCase()
                 + ", island world source: " + getConfig().getString("world.slime-data-source", "file") + ".");
@@ -531,4 +539,22 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     public void setEcoSlot(UUID player, int slot) {
         ecoSlot.put(player, slot);
     }
+    /**
+     * Anonymous usage reporting via bStats.
+     *
+     * <p>The library was already shaded into the jar but never initialised, so nothing was ever
+     * reported. Server owners who want no reporting disable it globally in plugins/bStats/config.yml.
+     */
+    private void setupMetrics() {
+        Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
+        metrics.addCustomChart(new SimplePie("storage_backend",
+                () -> getConfig().getString("storage.type", "SQLITE").toUpperCase(Locale.ROOT)));
+        metrics.addCustomChart(new SimplePie("island_world_backend",
+                () -> isWorldBackendReady() ? "asp" : "none"));
+        metrics.addCustomChart(new SimplePie("island_mobs_enabled",
+                () -> String.valueOf(getConfig().getBoolean("island-mobs.enabled", false))));
+        metrics.addCustomChart(new SimplePie("perks_enabled",
+                () -> String.valueOf(perkService != null && perkService.enabled())));
+    }
+
 }
