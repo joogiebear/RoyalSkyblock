@@ -422,6 +422,10 @@ public final class GuiManager implements Listener {
         return item;
     }
 
+    /** One resolved browser/leaderboard row, gathered off-thread and rendered on the main thread. */
+    private record BrowseRow(Island island, Profile profile, String ownerName) {
+    }
+
     private void fillVisit(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
         Profile viewer = plugin.profiles().getProfile(plugin.profiles().getActiveProfileId(player.getUniqueId()));
         if (viewer == null) {
@@ -429,26 +433,48 @@ public final class GuiManager implements Listener {
         }
         com.mystipixel.royalskyblock.profile.Gamemode mode = viewer.gamemode();
         List<Integer> slots = template.contentSlots();
-        int i = 0;
-        for (Island island : plugin.storage().getAllIslands()) {
-            if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) || !island.isEnabled(IslandSetting.LISTED)) {
-                continue;
+        java.util.UUID viewerId = player.getUniqueId();
+
+        // Gathered off-thread: getAllIslands() is a full table read, each profile can miss the cache
+        // and hit the DB, and each owner name touches the user cache. Doing that inline stalled the
+        // server for the whole scan every time anyone opened the browser, and the cost grew with the
+        // number of islands ever created rather than with players online.
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<BrowseRow> rows = new ArrayList<>();
+            for (Island island : plugin.storage().getAllIslands()) {
+                if (rows.size() >= slots.size()) {
+                    break;
+                }
+                if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) || !island.isEnabled(IslandSetting.LISTED)) {
+                    continue;
+                }
+                Profile prof = plugin.profiles().getProfile(island.profileId());
+                if (prof == null || prof.gamemode() != mode || prof.isMember(viewerId)) {
+                    continue; // gamemode must match; don't list your own
+                }
+                rows.add(new BrowseRow(island, prof, ownerName(prof)));
             }
-            Profile prof = plugin.profiles().getProfile(island.profileId());
-            if (prof == null || prof.gamemode() != mode || prof.isMember(player.getUniqueId())) {
-                continue; // gamemode must match; don't list your own
-            }
-            if (i >= slots.size()) {
-                break;
-            }
-            int slot = slots.get(i++);
-            String ownerName = ownerName(prof);
-            inv.setItem(slot, islandBrowserIcon(island, prof, ownerName));
-            holder.putAction(slot, (v, right) -> {
-                v.closeInventory();
-                visitFromBrowser(v, island, prof, ownerName);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!stillViewing(player, inv)) {
+                    return;
+                }
+                int i = 0;
+                for (BrowseRow row : rows) {
+                    int slot = slots.get(i++);
+                    inv.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName()));
+                    holder.putAction(slot, (v, right) -> {
+                        v.closeInventory();
+                        visitFromBrowser(v, row.island(), row.profile(), row.ownerName());
+                    });
+                }
+                player.updateInventory();
             });
-        }
+        });
+    }
+
+    /** True if the player still has this exact menu open — an async fill must not paint a stale view. */
+    private boolean stillViewing(Player player, Inventory inv) {
+        return player.isOnline() && inv.equals(player.getOpenInventory().getTopInventory());
     }
 
     private void visitFromBrowser(Player viewer, Island island, Profile prof, String ownerName) {
@@ -999,21 +1025,35 @@ public final class GuiManager implements Listener {
 
     /** Fill the leaderboard with islands ranked by stored level (never scans live). */
     private void fillTop(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
-        List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
-        all.sort((a, b) -> Double.compare(b.level(), a.level()));
         List<Integer> slots = template.contentSlots();
-        int rank = 0;
-        for (Island island : all) {
-            if (rank >= slots.size()) {
-                break;
+
+        // Same reasoning as fillVisit: read and rank off-thread, paint on the main thread.
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
+            all.sort((a, b) -> Double.compare(b.level(), a.level()));
+            List<BrowseRow> rows = new ArrayList<>();
+            for (Island island : all) {
+                if (rows.size() >= slots.size()) {
+                    break;
+                }
+                Profile prof = plugin.profiles().getProfile(island.profileId());
+                if (prof == null) {
+                    continue;
+                }
+                rows.add(new BrowseRow(island, prof, ownerName(prof)));
             }
-            Profile prof = plugin.profiles().getProfile(island.profileId());
-            if (prof == null) {
-                continue;
-            }
-            int slot = slots.get(rank++);
-            inv.setItem(slot, leaderboardIcon(rank, island, prof, ownerName(prof)));
-        }
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!stillViewing(player, inv)) {
+                    return;
+                }
+                int rank = 0;
+                for (BrowseRow row : rows) {
+                    int slot = slots.get(rank++);
+                    inv.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName()));
+                }
+                player.updateInventory();
+            });
+        });
     }
 
     private ItemStack leaderboardIcon(int rank, Island island, Profile prof, String ownerName) {

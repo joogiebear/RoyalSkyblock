@@ -172,6 +172,10 @@ public final class Storage {
             s.executeUpdate(indexSql("idx_islands_profile", "islands", "profile_id"));
             s.executeUpdate(indexSql("idx_profiles_owner", "profiles", "owner"));
             s.executeUpdate(indexSql("idx_profile_members_uuid", "profile_members", "uuid"));
+            // Serves getBankTransactions' "WHERE account_id = ? ORDER BY created_at DESC" exactly.
+            // Without it that query is a full scan plus a filesort, and it gets slower forever as the
+            // ledger grows — every bank-history open pays for every transaction ever recorded.
+            s.executeUpdate(indexSql("idx_bank_txns_account_created", "bank_txns", "account_id, created_at"));
         }
         // migrations for tables that predate a column
         addColumnIfMissing("islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
