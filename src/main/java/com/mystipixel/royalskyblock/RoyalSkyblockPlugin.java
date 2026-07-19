@@ -19,6 +19,7 @@ import com.mystipixel.royalskyblock.level.LevelService;
 import com.mystipixel.royalskyblock.listener.IslandRulesListener;
 import com.mystipixel.royalskyblock.island.GeneratorService;
 import com.mystipixel.royalskyblock.listener.GeneratorListener;
+import com.mystipixel.royalskyblock.listener.IslandPortalListener;
 import com.mystipixel.royalskyblock.listener.VoidListener;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
@@ -202,6 +203,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
 
         this.generatorService = new GeneratorService(this);
         getServer().getPluginManager().registerEvents(new GeneratorListener(this), this);
+        getServer().getPluginManager().registerEvents(new IslandPortalListener(this), this);
 
         startIslandMobSpawning();
 

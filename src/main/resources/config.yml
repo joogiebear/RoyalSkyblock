@@ -111,13 +111,22 @@ island:
     # used instead. Save one in-game with: /is admin schematic save <name>
     schematic: default
     # ── Built-in generator (fallback when there's no schematic) ──
-    # Generates a grass platform with a cozy oak starter hut (door, windows, roof, and a bed +
-    # crafting table + furnace + lantern inside — the starter chest sits in its back corner), an
-    # oak tree, a contained pond, a hydrated crop farm (wheat/carrots/potatoes/beetroot), and sugar cane.
-    platform-radius: 6           # 6 => a 13x13 platform (minimum 6 to fit the hut + features)
+    # Builds an island with an 11x11 house at its centre — the player spawns inside, on the floor —
+    # and features arranged around it: a crop farm, a carved pond with sugar cane, a small oak grove
+    # on a rise, a stone outcrop with boulders, and scattered flowers. The outline is irregular and
+    # the underside tapers, so it reads as land rather than a slab.
+    #
+    # A second, smaller island sits across a gap with a portal back to spawn on it. The gap is wider
+    # than a jump on purpose: bridging to it is the first thing a new island asks of you.
+    platform-radius: 17          # island radius; the outline bulges a few blocks past this
     platform-block: GRASS_BLOCK  # top surface
     sub-block: DIRT              # two layers beneath the surface
-    tree: true                  # plant a starter oak
+    tree: true                  # plant the oak grove
+
+    # The second island and its portal home.
+    portal-island: true
+    portal-island-distance: 34   # centre-to-centre; ~10 blocks of open air to bridge
+    portal-island-radius: 7
     bedrock-anchor: true        # a bedrock block under the centre
     chest:
       enabled: true             # set false to skip the starter chest entirely

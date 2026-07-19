@@ -16,6 +16,8 @@ general:
   reloaded: "&aConfiguration reloaded."
 
 island:
+  # Shown when the island portal has nowhere to send a player (no spawn world configured).
+  portal-no-spawn: "&cThe portal has nowhere to send you — ask an admin to set spawn.world."
   creating: "&7Creating your island..."
   created: "&aYour island is ready! Welcome home."
   create-failed: "&cCouldn't create your island: &7%error%"
