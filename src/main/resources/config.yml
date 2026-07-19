@@ -98,6 +98,22 @@ island:
   # Base number of guests that can /visit at once (before the guest-limit upgrade adds more).
   base-guest-limit: 3
 
+  # ── What a VISITOR may do on someone else's island ─────────────────────────
+  # This governs visitors only. Co-op members are deliberately not protected from
+  # each other: inviting someone onto your island IS the trust decision, and the
+  # plugin does not second-guess it.
+  #
+  #   read-only  Walk around, open doors, press buttons, sit in boats. Cannot take
+  #              or change anything: containers, item frames, armour stands,
+  #              animals, dropped items and crops are all refused. This is the
+  #              default, because an island nobody can move around is a poor
+  #              showcase.
+  #   strict     Every interaction is refused, including doors.
+  #
+  # Either way a visitor cannot break, place, or use buckets.
+  protection:
+    visitor-mode: read-only
+
   # Max members on a fresh island (owner counts as one). Raised by island upgrades.
   starting-member-limit: 4
 
