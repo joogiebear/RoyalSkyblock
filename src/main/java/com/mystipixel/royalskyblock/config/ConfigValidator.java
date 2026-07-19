@@ -77,6 +77,26 @@ public final class ConfigValidator {
             warnings.add("levels.yml has no 'blocks:' values — every island level will be 0. Add block point values.");
         }
 
+        // An upgrade track with nowhere to go in the menu is invisible: fillUpgrades pins each track to
+        // its `content: <key>` slot and falls back to the mask's 0-slots, so a track with neither is
+        // silently skipped. Configuring one and never seeing it is a confusing way to find that out.
+        var upgradesMenu = plugin.gui() == null ? null : plugin.gui().template("island/upgrades");
+        if (upgradesMenu != null) {
+            int autoSlots = upgradesMenu.contentSlots().size();
+            var pinned = upgradesMenu.namedContentSlots();
+            int unpinned = 0;
+            for (var def : plugin.upgrades().all()) {
+                if (!pinned.containsKey(def.key().toLowerCase(java.util.Locale.ROOT))) {
+                    unpinned++;
+                }
+            }
+            if (unpinned > autoSlots) {
+                warnings.add("gui/island/upgrades.yml has room for " + autoSlots + " unpinned upgrade(s) but "
+                        + unpinned + " track(s) have no 'content: <key>' slot — the extras won't appear in the"
+                        + " menu. Add a slot with 'content: <upgrade key>', or free some mask 0-slots.");
+            }
+        }
+
         boolean papi = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
         Set<String> reported = new HashSet<>();
         for (UpgradeDef def : plugin.upgrades().all()) {

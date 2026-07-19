@@ -31,13 +31,16 @@ slots:
   # ── the upgrades (pinned; rearrange freely) ──
   - content: size
     row: 3
-    column: 3
+    column: 2
   - content: guest-limit
     row: 3
-    column: 5
+    column: 4
   - content: coop-slots
     row: 3
-    column: 7
+    column: 6
+  - content: generator
+    row: 3
+    column: 8
 
   # ── footer ──
   - item: arrow name:"&7« Back"

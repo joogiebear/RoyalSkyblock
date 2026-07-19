@@ -219,7 +219,8 @@ public final class UpgradeManager {
         return base + bonus;
     }
 
-    private @Nullable UpgradeDef firstWithEffect(UpgradeEffect effect) {
+    /** The first upgrade with this effect, or null when no track declares it. */
+    public @Nullable UpgradeDef firstWithEffect(UpgradeEffect effect) {
         for (UpgradeDef def : upgrades.values()) {
             if (def.effect() == effect) {
                 return def;

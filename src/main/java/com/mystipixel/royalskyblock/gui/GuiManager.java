@@ -269,6 +269,11 @@ public final class GuiManager implements Listener {
         }
     }
 
+    /** A loaded menu template by id, or null if that file isn't registered. */
+    public MenuTemplate template(String id) {
+        return byId.get(id);
+    }
+
     private void fillUpgrades(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
@@ -386,6 +391,7 @@ public final class GuiManager implements Listener {
             case RADIUS -> (v * 2 + 1) + "x" + (v * 2 + 1); // border half-size -> full NxN (incl. centre)
             case GUEST_SLOTS -> "+" + v + " guest" + (v == 1 ? "" : "s");
             case COOP_SLOTS -> "+" + v + " coop slot" + (v == 1 ? "" : "s");
+            case GENERATOR -> "Tier " + v + " ores";
         };
     }
 

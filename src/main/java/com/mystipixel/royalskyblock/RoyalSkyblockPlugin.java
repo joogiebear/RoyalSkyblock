@@ -17,6 +17,8 @@ import com.mystipixel.royalskyblock.island.SchematicService;
 import com.mystipixel.royalskyblock.island.WorldEditSchematics;
 import com.mystipixel.royalskyblock.level.LevelService;
 import com.mystipixel.royalskyblock.listener.IslandRulesListener;
+import com.mystipixel.royalskyblock.island.GeneratorService;
+import com.mystipixel.royalskyblock.listener.GeneratorListener;
 import com.mystipixel.royalskyblock.listener.VoidListener;
 import com.mystipixel.royalskyblock.listener.ProfileListener;
 import com.mystipixel.royalskyblock.listener.ProtectionListener;
@@ -55,6 +57,7 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
     private static final int BSTATS_PLUGIN_ID = 32733;
 
     private static RoyalSkyblockPlugin instance;
+    private GeneratorService generatorService;
 
     private Storage storage;
     private IslandWorldService worldService;
@@ -197,6 +200,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
             getLogger().info("EcoMobs detected — island-level mob strength scaling active.");
         }
 
+        this.generatorService = new GeneratorService(this);
+        getServer().getPluginManager().registerEvents(new GeneratorListener(this), this);
+
         startIslandMobSpawning();
 
         setupMetrics();
@@ -289,6 +295,9 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
         currencyService.reload();
         upgradeManager.reload();
         levelService.reload();
+        if (generatorService != null) {
+            generatorService.reload();
+        }
         perkService.reload();
         bankLevels.reload();
         borderService.reload();
@@ -298,6 +307,10 @@ public final class RoyalSkyblockPlugin extends JavaPlugin {
             mobSpawnService.reloadSettings(); // toggling island-mobs.enabled on/off still needs a restart
         }
         new ConfigValidator(this).validate();
+    }
+
+    public GeneratorService generators() {
+        return generatorService;
     }
 
     public UpgradeManager upgrades() {

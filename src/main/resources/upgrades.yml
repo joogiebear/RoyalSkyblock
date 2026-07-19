@@ -217,3 +217,49 @@ coop-slots:
         currency: coins
         amount: 0
       time: 0
+
+generator:
+  display-name: "&b&lOre Generator"
+  icon: "cobblestone"
+  description: "Better ores from your cobblestone generator."
+  effect: generator
+  # 'value' is the generator tier used from generators.yml.
+  # Costs are deliberately modest at the low end and steepen sharply: each tier
+  # unlocks a permanent, unlimited income, so the price should reflect what it earns
+  # rather than what it costs to build.
+  tiers:
+    "1":
+      value: 1
+      cost: {currency: coins, amount: 0}
+      skip-cost: {currency: coins, amount: 0}
+      time: "0s"
+    "2":
+      value: 2
+      cost: {currency: coins, amount: 2500}
+      skip-cost: {currency: coins, amount: 4000}
+      time: "6h"
+    "3":
+      value: 3
+      cost: {currency: coins, amount: 10000}
+      skip-cost: {currency: coins, amount: 16000}
+      time: "12h"
+    "4":
+      value: 4
+      cost: {currency: coins, amount: 35000}
+      skip-cost: {currency: coins, amount: 56000}
+      time: "1d"
+    "5":
+      value: 5
+      cost: {currency: coins, amount: 100000}
+      skip-cost: {currency: coins, amount: 160000}
+      time: "2d"
+    "6":
+      value: 6
+      cost: {currency: coins, amount: 300000}
+      skip-cost: {currency: coins, amount: 480000}
+      time: "3d"
+    "7":
+      value: 7
+      cost: {currency: coins, amount: 750000}
+      skip-cost: {currency: coins, amount: 1200000}
+      time: "5d"

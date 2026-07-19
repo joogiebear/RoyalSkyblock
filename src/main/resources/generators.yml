@@ -1,0 +1,89 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Ore generator
+# ═══════════════════════════════════════════════════════════════════════════════
+#  The classic skyblock generator: lava meets water and makes cobblestone. This
+#  replaces what it makes with a weighted roll, so a generator gets better as an
+#  island upgrades.
+#
+#  Tiers come from the upgrade track with 'effect: generator' in upgrades.yml, so
+#  unlocking one costs money and takes time like any other upgrade.
+#
+#  ── A WARNING WORTH READING ──────────────────────────────────────────────────
+#  A generator is an INFINITE source. If a shop buys what it produces at a fixed
+#  minimum price, players have an unlimited income at that price — which no amount
+#  of dynamic pricing fixes, because the floor is the floor.
+#
+#  So: keep the valuable ores rare, and price bulk materials like cobblestone near
+#  nothing wherever you sell them. The default tables below are deliberately
+#  conservative; raise them only alongside a sink that scales with the income.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+enabled: true
+
+# Which formations to take over.
+#   COBBLESTONE - lava flowing into water (the classic generator)
+#   STONE       - lava flowing onto a water source
+#   BASALT      - lava over soul soil beside blue ice
+replace:
+  - COBBLESTONE
+  - STONE
+
+# Used by islands with no generator upgrade yet, and if the upgrade track is absent.
+default-tier: 1
+
+# Weights are relative, not percentages — a material with weight 5 out of a total of
+# 100 appears one time in twenty. A tier that isn't defined falls back to the highest
+# one below it, so you can leave gaps.
+tiers:
+
+  1:
+    weights:
+      COBBLESTONE: 100
+
+  2:
+    weights:
+      COBBLESTONE: 90
+      COAL_ORE: 10
+
+  3:
+    weights:
+      COBBLESTONE: 80
+      COAL_ORE: 15
+      IRON_ORE: 5
+
+  4:
+    weights:
+      COBBLESTONE: 71
+      COAL_ORE: 15
+      IRON_ORE: 10
+      GOLD_ORE: 4
+
+  5:
+    weights:
+      COBBLESTONE: 60
+      COAL_ORE: 16
+      IRON_ORE: 12
+      GOLD_ORE: 6
+      REDSTONE_ORE: 4
+      LAPIS_ORE: 2
+
+  6:
+    weights:
+      COBBLESTONE: 52
+      COAL_ORE: 16
+      IRON_ORE: 14
+      GOLD_ORE: 8
+      REDSTONE_ORE: 5
+      LAPIS_ORE: 4
+      DIAMOND_ORE: 1
+
+  7:
+    weights:
+      COBBLESTONE: 45
+      COAL_ORE: 16
+      IRON_ORE: 15
+      GOLD_ORE: 10
+      REDSTONE_ORE: 6
+      LAPIS_ORE: 5
+      DIAMOND_ORE: 2
+      EMERALD_ORE: 1
