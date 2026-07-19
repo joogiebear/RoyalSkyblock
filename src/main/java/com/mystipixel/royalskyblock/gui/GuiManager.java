@@ -1203,7 +1203,7 @@ public final class GuiManager implements Listener {
         }
         List<MenuEffect> effects = event.isRightClick() && !slot.rightClick().isEmpty()
                 ? slot.rightClick() : slot.leftClick();
-        if (!effects.isEmpty()) {
+        if (!effects.isEmpty() && !slot.silent()) {
             play(player, template, "click", CLICK_FALLBACK);
         }
         for (MenuEffect effect : effects) {

@@ -18,5 +18,17 @@ public record MenuSlot(int index,
                        ItemSpec item,
                        List<String> lore,
                        List<MenuEffect> leftClick,
-                       List<MenuEffect> rightClick) {
+                       List<MenuEffect> rightClick,
+                       boolean silent) {
+
+    /**
+     * {@code silent: true} suppresses the menu's click sound for this slot alone.
+     *
+     * <p>For a button that opens another menu, the destination announces itself when it opens — so
+     * the click sound and the open sound land together and are heard as one doubled click. The menu
+     * sound is menu-wide, so this is the only way to exempt a single button without taking the
+     * feedback away from every other one.
+     */
+    public MenuSlot {
+    }
 }

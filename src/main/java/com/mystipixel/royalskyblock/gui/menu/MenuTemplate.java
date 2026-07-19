@@ -148,7 +148,8 @@ public final class MenuTemplate {
         ItemSpec item = ItemSpec.parse(itemObj == null ? "barrier" : String.valueOf(itemObj));
         return new MenuSlot(index, id, content, item, stringList(raw.get("lore")),
                 MenuEffect.parseList(castMapList(raw.get("left-click"))),
-                MenuEffect.parseList(castMapList(raw.get("right-click"))));
+                MenuEffect.parseList(castMapList(raw.get("right-click"))),
+                Boolean.parseBoolean(String.valueOf(raw.get("silent"))));
     }
 
     /** Slots that pin a named dynamic entry ({@code content: <key>}) → their 0-based index. */

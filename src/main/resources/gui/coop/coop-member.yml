@@ -8,6 +8,8 @@
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
+#    slot options: silent: true — suppress this menu’s click sound for one slot, for a
+#      button whose destination plays its own open sound (the two land together otherwise)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&8Skyblock &7» &fCoop Member"
