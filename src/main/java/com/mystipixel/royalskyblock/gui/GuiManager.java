@@ -128,6 +128,7 @@ public final class GuiManager implements Listener {
         }
         fillDynamic(menuId, player, template, inv, holder);
         player.openInventory(inv);
+        play(player, template, "open", null);
     }
 
     /** Fill data-driven menus (profile list, settings toggles) into their mask content slots. */
@@ -1192,7 +1193,7 @@ public final class GuiManager implements Listener {
         BiConsumer<Player, Boolean> dynamic = holder.action(raw);
         if (dynamic != null) {
             boolean rightClick = event.isRightClick();
-            playClick(player);
+            play(player, template, "click", CLICK_FALLBACK);
             runNextTick(() -> dynamic.accept(player, rightClick));
             return;
         }
@@ -1203,7 +1204,7 @@ public final class GuiManager implements Listener {
         List<MenuEffect> effects = event.isRightClick() && !slot.rightClick().isEmpty()
                 ? slot.rightClick() : slot.leftClick();
         if (!effects.isEmpty()) {
-            playClick(player);
+            play(player, template, "click", CLICK_FALLBACK);
         }
         for (MenuEffect effect : effects) {
             execute(player, effect);
@@ -1245,11 +1246,27 @@ public final class GuiManager implements Listener {
         Bukkit.getScheduler().runTask(plugin, runnable);
     }
 
-    private void playClick(Player player) {
+    /**
+     * What a click sounds like when a menu doesn't say. Menus were silent in config and this was
+     * hardcoded, so it stays the default — a menu that adds a {@code sounds:} block overrides it, and
+     * one that sets {@code enabled: false} turns it off.
+     */
+    private static final MenuTemplate.SoundSpec CLICK_FALLBACK =
+            new MenuTemplate.SoundSpec("ui.button.click", 0.6f, 1.2f);
+
+    /** Play a menu's configured sound for {@code key}, or {@code fallback} when it defines none. */
+    private void play(Player player, MenuTemplate template, String key, MenuTemplate.SoundSpec fallback) {
+        MenuTemplate.SoundSpec spec = template == null ? null : template.sound(key);
+        if (spec == null) {
+            spec = fallback;
+        }
+        if (spec == null) {
+            return;
+        }
         try {
-            player.playSound(player.getLocation(), "ui.button.click", 0.6f, 1.2f);
+            player.playSound(player.getLocation(), spec.name(), spec.volume(), spec.pitch());
         } catch (Throwable ignored) {
-            // sound unavailable — never let it break a click
+            // bad sound key or unavailable — never let it break a click
         }
     }
 

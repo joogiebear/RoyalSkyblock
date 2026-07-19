@@ -9,6 +9,7 @@ import org.bukkit.inventory.ItemStack;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.List;
 import java.util.Map;
 
@@ -26,14 +27,54 @@ public final class MenuTemplate {
     private final ItemStack maskFiller;        // null when no mask
     private final List<Integer> contentSlots;  // indices marked 0 in the mask
     private final List<MenuSlot> slots;
+    private final Map<String, SoundSpec> sounds;
 
     private MenuTemplate(String title, int rows, ItemStack maskFiller,
-                         List<Integer> contentSlots, List<MenuSlot> slots) {
+                         List<Integer> contentSlots, List<MenuSlot> slots,
+                         Map<String, SoundSpec> sounds) {
         this.title = title;
         this.rows = rows;
         this.maskFiller = maskFiller;
         this.contentSlots = contentSlots;
         this.slots = slots;
+        this.sounds = sounds;
+    }
+
+    /** One entry from a menu's {@code sounds:} block. */
+    public record SoundSpec(String name, float volume, float pitch) {
+    }
+
+    /**
+     * Read the {@code sounds:} block. Keys are free-form ({@code open}, {@code click}, ...) so a menu can
+     * define whatever the engine asks for without the parser needing to know the names.
+     *
+     * <p>Sound ids are written as the Bukkit enum ({@code UI_BUTTON_CLICK}) and converted to the
+     * namespaced key Paper expects, so configs match the rest of the suite. {@code enabled: false}
+     * silences one without deleting it.
+     */
+    private static Map<String, SoundSpec> parseSounds(FileConfiguration cfg) {
+        ConfigurationSection section = cfg.getConfigurationSection("sounds");
+        if (section == null) {
+            return Map.of();
+        }
+        Map<String, SoundSpec> out = new LinkedHashMap<>();
+        for (String key : section.getKeys(false)) {
+            ConfigurationSection entry = section.getConfigurationSection(key);
+            if (entry == null) {
+                continue;
+            }
+            // 'name' is the suite's key (RoyalBank, RoyalWardrobe, RoyalAuctions all use it);
+            // 'sound' is accepted too so a config written either way works.
+            String name = entry.getString("name", entry.getString("sound", ""));
+            if (name.isBlank() || !entry.getBoolean("enabled", true)) {
+                continue;
+            }
+            out.put(key.toLowerCase(Locale.ROOT), new SoundSpec(
+                    name.trim().toLowerCase(Locale.ROOT).replace('_', '.'),
+                    (float) entry.getDouble("volume", 0.7),
+                    (float) entry.getDouble("pitch", 1.0)));
+        }
+        return Map.copyOf(out);
     }
 
     public static MenuTemplate load(File file, String defaultTitle, int defaultRows) {
@@ -69,7 +110,7 @@ public final class MenuTemplate {
             }
         }
 
-        return new MenuTemplate(title, rows, filler, contentSlots, slots);
+        return new MenuTemplate(title, rows, filler, contentSlots, slots, parseSounds(cfg));
     }
 
     private static ConfigurationSection firstPageMask(FileConfiguration cfg) {
@@ -158,6 +199,11 @@ public final class MenuTemplate {
     }
 
     /** Inventory indices marked {@code 0} in the mask — where dynamic content (e.g. profile icons) go. */
+    /** A configured sound by key, or null when the menu doesn't define one. */
+    public SoundSpec sound(String key) {
+        return sounds.get(key);
+    }
+
     public List<Integer> contentSlots() {
         return contentSlots;
     }

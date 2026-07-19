@@ -12,6 +12,21 @@
 title: "&8Skyblock &7» &fCoop Invites"
 rows: 6
 
+# Sounds this menu plays. Delete a key to silence it, or set enabled: false.
+#   open  - when the menu is opened
+#   click - when a button is clicked
+sounds:
+  open:
+    enabled: true
+    name: UI_BUTTON_CLICK
+    volume: 0.7
+    pitch: 1.2
+  click:
+    enabled: true
+    name: UI_BUTTON_CLICK
+    volume: 0.6
+    pitch: 1.2
+
 pages:
   - page: 1
     mask:

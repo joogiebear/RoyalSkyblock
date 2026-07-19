@@ -6,11 +6,26 @@
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
-#    (a click sound plays automatically — no need to add one per button)
+#    (sounds are configured per menu in the sounds: block below)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&8Skyblock"
 rows: 6
+
+# Sounds this menu plays. Delete a key to silence it, or set enabled: false.
+#   open  - when the menu is opened
+#   click - when a button is clicked
+sounds:
+  open:
+    enabled: true
+    name: UI_BUTTON_CLICK
+    volume: 0.7
+    pitch: 1.2
+  click:
+    enabled: true
+    name: UI_BUTTON_CLICK
+    volume: 0.6
+    pitch: 1.2
 
 pages:
   - page: 1
