@@ -13,6 +13,8 @@
 #                     radius       -> island size (world-border half-size)
 #                     guest_slots  -> extra concurrent /visit guests
 #                     coop_slots   -> extra coop members
+#                     minions      -> extra minion slots (read by RoyalMinions;
+#                                     each tier grants one more minion on the island)
 #
 #  Per tier (1, 2, 3, ...):
 #    value      : the effect number at that tier (a radius, or a +slots amount)
@@ -263,3 +265,37 @@ generator:
       cost: {currency: coins, amount: 750000}
       skip-cost: {currency: coins, amount: 1200000}
       time: "5d"
+
+minions:
+  display-name: "&e&lMinion Slots"
+  icon: armor_stand
+  description: "Place more AFK minions on your island."
+  effect: minions
+  # 'value' is the total bonus slots at that tier (each tier adds one). RoyalMinions reads the tier
+  # count and grants that many slots on top of its own `slot-limit`, so tier 5 here = 5 extra minions.
+  tiers:
+    1:
+      value: 1
+      cost: {currency: coins, amount: 5000}
+      skip-cost: {currency: coins, amount: 8000}
+      time: "6h"
+    2:
+      value: 2
+      cost: {currency: coins, amount: 15000}
+      skip-cost: {currency: coins, amount: 24000}
+      time: "12h"
+    3:
+      value: 3
+      cost: {currency: coins, amount: 40000}
+      skip-cost: {currency: coins, amount: 64000}
+      time: "1d"
+    4:
+      value: 4
+      cost: {currency: coins, amount: 100000}
+      skip-cost: {currency: coins, amount: 160000}
+      time: "2d"
+    5:
+      value: 5
+      cost: {currency: coins, amount: 250000}
+      skip-cost: {currency: coins, amount: 400000}
+      time: "3d"

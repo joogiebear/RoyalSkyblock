@@ -393,6 +393,7 @@ public final class GuiManager implements Listener {
             case GUEST_SLOTS -> "+" + v + " guest" + (v == 1 ? "" : "s");
             case COOP_SLOTS -> "+" + v + " coop slot" + (v == 1 ? "" : "s");
             case GENERATOR -> "Tier " + v + " ores";
+            case MINIONS -> "+" + v + " minion slot" + (v == 1 ? "" : "s");
         };
     }
 

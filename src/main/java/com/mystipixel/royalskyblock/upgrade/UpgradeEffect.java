@@ -9,6 +9,8 @@ import java.util.Locale;
  *   <li>{@link #GUEST_SLOTS} — extra concurrent visitors allowed (added to the base guest limit).</li>
  *   <li>{@link #COOP_SLOTS} — extra coop members allowed (added to the base member cap).</li>
  *   <li>{@link #GENERATOR} — which ore-generator tier the island produces (absolute tier number).</li>
+ *   <li>{@link #MINIONS} — extra minion slots. Inert here: RoyalSkyblock only stores the tier; an
+ *       addon (RoyalMinions) reads {@code island.upgradeTier("minions")} and grants the slots.</li>
  * </ul>
  */
 public enum UpgradeEffect {
@@ -16,7 +18,8 @@ public enum UpgradeEffect {
     RADIUS,
     GUEST_SLOTS,
     COOP_SLOTS,
-    GENERATOR;
+    GENERATOR,
+    MINIONS;
 
     public static UpgradeEffect fromString(String raw, UpgradeEffect fallback) {
         if (raw == null) {
@@ -34,6 +37,9 @@ public enum UpgradeEffect {
             }
             case "generator", "ore_generator", "ore-generator" -> {
                 return GENERATOR;
+            }
+            case "minions", "minion_slots", "minion-slots" -> {
+                return MINIONS;
             }
             default -> {
                 return fallback;
