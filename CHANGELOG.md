@@ -1,3 +1,25 @@
+## 2026.32.0 — 2026-08-07
+
+### ✨ Features
+- let a slot opt out of the menu's click sound (`9d276e9`)
+- rebuild the generated starter island around a house and a portal isle (`daaa00b`)
+- make menu sounds configurable (`2b43fc6`)
+- tiered ore generator (`b295b3f`)
+- let another plugin own a hotbar slot (`ec7c07d`)
+- report anonymous usage stats via bStats (`0286c68`)
+
+### 🐛 Fixes
+- protect visitors' theft routes, not just their block edits (`e9984fb`)
+- never persist a null inventory blob over a good profile row (`132bcd2`)
+- shutdown island save never ran — use a synchronous save path (`0a13278`)
+
+### ⚡ Performance
+- keep player join and hot reads off the main thread (`d8fd34c`)
+- take the island browser and leaderboard off the main thread (`e58c831`)
+
+### 📝 Documentation
+- drop internal roadmap language and correct the command list (`e2b61de`)
+
 ## 2026.29.5 — 2026-07-18
 
 ### ✨ Features
