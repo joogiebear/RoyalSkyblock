@@ -54,7 +54,7 @@ public final class AspIslandWorldService implements IslandWorldService {
             }
             this.loader = buildLoader();
             plugin.getLogger().info("Island world backend ready (ASP, source="
-                    + plugin.getConfig().getString("world.slime-data-source", "file") + ").");
+                    + plugin.conf().getString("world.slime-data-source", "file") + ").");
         }, async);
     }
 
@@ -173,10 +173,10 @@ public final class AspIslandWorldService implements IslandWorldService {
 
     /** Build the ASP data-source loader from config. Called once during {@link #initialize()}. */
     private SlimeLoader buildLoader() {
-        String source = plugin.getConfig().getString("world.slime-data-source", "file").toLowerCase();
+        String source = plugin.conf().getString("world.slime-data-source", "file").toLowerCase();
         switch (source) {
             case "mysql" -> {
-                ConfigurationSection my = plugin.getConfig().getConfigurationSection("storage.mysql");
+                ConfigurationSection my = plugin.conf().getConfigurationSection("storage.mysql");
                 if (my == null) {
                     throw new IllegalStateException("world.slime-data-source is 'mysql' but storage.mysql is missing.");
                 }
@@ -205,8 +205,8 @@ public final class AspIslandWorldService implements IslandWorldService {
     /** Build the world property map for new/loaded island worlds from config. */
     private SlimePropertyMap buildProperties() {
         SlimePropertyMap map = new SlimePropertyMap();
-        ConfigurationSection p = plugin.getConfig().getConfigurationSection("world.properties");
-        ConfigurationSection paste = plugin.getConfig().getConfigurationSection("island.paste");
+        ConfigurationSection p = plugin.conf().getConfigurationSection("world.properties");
+        ConfigurationSection paste = plugin.conf().getConfigurationSection("island.paste");
 
         map.setValue(SlimeProperties.DIFFICULTY, p != null ? p.getString("difficulty", "normal") : "normal");
         map.setValue(SlimeProperties.ALLOW_MONSTERS, p == null || p.getBoolean("allow-monsters", true));

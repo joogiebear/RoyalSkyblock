@@ -36,14 +36,14 @@ public final class FlowLimiterListener implements Listener {
     @EventHandler(ignoreCancelled = true)
     public void onBucket(PlayerBucketEmptyEvent event) {
         if (event.getPlayer().hasPermission("royalskyblock.bypass")) {
-            long seconds = plugin.getConfig().getLong("flow-limiter.admin-bypass-seconds", 30);
+            long seconds = plugin.conf().getLong("flow-limiter.admin-bypass-seconds", 30);
             bypassUntil.put(event.getBlock().getWorld().getUID(), System.currentTimeMillis() + seconds * 1000L);
         }
     }
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onFlow(BlockFromToEvent event) {
-        if (!plugin.getConfig().getBoolean("flow-limiter.enabled", true)) {
+        if (!plugin.conf().getBoolean("flow-limiter.enabled", true)) {
             return;
         }
         Material type = event.getBlock().getType();
@@ -55,7 +55,7 @@ public final class FlowLimiterListener implements Listener {
         if (bypass != null && bypass > System.currentTimeMillis()) {
             return; // an admin is actively pouring here
         }
-        int max = Math.max(1, plugin.getConfig().getInt("flow-limiter.max-per-second", 800));
+        int max = Math.max(1, plugin.conf().getInt("flow-limiter.max-per-second", 800));
         long second = System.currentTimeMillis() / 1000L;
 
         long[] counter = counters.computeIfAbsent(world.getUID(), k -> new long[]{second, 0});

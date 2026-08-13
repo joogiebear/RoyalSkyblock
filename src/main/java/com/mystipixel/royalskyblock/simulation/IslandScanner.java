@@ -74,16 +74,16 @@ public final class IslandScanner implements Listener {
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onCatchup(IslandCatchupEvent event) {
-        if (!plugin.getConfig().getBoolean("simulation.enabled", true) || byMaterial.isEmpty()) {
+        if (!plugin.conf().getBoolean("simulation.enabled", true) || byMaterial.isEmpty()) {
             return;
         }
         World world = event.getWorld();
         Island island = event.getIsland();
         long offline = event.getOfflineSeconds();
-        boolean debug = plugin.getConfig().getBoolean("settings.debug", false);
+        boolean debug = plugin.conf().getBoolean("settings.debug", false);
 
-        int loY = Math.max(world.getMinHeight(), plugin.getConfig().getInt("simulation.scan-y-min", 60));
-        int hiY = Math.min(world.getMaxHeight() - 1, plugin.getConfig().getInt("simulation.scan-y-max", 180));
+        int loY = Math.max(world.getMinHeight(), plugin.conf().getInt("simulation.scan-y-min", 60));
+        int hiY = Math.min(world.getMaxHeight() - 1, plugin.conf().getInt("simulation.scan-y-max", 180));
         if (loY > hiY) {
             plugin.getLogger().warning("simulation.scan-y-min is above scan-y-max — nothing will ever be "
                     + "simulated. Check config.yml.");
@@ -92,8 +92,8 @@ public final class IslandScanner implements Listener {
 
         // The island's own footprint. NOT getLoadedChunks(): this fires the instant the world loads,
         // before the arriving player is teleported in, so almost nothing is loaded yet.
-        int centreX = plugin.getConfig().getInt("island.paste.x", 0);
-        int centreZ = plugin.getConfig().getInt("island.paste.z", 0);
+        int centreX = plugin.conf().getInt("island.paste.x", 0);
+        int centreZ = plugin.conf().getInt("island.paste.z", 0);
         int radius = Math.max(16, island.radius());
 
         Map<Long, ChunkSnapshot> snapshots = new HashMap<>();

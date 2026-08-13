@@ -12,10 +12,11 @@ islands without a bloated single world.
 
 | | |
 |---|---|
+| **eco** | **Required** — RoyalSkyblock is an eco plugin and will not load without the platform. Install [eco](https://polymart.org/resource/eco.773) first, and keep it on the same `YEAR.WEEK` version line as the rest of the suite. |
 | **Advanced Slime Paper** | **Required** — the ASP server fork, *not* vanilla Paper. Without it the plugin still enables, but island create/teleport are disabled (everything else works). |
 | **Java 21+** | Required. |
 | **Vault + an economy** | Needed for the bank and upgrade/coin costs. Any Vault economy works (EcoBits, Essentials, CMI, …). Without it, the bank and coin costs are disabled. |
-| **eco / EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
+| **EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
 | **PlaceholderAPI** | Optional. Used by command-based currencies (e.g. gems) and placeholders. |
 | **WorldEdit / FastAsyncWorldEdit** | Optional. Enables `.schem` starter islands; without it, a built-in generator makes the starter island (grass platform + a cozy oak hut, pond, crop farm, and tree). |
 

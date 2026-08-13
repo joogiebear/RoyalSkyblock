@@ -205,7 +205,7 @@ public final class UpgradeManager {
 
     /** Max concurrent visitors allowed on the island (base + guest-slots upgrade). */
     public int guestLimit(Island island) {
-        int base = plugin.getConfig().getInt("island.base-guest-limit", 3);
+        int base = plugin.conf().getInt("island.base-guest-limit", 3);
         UpgradeDef def = firstWithEffect(UpgradeEffect.GUEST_SLOTS);
         int bonus = def == null ? 0 : (int) def.valueAt(island.upgradeTier(def.key()));
         return base + bonus;
@@ -213,7 +213,7 @@ public final class UpgradeManager {
 
     /** Max coop members allowed on the island's profile (base + coop-slots upgrade). */
     public int coopMemberCap(Island island) {
-        int base = plugin.getConfig().getInt("coop.max-members", 4);
+        int base = plugin.conf().getInt("coop.max-members", 4);
         UpgradeDef def = firstWithEffect(UpgradeEffect.COOP_SLOTS);
         int bonus = def == null ? 0 : (int) def.valueAt(island.upgradeTier(def.key()));
         return base + bonus;

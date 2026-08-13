@@ -42,7 +42,7 @@ public final class StackingPlantSimulator implements BlockSimulator {
     @Override
     public void simulate(SimBlock block, SimulationContext ctx) {
         Material type = block.type();
-        if (!plugin.getConfig().getBoolean("simulation.stacking-plants.enabled", true)) {
+        if (!plugin.conf().getBoolean("simulation.stacking-plants.enabled", true)) {
             return;
         }
         // Only the top of a column grows. Without this, every block in a 3-tall cane would each try
@@ -50,14 +50,14 @@ public final class StackingPlantSimulator implements BlockSimulator {
         if (ctx.typeAt(block.x(), block.y() + 1, block.z()) == type) {
             return;
         }
-        int maxHeight = Math.max(1, plugin.getConfig().getInt("simulation.stacking-plants.max-height", 3));
+        int maxHeight = Math.max(1, plugin.conf().getInt("simulation.stacking-plants.max-height", 3));
         int height = heightBelow(block, ctx, type);
         int room = maxHeight - height;
         if (room <= 0) {
             return;                             // already at full height
         }
 
-        double perBlock = plugin.getConfig().getDouble("simulation.stacking-plants.seconds-per-block", 1080);
+        double perBlock = plugin.conf().getDouble("simulation.stacking-plants.seconds-per-block", 1080);
         if (perBlock <= 0) {
             return;
         }

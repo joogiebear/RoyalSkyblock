@@ -100,9 +100,9 @@ public final class IslandMobSpawnService {
     }
 
     public void reloadSettings() {
-        ConfigurationSection c = plugin.getConfig().getConfigurationSection("island-mobs");
+        ConfigurationSection c = plugin.conf().getConfigurationSection("island-mobs");
         if (c == null) {
-            c = plugin.getConfig().createSection("island-mobs");
+            c = plugin.conf().createSection("island-mobs");
         }
         enabled = c.getBoolean("enabled", false);
         scanIntervalTicks = Math.max(20, c.getInt("scan-interval-ticks", 200));
@@ -121,7 +121,7 @@ public final class IslandMobSpawnService {
         mobIdFormat = c.getString("mob-id-format", "private_island_%family%_%level%");
         debug = c.getBoolean("debug", false);
 
-        ConfigurationSection paste = plugin.getConfig().getConfigurationSection("island.paste");
+        ConfigurationSection paste = plugin.conf().getConfigurationSection("island.paste");
         centerX = paste != null ? paste.getInt("x", 0) : 0;
         centerZ = paste != null ? paste.getInt("z", 0) : 0;
 

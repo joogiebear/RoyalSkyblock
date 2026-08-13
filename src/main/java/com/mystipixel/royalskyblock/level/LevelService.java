@@ -298,7 +298,7 @@ public final class LevelService {
     }
 
     private int pasteAxis(String axis) {
-        ConfigurationSection paste = plugin.getConfig().getConfigurationSection("island.paste");
+        ConfigurationSection paste = plugin.conf().getConfigurationSection("island.paste");
         return paste != null ? paste.getInt(axis, 0) : 0;
     }
 

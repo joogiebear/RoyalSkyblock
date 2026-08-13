@@ -44,7 +44,7 @@ public final class IslandMobTargetingBridge implements Listener {
 
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onTarget(EntityTargetLivingEntityEvent event) {
-        if (!plugin.getConfig().getBoolean("island-mobs.intimidation.enabled", true)) {
+        if (!plugin.conf().getBoolean("island-mobs.intimidation.enabled", true)) {
             return;
         }
         if (!(event.getTarget() instanceof Player player)) {
@@ -69,7 +69,7 @@ public final class IslandMobTargetingBridge implements Listener {
      */
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
-        if (!plugin.getConfig().getBoolean("island-mobs.intimidation.enabled", true)) {
+        if (!plugin.conf().getBoolean("island-mobs.intimidation.enabled", true)) {
             return;
         }
         if (!(event.getEntity() instanceof Player player)) {
@@ -98,7 +98,7 @@ public final class IslandMobTargetingBridge implements Listener {
     /** {@code min(combat level, intimidation stat)} — or the raw stat when the cap is turned off. */
     private int ignoreLevel(Player player) {
         int level = intimidation.levelOf(player);
-        if (plugin.getConfig().getBoolean("island-mobs.intimidation.cap-to-combat-level", true)) {
+        if (plugin.conf().getBoolean("island-mobs.intimidation.cap-to-combat-level", true)) {
             level = Math.min(level, combat.levelOf(player));
         }
         return level;

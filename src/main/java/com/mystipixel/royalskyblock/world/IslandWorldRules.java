@@ -38,7 +38,7 @@ public final class IslandWorldRules {
         if (world == null) {
             return;
         }
-        ConfigurationSection sec = plugin.getConfig().getConfigurationSection("island.world-rules.gamerules");
+        ConfigurationSection sec = plugin.conf().getConfigurationSection("island.world-rules.gamerules");
         if (sec == null) {
             return;
         }
@@ -98,12 +98,12 @@ public final class IslandWorldRules {
      */
     public void applyGameMode(Player player) {
         if (player == null
-                || !plugin.getConfig().getBoolean("island.world-rules.enforce-gamemode", true)
+                || !plugin.conf().getBoolean("island.world-rules.enforce-gamemode", true)
                 || player.hasPermission("royalskyblock.playmode.bypass")
                 || plugin.islands().getIslandByWorld(player.getWorld()) == null) {
             return;
         }
-        GameMode target = parseGameMode(plugin.getConfig().getString("island.world-rules.gamemode", "survival"));
+        GameMode target = parseGameMode(plugin.conf().getString("island.world-rules.gamemode", "survival"));
         if (target != null && player.getGameMode() != target) {
             player.setGameMode(target);
         }

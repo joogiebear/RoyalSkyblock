@@ -29,7 +29,7 @@ public final class ConfigValidator {
 
     public void validate() {
         List<String> warnings = new ArrayList<>();
-        FileConfiguration cfg = plugin.getConfig();
+        FileConfiguration cfg = plugin.conf();
 
         String storage = cfg.getString("storage.type", "sqlite").toLowerCase(Locale.ROOT);
         if (!storage.equals("sqlite") && !storage.equals("mysql")) {

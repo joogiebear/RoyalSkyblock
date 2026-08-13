@@ -139,7 +139,7 @@ public final class ProfileManager {
     }
 
     private boolean debug() {
-        return plugin.getConfig().getBoolean("settings.debug", false);
+        return plugin.conf().getBoolean("settings.debug", false);
     }
 
     /** Drop a preload for a player who never actually joined (failed login, kick at the door). */
@@ -261,7 +261,7 @@ public final class ProfileManager {
      */
     public CompletableFuture<Profile> createProfile(Player player, Gamemode gamemode, @Nullable String name) {
         List<Profile> existing = storage.getProfilesByOwner(player.getUniqueId());
-        int max = plugin.getConfig().getInt("profiles.max-profiles", 3);
+        int max = plugin.conf().getInt("profiles.max-profiles", 3);
         if (existing.size() >= max) {
             return CompletableFuture.failedFuture(
                     new IllegalStateException("You've reached the profile limit (" + max + ")."));
@@ -383,11 +383,11 @@ public final class ProfileManager {
         }
         Island island = plugin.islands().getIslandByProfile(active.id());
         int max = island != null ? plugin.upgrades().coopMemberCap(island)
-                : plugin.getConfig().getInt("coop.max-members", 4);
+                : plugin.conf().getInt("coop.max-members", 4);
         if (active.memberCount() >= max) {
             return "This profile is full (" + max + " members).";
         }
-        long timeout = plugin.getConfig().getLong("coop.invite-timeout-seconds", 60) * 1000L;
+        long timeout = plugin.conf().getLong("coop.invite-timeout-seconds", 60) * 1000L;
         pendingInvites.put(target.getUniqueId(), new Invite(active.id(), inviter.getName(), System.currentTimeMillis() + timeout));
         return null;
     }
@@ -414,7 +414,7 @@ public final class ProfileManager {
         }
         Island island = plugin.islands().getIslandByProfile(profile.id());
         int max = island != null ? plugin.upgrades().coopMemberCap(island)
-                : plugin.getConfig().getInt("coop.max-members", 4);
+                : plugin.conf().getInt("coop.max-members", 4);
         if (profile.memberCount() >= max) {
             return new AcceptResult(null, "full");
         }

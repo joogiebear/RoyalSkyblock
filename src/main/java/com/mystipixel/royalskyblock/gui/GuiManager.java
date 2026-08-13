@@ -661,12 +661,12 @@ public final class GuiManager implements Listener {
         }
 
         boolean canWithdraw = true;
-        if (coop && plugin.getConfig().getBoolean("coop.bank.withdraw-requires-manager", false)) {
+        if (coop && plugin.conf().getBoolean("coop.bank.withdraw-requires-manager", false)) {
             IslandRole role = profile.roleOf(player.getUniqueId());
             canWithdraw = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
         }
 
-        List<Integer> amounts = plugin.getConfig().getIntegerList("coop.bank.amounts");
+        List<Integer> amounts = plugin.conf().getIntegerList("coop.bank.amounts");
         if (amounts.isEmpty()) {
             amounts = List.of(100, 1000, 10000);
         }
@@ -914,7 +914,7 @@ public final class GuiManager implements Listener {
     private int coopMax(Profile profile) {
         Island island = plugin.islands().getIslandByProfile(profile.id());
         return island != null ? plugin.upgrades().coopMemberCap(island)
-                : plugin.getConfig().getInt("coop.max-members", 4);
+                : plugin.conf().getInt("coop.max-members", 4);
     }
 
     private ItemStack coopInfoIcon(Profile profile, int max) {

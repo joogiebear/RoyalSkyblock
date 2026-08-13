@@ -71,8 +71,9 @@ dependencies {
     // com.sk89q.worldedit.* type is only touched when WorldEdit/FAWE is present at runtime.
     compileOnly("com.sk89q.worldedit:worldedit-bukkit:7.3.6")
 
-    // bStats is still shaded (relocated) into the jar; it is not a library-loader artifact.
-    implementation("org.bstats:bstats-bukkit:3.2.1")
+    // No bStats dependency: eco registers metrics itself from the id in eco.yml, and the plugin
+    // supplies its charts through EcoPlugin.getCustomCharts(). Shading our own copy as well would
+    // double-report.
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.mockito:mockito-core:5.14.2")
@@ -135,6 +136,4 @@ tasks.shadowJar {
     relocate("kotlin.jvm", "com.willfp.eco.libs.kotlin.jvm")
     relocate("kotlin.coroutines", "com.willfp.eco.libs.kotlin.coroutines")
     relocate("kotlin.reflect", "com.willfp.eco.libs.kotlin.reflect")
-
-    relocate("org.bstats", "com.mystipixel.royalskyblock.libs.bstats")
 }

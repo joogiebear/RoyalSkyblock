@@ -55,7 +55,7 @@ public final class EcoMobsStrengthBridge implements Listener {
     // finished configuring the entity (the event carries an already-set-up LivingMob).
     @EventHandler(priority = EventPriority.HIGH)
     public void onSpawn(EcoMobSpawnEvent event) {
-        if (!plugin.getConfig().getBoolean("ecomobs.enabled", true)) {
+        if (!plugin.conf().getBoolean("ecomobs.enabled", true)) {
             return;
         }
         Mob entity = event.getMob().getEntity();
@@ -75,8 +75,8 @@ public final class EcoMobsStrengthBridge implements Listener {
 
     /** {@code 1 + level*scale}, clamped to {@code [1, max-multiplier]}. */
     private double multiplier(double level, String scaleKey, double scaleDefault) {
-        double scale = plugin.getConfig().getDouble("ecomobs." + scaleKey, scaleDefault);
-        double max = plugin.getConfig().getDouble("ecomobs.max-multiplier", 5.0);
+        double scale = plugin.conf().getDouble("ecomobs." + scaleKey, scaleDefault);
+        double max = plugin.conf().getDouble("ecomobs.max-multiplier", 5.0);
         return Math.max(1.0, Math.min(max, 1.0 + level * scale));
     }
 
