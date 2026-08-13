@@ -28,6 +28,7 @@ import com.mystipixel.royalskyblock.island.SchematicService
 import com.mystipixel.royalskyblock.island.WorldEditSchematics
 import com.mystipixel.royalskyblock.level.LevelService
 import com.mystipixel.royalskyblock.libreforge.ConditionMinionCount
+import com.mystipixel.royalskyblock.libreforge.IslandConditions
 import com.mystipixel.royalskyblock.libreforge.MinionTriggers
 import com.mystipixel.royalskyblock.libreforge.RoyalHolderListener
 import com.mystipixel.royalskyblock.libreforge.RoyalHolders
@@ -291,6 +292,10 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         this.generatorService = GeneratorService(this)
         server.pluginManager.registerEvents(GeneratorListener(this), this)
         server.pluginManager.registerEvents(IslandPortalListener(this), this)
+
+        // RoyalSkyblock's own island state, published to libreforge so any eco plugin — and this
+        // plugin's own perks and upgrades — can ask questions about an island in config.
+        IslandConditions.register()
 
         // Publish EcoMinions activity to libreforge. EcoMinions registers no elements of its own, so
         // without this nothing in any eco config can react to a minion.
