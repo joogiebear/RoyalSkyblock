@@ -17,6 +17,7 @@ import com.mystipixel.royalskyblock.hooks.EcoSkillsCombatSource
 import com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource
 import com.mystipixel.royalskyblock.hooks.IslandMobProvider
 import com.mystipixel.royalskyblock.hooks.IslandMobTargetingBridge
+import com.mystipixel.royalskyblock.hooks.IslandPlaceholders
 import com.mystipixel.royalskyblock.hooks.RoyalSkyblockExpansion
 import com.mystipixel.royalskyblock.hooks.VaultHook
 import com.mystipixel.royalskyblock.island.GeneratorService
@@ -28,6 +29,7 @@ import com.mystipixel.royalskyblock.island.SchematicService
 import com.mystipixel.royalskyblock.island.WorldEditSchematics
 import com.mystipixel.royalskyblock.level.LevelService
 import com.mystipixel.royalskyblock.libreforge.ConditionMinionCount
+import com.mystipixel.royalskyblock.libreforge.EcoPlaceholders
 import com.mystipixel.royalskyblock.libreforge.IslandConditions
 import com.mystipixel.royalskyblock.libreforge.IslandTriggers
 import com.mystipixel.royalskyblock.libreforge.MenuChains
@@ -128,7 +130,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     private var ecoBridge: EcoProfileBridge? = null
     private var messageManager: MessageManager? = null
     private var guiManager: GuiManager? = null
-    private var rsbExpansion: RoyalSkyblockExpansion? = null
+    /** Resolves every placeholder. Independent of PlaceholderAPI; both front ends share it. */
+    private var placeholders: IslandPlaceholders? = null
     private var papiRegistered = false
 
     /**
@@ -256,14 +259,15 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         server.pluginManager.registerEvents(guiManager!!, this)
         server.pluginManager.registerEvents(borderService!!, this)
 
-        // PlaceholderAPI expansion (%royalskyblock_...%) for TAB / scoreboards / chat. Soft — only
-        // registers if PlaceholderAPI is installed.
+        // Placeholders. Registered with eco unconditionally, so %royalskyblock_...% resolves inside
+        // eco configs — effect chains, menu titles, item lore — on any server, with or without
+        // PlaceholderAPI. The PAPI expansion is an additional front end onto the same resolver, for
+        // TAB, scoreboards and chat.
+        val resolver = IslandPlaceholders(this)
+        this.placeholders = resolver
+        EcoPlaceholders.register(this, resolver)
         if (server.pluginManager.isPluginEnabled("PlaceholderAPI")) {
-            val expansion = RoyalSkyblockExpansion(this)
-            this.rsbExpansion = expansion
-            if (expansion.register()) {
-                papiRegistered = true
-            }
+            papiRegistered = RoyalSkyblockExpansion(this, resolver).register()
         }
 
         // Resume in-progress upgrade timers and complete any that elapsed while offline.
@@ -366,16 +370,15 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // server's cost scales with islands-ever-visited instead of players online.
         server.scheduler.runTaskTimer(this, Runnable { unloadService?.tick() }, 200L, 100L)
 
-        // The level leaderboard is refreshed off-thread.
-        if (papiRegistered) {
-            server.scheduler.runTaskTimerAsynchronously(this, Runnable {
-                try {
-                    rsbExpansion?.refreshLeaderboard()
-                } catch (ex: Exception) {
-                    logger.warning("Placeholder leaderboard refresh failed: ${ex.message}")
-                }
-            }, 20L, 60L * 20L)
-        }
+        // The level leaderboard is refreshed off-thread. No longer gated on PlaceholderAPI: the rank
+        // placeholder is served to eco as well, so the cache has to be warm regardless.
+        server.scheduler.runTaskTimerAsynchronously(this, Runnable {
+            try {
+                placeholders?.refreshLeaderboard()
+            } catch (ex: Exception) {
+                logger.warning("Placeholder leaderboard refresh failed: ${ex.message}")
+            }
+        }, 20L, 60L * 20L)
     }
 
     /** A one-glance boot summary: which dependencies are active and what an admin should configure first. */
@@ -407,8 +410,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             else "off (optional — enable in perks.yml)"
         )
         logger.info(
-            " Placeholders     : " + if (papiRegistered) "registered (%royalskyblock_...%)"
-            else "PlaceholderAPI not found"
+            " Placeholders     : registered with eco (%royalskyblock_...%)"
+                + if (papiRegistered) " + PlaceholderAPI" else " — PlaceholderAPI not found"
         )
         logger.info(" ---------------------------------------------------------------")
         logger.info(" Configure first  : spawn.world + currencies in config.yml")
