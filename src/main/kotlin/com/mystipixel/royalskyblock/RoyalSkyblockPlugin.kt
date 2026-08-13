@@ -7,6 +7,7 @@ import com.mystipixel.royalskyblock.command.BankCommand
 import com.mystipixel.royalskyblock.command.IslandCommand
 import com.mystipixel.royalskyblock.config.ConfigValidator
 import com.mystipixel.royalskyblock.currency.CurrencyService
+import com.mystipixel.royalskyblock.data.EcoStorage
 import com.mystipixel.royalskyblock.data.SqlStorage
 import com.mystipixel.royalskyblock.data.Storage
 import com.mystipixel.royalskyblock.gui.GuiManager
@@ -207,12 +208,39 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         cachedConfig = null
     }
 
+    /**
+     * Pick the metadata store from `storage.type`.
+     *
+     * `SQLITE`/`MYSQL` use this plugin's own database; `ECO` hands everything to eco's data layer,
+     * which is how the rest of the suite works and what makes islands network-shared without a
+     * second database to configure. SQLite stays the default so no existing server changes backend
+     * on an update.
+     *
+     * Switching an existing server to `ECO` is refused while a SQLite file is still sitting there:
+     * the migration is not written yet, and starting empty would look exactly like every island
+     * having been deleted. Refusing is loud; silently starting on an empty store is not.
+     */
+    private fun createStorage(): Storage? {
+        val type = conf().getString("storage.type", "SQLITE")!!.uppercase(Locale.ROOT)
+        if (type != "ECO") {
+            return SqlStorage(this)
+        }
+        val sqliteFile = File(dataFolder, conf().getString("storage.sqlite-file", "islands.db")!!)
+        if (sqliteFile.exists()) {
+            logger.severe("storage.type is ECO but ${sqliteFile.name} still exists.")
+            logger.severe("Migrating SQLite data into eco is not implemented yet, so starting on the")
+            logger.severe("eco store would come up with no islands. Set storage.type back to SQLITE.")
+            return null
+        }
+        return EcoStorage(this)
+    }
+
     override fun handleEnable() {
         this.messageManager = MessageManager(this)
 
-        val store = SqlStorage(this)
+        val store = createStorage()
         this.storage = store
-        if (!store.connect()) {
+        if (store == null || !store.connect()) {
             logger.severe("Storage failed to initialise — disabling RoyalSkyblock.")
             server.pluginManager.disablePlugin(this)
             return

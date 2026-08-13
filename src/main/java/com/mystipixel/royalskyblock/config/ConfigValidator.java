@@ -32,8 +32,8 @@ public final class ConfigValidator {
         FileConfiguration cfg = plugin.conf();
 
         String storage = cfg.getString("storage.type", "sqlite").toLowerCase(Locale.ROOT);
-        if (!storage.equals("sqlite") && !storage.equals("mysql")) {
-            warnings.add("storage.type '" + storage + "' is invalid — use 'sqlite' or 'mysql'.");
+        if (!Set.of("sqlite", "mysql", "eco").contains(storage)) {
+            warnings.add("storage.type '" + storage + "' is invalid — use 'sqlite', 'mysql', or 'eco'.");
         }
         String worldSrc = cfg.getString("world.slime-data-source", "file").toLowerCase(Locale.ROOT);
         if (!Set.of("file", "mysql", "mongo").contains(worldSrc)) {

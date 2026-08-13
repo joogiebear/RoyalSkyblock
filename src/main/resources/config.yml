@@ -25,7 +25,19 @@
 # dual-dialect layer used across the Royal suite. The island BLOCKS live in the
 # slime data-source below, not here.
 storage:
-  # sqlite (default, zero-setup) or mysql (recommended for a network).
+  # sqlite (default, zero-setup), mysql (a network), or eco.
+  #
+  # eco keeps islands, profiles, rosters and banks in eco's own data layer, exactly as every other
+  # plugin in the suite does — whatever data-handler eco is set to (yaml/mysql/mariadb/mongodb) holds
+  # this plugin's data too, the mysql block below is ignored, and there is no second database to
+  # configure or back up. With eco on mysql/mongodb every server on a network shares one set of
+  # islands. Two things to know: eco flushes writes on its own save interval rather than immediately,
+  # and it caches what it has loaded, so another server's writes are not picked up until restart —
+  # the shared views (leaderboard, visit browser) can lag behind.
+  #
+  # New servers only for now. Migrating an existing islands.db into eco is not implemented, and the
+  # plugin refuses to start on eco while that file is still present rather than come up with no
+  # islands.
   type: sqlite
   # SQLite database file name (under the plugin folder).
   sqlite-file: islands.db

@@ -80,9 +80,19 @@ public final class EcoProfileBridge {
             if (key.isLocal()) {
                 continue; // session-local keys aren't part of saved progression
             }
+            if (OWN_NAMESPACE.equals(key.getKey().getNamespace())) {
+                // Our own keys are storage, not progression. On the eco backend they include which
+                // profile the player is on — swapping that during a profile switch would rewrite the
+                // answer to the question being asked. EcoStorage also keeps player-scoped rows off the
+                // player's real UUID, so this is the second of two reasons it can't happen.
+                continue;
+            }
             copyKey(src, dst, key);
         }
     }
+
+    /** Lower-cased plugin name, which is the namespace of every key this plugin registers. */
+    private static final String OWN_NAMESPACE = "royalskyblock";
 
     private static <T> void copyKey(Profile src, Profile dst, PersistentDataKey<T> key) {
         dst.write(key, src.read(key));
