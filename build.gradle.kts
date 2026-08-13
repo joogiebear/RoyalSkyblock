@@ -34,6 +34,12 @@ dependencies {
     // eco platform. Now a HARD dependency (plugin.yml `depend: [eco]`) — RoyalSkyblock is built
     // around the eco/libreforge element system rather than merely tolerating it.
     compileOnly("com.willfp:eco:$ecoVersion")
+
+    // Prebuilt eco GUI components (pagination, menuStateVar). Shipped in the jar rather than
+    // compileOnly — eco does not provide it at runtime — and relocated below, which is how the
+    // Auxilor plugins consume it. Used by the menu engine's port onto eco's Menu API.
+    implementation("com.willfp:ecomponent:1.5.0")
+
     compileOnly("org.jetbrains:annotations:26.0.2")
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
 
@@ -151,6 +157,10 @@ tasks.shadowJar {
 
     // Mandatory for libreforge plugins: each plugin relocates its own copy of the loader.
     relocate("com.willfp.libreforge.loader", "com.mystipixel.royalskyblock.libreforge.loader")
+
+    // ecomponent is bundled, so it must be relocated too — otherwise two eco plugins shipping
+    // different versions clash on the same classes.
+    relocate("com.willfp.ecomponent", "com.mystipixel.royalskyblock.ecomponent")
 
     // Match eco's own relocation so every eco plugin shares one Kotlin runtime.
     relocate("kotlin", "com.willfp.eco.libs.kotlin")
