@@ -21,6 +21,28 @@
 #    cost       : pay this, then wait `time` for the upgrade to finish
 #    skip-cost  : pay this instead to finish instantly
 #    time       : the wait — 2d / 4h / 30m / 45s / 0   (0 = instant)
+#    effects    : OPTIONAL libreforge effect chain granted while the island sits at this
+#                 tier — the same `id:`/`args:` dialect as the rest of the eco suite, so a
+#                 tier can grant anything eco can express rather than only the built-in
+#                 `effect:` above. `conditions:` works here too.
+#
+#                 Applies to ANYONE standing on the island, members and visitors alike —
+#                 the island is what was upgraded, so the buff belongs to the place. (Perks
+#                 in perks.yml take the same blocks but apply only on your own island.)
+#
+#                 Only the CURRENT tier's chain is active, not every tier beneath it — the
+#                 same way `value:` is the total at that tier rather than an increment. Write
+#                 each tier's chain as the full effect you want at that tier.
+#
+#                   3:
+#                     value: 3
+#                     cost: {currency: coins, amount: 40000}
+#                     time: "1d"
+#                     effects:
+#                       - id: permanent_potion_effect
+#                         args:
+#                           effect: haste
+#                           level: 2        # 1 = level I, so this is Haste II
 #
 #  A cost / skip-cost is a currency + amount, where `currency` is a key from the
 #  `currencies:` section of config.yml. These upgrades use `coins` (your Vault

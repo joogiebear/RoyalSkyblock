@@ -27,6 +27,8 @@ import com.mystipixel.royalskyblock.island.NoOpSchematics
 import com.mystipixel.royalskyblock.island.SchematicService
 import com.mystipixel.royalskyblock.island.WorldEditSchematics
 import com.mystipixel.royalskyblock.level.LevelService
+import com.mystipixel.royalskyblock.libreforge.RoyalHolderListener
+import com.mystipixel.royalskyblock.libreforge.RoyalHolders
 import com.mystipixel.royalskyblock.listener.CommandGateListener
 import com.mystipixel.royalskyblock.listener.FlowLimiterListener
 import com.mystipixel.royalskyblock.listener.GeneratorListener
@@ -281,6 +283,11 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         server.pluginManager.registerEvents(GeneratorListener(this), this)
         server.pluginManager.registerEvents(IslandPortalListener(this), this)
 
+        // Perks and island upgrades as libreforge effect holders. Registered after the services they
+        // read (perks, upgrades, islands, profiles) exist.
+        RoyalHolders.register(this)
+        server.pluginManager.registerEvents(RoyalHolderListener(), this)
+
         startIslandMobSpawning()
 
         logger.info(
@@ -435,6 +442,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         borderService?.refreshAll() // re-apply borders live (colour/size/toggle changes)
         guiManager?.reload()
         mobSpawnService?.reloadSettings() // toggling island-mobs.enabled on/off still needs a restart
+        RoyalHolders.reload(this) // recompile perk/upgrade effect chains and re-provide them
         ConfigValidator(this).validate()
     }
 

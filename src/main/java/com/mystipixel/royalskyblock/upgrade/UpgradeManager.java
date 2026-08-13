@@ -200,7 +200,21 @@ public final class UpgradeManager {
                 reapplyBorder(island);
             }
         }
+        // The new tier may carry a libreforge effect chain, and libreforge caches a player's holders —
+        // without this the buff would not appear until they next crossed a world boundary.
+        refreshHoldersOnIsland(island);
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+    }
+
+    /** Re-provide libreforge holders for everyone currently standing on the island. */
+    private void refreshHoldersOnIsland(Island island) {
+        org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
+        if (world == null) {
+            return;                              // island not loaded — holders resolve on next join
+        }
+        for (org.bukkit.entity.Player player : world.getPlayers()) {
+            com.mystipixel.royalskyblock.libreforge.RoyalHolders.refresh(player);
+        }
     }
 
     /** Max concurrent visitors allowed on the island (base + guest-slots upgrade). */
