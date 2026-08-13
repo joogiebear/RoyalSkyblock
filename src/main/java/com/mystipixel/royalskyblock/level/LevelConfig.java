@@ -61,6 +61,9 @@ public final class LevelConfig {
         autoRecalcMaxPerCycle = Math.max(1, cfg.getInt("auto-recalc.max-per-cycle", 3));
 
         rewards.clear();
+        // Reward chains are recompiled alongside the command lists, so a broken one is reported while
+        // levels.yml is being read rather than when an island happens to reach that level.
+        com.mystipixel.royalskyblock.libreforge.LevelRewardChains.invalidate();
         ConfigurationSection rewardSec = cfg.getConfigurationSection("rewards");
         if (rewardSec != null) {
             for (String key : rewardSec.getKeys(false)) {
@@ -71,10 +74,15 @@ public final class LevelConfig {
                     plugin.getLogger().warning("levels.yml rewards: '" + key + "' isn't a level number — skipping.");
                     continue;
                 }
+                // One list, two forms: getStringList sees only the console commands and getMapList
+                // only the effect blocks, so each side picks up what it understands and neither
+                // existing config nor new one has to be converted.
                 List<String> commands = new ArrayList<>(rewardSec.getStringList(key));
                 if (!commands.isEmpty()) {
                     rewards.put(level, commands);
                 }
+                com.mystipixel.royalskyblock.libreforge.LevelRewardChains.compile(
+                        level, rewardSec.getMapList(key));
             }
         }
 

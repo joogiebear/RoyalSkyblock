@@ -48,6 +48,19 @@ auto-recalc:
 #     - "give %owner% diamond 16"               # vanilla items
 #   10:
 #     - "eco give %owner% 5000"
+#
+# A reward can also be a libreforge EFFECT rather than a command — the same id:/args:
+# blocks the rest of the eco suite uses, so a reward can carry a chance, a condition or
+# a delay that a console command cannot. Both forms live in the same list:
+#   25:
+#     - "eco give %owner% 10000"                 # command, as above
+#     - id: give_xp                              # any of the 275 eco effects
+#       args:
+#         amount: 500
+#
+# Commands run ONCE per level and address the owner by name. Effects run once per level
+# PER ONLINE MEMBER, because an effect targets a player while an island belongs to a
+# profile — so on a coop island every member online earns the reward.
 rewards: {}
 
 # ── Block values ────────────────────────────────────────────────────────────────

@@ -153,6 +153,16 @@ public final class LevelService {
         Profile profile = plugin.profiles().getProfile(island.profileId());
         String owner = profile == null ? "" : ownerName(profile);
         for (int lvl = from + 1; lvl <= to; lvl++) {
+            // Chains run per online member: an effect targets a player, while the commands below are
+            // server-side and address the owner by name, so they stay once-per-level.
+            if (!com.mystipixel.royalskyblock.libreforge.LevelRewardChains.isEmpty() && profile != null) {
+                for (var member : profile.members()) {
+                    Player online = Bukkit.getPlayer(member.uuid());
+                    if (online != null) {
+                        com.mystipixel.royalskyblock.libreforge.LevelRewardChains.run(online, island, lvl);
+                    }
+                }
+            }
             List<String> commands = config.rewardsFor(lvl);
             if (commands == null) {
                 continue;
