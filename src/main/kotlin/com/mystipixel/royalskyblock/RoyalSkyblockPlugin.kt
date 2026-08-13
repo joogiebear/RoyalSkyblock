@@ -52,7 +52,9 @@ import com.willfp.eco.core.bstats.EcoMetricsChart
 import com.willfp.libreforge.loader.LibreforgePlugin
 import com.willfp.libreforge.loader.configs.ConfigCategory
 import org.bukkit.configuration.file.FileConfiguration
+import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
+import java.io.File
 import java.io.IOException
 import java.util.Locale
 import java.util.UUID
@@ -159,12 +161,24 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     /**
      * Read-side config accessor. Use this instead of `getConfig()` everywhere in the plugin — see
      * the class docs for why `getConfig()` is unusable under eco.
+     *
+     * Reads `config.yml` off disk rather than going through `configYml.toBukkit()`. eco's conversion
+     * does not round-trip *nested* sections as Bukkit [org.bukkit.configuration.ConfigurationSection]s:
+     * `getConfigurationSection("currencies")` resolves but `getConfigurationSection("coins")` inside
+     * it comes back null, so CurrencyService silently skipped every currency and the config check
+     * started reporting "currency 'coins' isn't defined". Eleven call sites use nested sections, and
+     * most of them fall back to defaults rather than failing loudly, so this went unnoticed until the
+     * validator caught it. Loading the file gives a genuine YamlConfiguration with the exact
+     * semantics the pre-port `getConfig()` had.
+     *
+     * eco still owns writing and merging the file; this only reads it. Safe from [handleEnable]
+     * onwards — eco writes config.yml before the plugin enables.
      */
     fun conf(): FileConfiguration {
         cachedConfig?.let { return it }
-        val converted = configYml.toBukkit() as FileConfiguration
-        cachedConfig = converted
-        return converted
+        val loaded = YamlConfiguration.loadConfiguration(File(dataFolder, "config.yml"))
+        cachedConfig = loaded
+        return loaded
     }
 
     /**
