@@ -27,6 +27,7 @@ import com.mystipixel.royalskyblock.island.NoOpSchematics
 import com.mystipixel.royalskyblock.island.SchematicService
 import com.mystipixel.royalskyblock.island.WorldEditSchematics
 import com.mystipixel.royalskyblock.level.LevelService
+import com.mystipixel.royalskyblock.libreforge.MinionTriggers
 import com.mystipixel.royalskyblock.libreforge.RoyalHolderListener
 import com.mystipixel.royalskyblock.libreforge.RoyalHolders
 import com.mystipixel.royalskyblock.listener.CommandGateListener
@@ -294,6 +295,19 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // read (perks, upgrades, islands, profiles) exist.
         RoyalHolders.register(this)
         server.pluginManager.registerEvents(RoyalHolderListener(), this)
+
+        // Publish EcoMinions activity to libreforge. EcoMinions registers no elements of its own, so
+        // without this nothing in any eco config can react to a minion.
+        if (server.pluginManager.isPluginEnabled("EcoMinions")) {
+            if (MinionTriggers.register(this)) {
+                logger.info("EcoMinions detected — minion triggers registered (minion_pickup, "
+                    + "minion_place, minion_upgrade, minion_fuel).")
+            } else {
+                logger.warning(
+                    "EcoMinions is installed but its API could not be read — minion triggers are off."
+                )
+            }
+        }
 
         startIslandMobSpawning()
 
