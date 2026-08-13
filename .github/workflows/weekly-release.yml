@@ -1,16 +1,18 @@
-name: Weekly Release
+name: Release
 
-# Fires every Friday at 10:00 America/Chicago (Central), DST-safe.
-# GitHub cron is UTC with no DST awareness, so we trigger at both candidate
-# UTC times and gate on the real Central hour inside the job.
+# MANUAL ONLY. The weekly Friday schedule is switched off, not deleted — run this
+# from the Actions tab (or `gh workflow run weekly-release.yml`) when you want a
+# release. To put the schedule back, uncomment the two crons below; they fire at
+# both candidate UTC times because GitHub cron has no DST awareness, and the gate
+# job checks the real Central hour so only the right one proceeds.
 on:
-  schedule:
-    - cron: '0 15 * * 5'   # 10:00 Central during CDT (summer)
-    - cron: '0 16 * * 5'   # 10:00 Central during CST (winter)
+  # schedule:
+  #   - cron: '0 15 * * 5'   # 10:00 Central during CDT (summer)
+  #   - cron: '0 16 * * 5'   # 10:00 Central during CST (winter)
   workflow_dispatch:
     inputs:
       force:
-        description: 'Release even when there are no new commits this week'
+        description: 'Release even when there are no new commits since the last tag'
         type: boolean
         default: false
 
