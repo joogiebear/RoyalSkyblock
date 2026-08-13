@@ -4,7 +4,8 @@
 #  Shown on a Coop profile: pick which bank to open. Personal Bank is your own
 #  per-profile RoyalBank account (native /bank); Coop Bank is the shared account.
 #
-#  RoyalSkyblock's own menu engine (not eco/libreforge):
+#  Rendered through eco's Menu API. The dialect below is RoyalSkyblock's own —
+#  eco draws the menu, this file describes it:
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
 #    slot options: sound: — the sound clicking this slot makes (name / volume / pitch,
