@@ -45,9 +45,11 @@ public final class PerkService {
         if (!new File(plugin.getDataFolder(), "perks.yml").exists()) {
             plugin.saveResource("perks.yml", false);
         }
-        // Fresh install ships the folder, not a monolith. Skipped when perks/ already exists so a
-        // deleted perk stays deleted.
-        if (!new File(plugin.getDataFolder(), "perks").isDirectory()) {
+        // Fresh install ships the folder, not a monolith. Written only when there is neither a perks/
+        // folder NOR a legacy perks.yml that already defines perks — otherwise the shipped defaults
+        // would land beside an admin's own versions of the same ids and, being read first, silently
+        // shadow their tuning.
+        if (!new File(plugin.getDataFolder(), "perks").isDirectory() && !legacyDefinesPerks()) {
             for (String id : DEFAULT_PERKS) {
                 plugin.saveResource("perks/" + id + ".yml", false);
             }
@@ -66,6 +68,17 @@ public final class PerkService {
      * untouched; nothing is auto-split, because rewriting YAML through Bukkit strips every comment.
      * A folder file wins if both define the same id.
      */
+    /** Whether a legacy perks.yml already carries perk definitions (rather than just the switches). */
+    private boolean legacyDefinesPerks() {
+        File file = new File(plugin.getDataFolder(), "perks.yml");
+        if (!file.isFile()) {
+            return false;
+        }
+        ConfigurationSection section =
+                YamlConfiguration.loadConfiguration(file).getConfigurationSection("perks");
+        return section != null && !section.getKeys(false).isEmpty();
+    }
+
     public void reload() {
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "perks.yml"));
         enabled = cfg.getBoolean("enabled", false);
