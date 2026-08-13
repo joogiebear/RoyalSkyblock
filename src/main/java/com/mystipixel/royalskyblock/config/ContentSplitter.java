@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.config;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.libreforge.RoyalHolders;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.BufferedReader;
@@ -211,7 +212,11 @@ public final class ContentSplitter {
         if (apply && !written.isEmpty()) {
             plugin.upgrades().reload();
             plugin.perks().reload();
-            notes.add("Reloaded upgrades and perks.");
+            // The effect chains are compiled separately from the content, and the split just moved the
+            // files they are read from. Without this they would keep serving what was compiled at boot
+            // from a monolith that no longer exists, until something else happened to reload them.
+            RoyalHolders.INSTANCE.reload(plugin);
+            notes.add("Reloaded upgrades, perks, and their effect chains.");
         }
         return new Result(written, skipped, notes);
     }

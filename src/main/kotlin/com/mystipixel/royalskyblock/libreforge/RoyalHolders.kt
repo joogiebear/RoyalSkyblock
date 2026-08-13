@@ -50,26 +50,25 @@ object RoyalHolders {
 
     /** Recompile every chain from disk. Safe to call repeatedly; called on reload. */
     fun reload(plugin: RoyalSkyblockPlugin) {
-        perkHolders = compileSection(plugin, "perks.yml", "perks", "perk")
+        perkHolders = compilePerks(plugin)
         upgradeHolders = compileUpgrades(plugin)
         refreshAll()
     }
 
     /**
-     * Compile a `<file>/<root>/<id>/effects` block per entry — the perks layout.
+     * Every perk's `effects`/`conditions`, from `perks/<id>.yml` and from a legacy `perks.yml`.
+     *
+     * Must read the same two sources as [com.mystipixel.royalskyblock.perk.PerkService], because a
+     * perk is loaded by two things that have to agree: PerkService reads its name, icon and potion
+     * shorthand, this reads its libreforge chain. When only one of them learned about the folder
+     * layout, every folder perk appeared in the menu and reported as loaded while its chain quietly
+     * never compiled — nothing errors, because a perk with no chain is a legal perk.
      */
-    private fun compileSection(
-        plugin: RoyalSkyblockPlugin,
-        fileName: String,
-        root: String,
-        label: String
-    ): Map<String, RoyalHolder> {
-        val section = load(plugin, fileName)?.getConfigurationSection(root) ?: return emptyMap()
+    private fun compilePerks(plugin: RoyalSkyblockPlugin): Map<String, RoyalHolder> {
         val out = mutableMapOf<String, RoyalHolder>()
-        for (key in section.getKeys(false)) {
-            val entry = section.getConfigurationSection(key) ?: continue
-            val context = ViolationContext(plugin, "$label $key")
-            val id = NamespacedKey(plugin, "${label}_${key.lowercase()}")
+        for ((key, entry) in sections(plugin, "perks.yml", "perks", "perks")) {
+            val context = ViolationContext(plugin, "perk $key")
+            val id = NamespacedKey(plugin, "perk_${key.lowercase()}")
             compileRoyalHolder(plugin, id, entry, context)?.let { out[key] = it }
         }
         return out
@@ -77,13 +76,13 @@ object RoyalHolders {
 
     /**
      * Upgrades nest one level deeper than perks: the chain lives on an individual tier, so a track can
-     * grant a different effect at each tier.
+     * grant a different effect at each tier. Same two sources as
+     * [com.mystipixel.royalskyblock.upgrade.UpgradeManager].
      */
     private fun compileUpgrades(plugin: RoyalSkyblockPlugin): Map<String, Map<Int, RoyalHolder>> {
-        val root = load(plugin, "upgrades.yml") ?: return emptyMap()
         val out = mutableMapOf<String, Map<Int, RoyalHolder>>()
-        for (track in root.getKeys(false)) {
-            val tiers = root.getConfigurationSection("$track.tiers") ?: continue
+        for ((track, section) in sections(plugin, "upgrades.yml", null, "upgrades")) {
+            val tiers = section.getConfigurationSection("tiers") ?: continue
             val perTier = mutableMapOf<Int, RoyalHolder>()
             for (tierKey in tiers.getKeys(false)) {
                 val tierNumber = tierKey.toIntOrNull() ?: continue
@@ -95,6 +94,37 @@ object RoyalHolders {
             if (perTier.isNotEmpty()) {
                 out[track] = perTier
             }
+        }
+        return out
+    }
+
+    /**
+     * id -> its config section, gathered from the legacy monolith and then the content folder.
+     *
+     * Mirrors both content loaders exactly: the monolith is read first so a folder file of the same
+     * id replaces it, `_`-prefixed files are examples rather than content, and the file name is the
+     * id. [root] is the section items live under in the monolith, or null when they are at its root.
+     */
+    private fun sections(
+        plugin: RoyalSkyblockPlugin,
+        fileName: String,
+        root: String?,
+        folderName: String
+    ): Map<String, ConfigurationSection> {
+        val out = linkedMapOf<String, ConfigurationSection>()
+
+        val legacy = load(plugin, fileName)
+        val holder = if (root == null) legacy else legacy?.getConfigurationSection(root)
+        if (holder != null) {
+            for (key in holder.getKeys(false)) {
+                holder.getConfigurationSection(key)?.let { out[key] = it }
+            }
+        }
+
+        val files = File(plugin.dataFolder, folderName)
+            .listFiles { _, name -> name.endsWith(".yml") && !name.startsWith("_") }
+        for (file in files.orEmpty()) {
+            out[file.name.dropLast(4)] = YamlConfiguration.loadConfiguration(file)
         }
         return out
     }

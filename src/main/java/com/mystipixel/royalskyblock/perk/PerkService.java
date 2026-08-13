@@ -31,9 +31,19 @@ import java.util.UUID;
  */
 public final class PerkService {
 
-    /** The perks shipped in the jar, written out on a fresh install. */
+    /**
+     * The perks shipped in the jar, written out on a fresh install, in unlock order.
+     *
+     * <p>{@code _overseer} keeps its underscore deliberately: {@link #reload()} skips {@code _}-prefixed
+     * files, so it ships as an example to rename rather than as live content. It is the only perk that
+     * depends on another plugin — both its {@code minion_pickup} trigger and its {@code
+     * minion_count_above} condition come from the EcoMinions bridge — and shipping it enabled would log
+     * violations on every server without EcoMinions and, worse, load the perk with its minion-count gate
+     * silently dropped, handing the bonus to everyone at the required level.
+     */
     private static final String[] DEFAULT_PERKS =
-            {"haste", "renewal", "prospector", "bountiful_veins", "homefield", "scholar"};
+            {"haste", "renewal", "prospector", "swift", "bountiful_veins", "homefield", "_overseer",
+             "scholar"};
 
     private final RoyalSkyblockPlugin plugin;
     private final List<Perk> perks = new ArrayList<>();
