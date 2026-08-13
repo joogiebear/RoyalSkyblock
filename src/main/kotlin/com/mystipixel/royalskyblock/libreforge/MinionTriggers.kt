@@ -1,10 +1,6 @@
 package com.mystipixel.royalskyblock.libreforge
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin
-import com.willfp.libreforge.toDispatcher
-import com.willfp.libreforge.triggers.Trigger
-import com.willfp.libreforge.triggers.TriggerData
-import com.willfp.libreforge.triggers.TriggerParameter
 import com.willfp.libreforge.triggers.Triggers
 import org.bukkit.Bukkit
 import org.bukkit.Location
@@ -44,16 +40,16 @@ object MinionTriggers {
     private const val EVENT_PACKAGE = "com.exanthiax.ecominions.api.event."
 
     /** Fires when a player collects the contents of a minion. `value` is the minion's level. */
-    val PICKUP = MinionTrigger("minion_pickup", "Fires when a player collects from a minion.")
+    val PICKUP = RoyalTrigger("minion_pickup", "Fires when a player collects from a minion.", "minions")
 
     /** Fires when a player places a minion. `value` is the minion's level. */
-    val PLACE = MinionTrigger("minion_place", "Fires when a player places a minion.")
+    val PLACE = RoyalTrigger("minion_place", "Fires when a player places a minion.", "minions")
 
     /** Fires when a player upgrades a minion. `value` is the tier reached. */
-    val UPGRADE = MinionTrigger("minion_upgrade", "Fires when a player upgrades a minion.")
+    val UPGRADE = RoyalTrigger("minion_upgrade", "Fires when a player upgrades a minion.", "minions")
 
     /** Fires when a player fuels a minion. `value` is the minion's level. */
-    val FUEL = MinionTrigger("minion_fuel", "Fires when a player fuels a minion.")
+    val FUEL = RoyalTrigger("minion_fuel", "Fires when a player fuels a minion.", "minions")
 
     /**
      * Register the triggers and bind them to EcoMinions' events. Returns false when EcoMinions is
@@ -88,7 +84,7 @@ object MinionTriggers {
         plugin: RoyalSkyblockPlugin,
         loader: ClassLoader,
         simpleName: String,
-        trigger: MinionTrigger,
+        trigger: RoyalTrigger,
         value: MinionValue
     ) {
         @Suppress("UNCHECKED_CAST")
@@ -137,35 +133,4 @@ object MinionTriggers {
 
     /** The executor does the work; Bukkit just needs a listener instance to own the registration. */
     private object EmptyListener : Listener
-}
-
-/**
- * A libreforge trigger fired from outside itself.
- *
- * Triggers normally carry their own `@EventHandler`, which needs the event type at compile time.
- * EcoMinions is reflective here, so [fire] is called by the dynamically-registered executor instead —
- * `Trigger.dispatch` is public, so this needs no special access.
- */
-class MinionTrigger(id: String, override val description: String) : Trigger(id) {
-
-    override val parameters = setOf(
-        TriggerParameter.PLAYER,
-        TriggerParameter.LOCATION,
-        TriggerParameter.TEXT,
-        TriggerParameter.VALUE
-    )
-
-    override val categories = setOf("minions")
-
-    fun fire(player: Player, location: Location?, minionTypeId: String?, value: Double) {
-        dispatch(
-            player.toDispatcher(),
-            TriggerData(
-                player = player,
-                location = location ?: player.location,
-                text = minionTypeId ?: "",
-                value = value
-            )
-        )
-    }
 }

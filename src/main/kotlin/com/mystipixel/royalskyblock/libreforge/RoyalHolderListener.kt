@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.libreforge
 import org.bukkit.event.EventHandler
 import org.bukkit.event.EventPriority
 import org.bukkit.event.Listener
+import com.mystipixel.royalskyblock.RoyalSkyblockPlugin
 import org.bukkit.event.player.PlayerChangedWorldEvent
 import org.bukkit.event.player.PlayerJoinEvent
 
@@ -17,6 +18,12 @@ class RoyalHolderListener : Listener {
     @EventHandler(priority = EventPriority.MONITOR)
     fun onChangeWorld(event: PlayerChangedWorldEvent) {
         RoyalHolders.refresh(event.player)
+
+        // Every island is its own world, so a world change IS entering or leaving one. Fired here
+        // rather than from a movement listener because that is the only moment it can happen.
+        val islands = RoyalSkyblockPlugin.get().islands()
+        islands.getIslandByWorld(event.from)?.let { IslandTriggers.crossed(event.player, it, false) }
+        islands.getIslandByWorld(event.player.world)?.let { IslandTriggers.crossed(event.player, it, true) }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)

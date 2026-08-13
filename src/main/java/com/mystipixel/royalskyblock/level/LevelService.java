@@ -167,10 +167,10 @@ public final class LevelService {
             }
         }
         island.setRewardLevel(to);
-        notifyMembers(profile, to);
+        notifyMembers(profile, island, to);
     }
 
-    private void notifyMembers(Profile profile, int level) {
+    private void notifyMembers(Profile profile, Island island, int level) {
         if (profile == null) {
             return;
         }
@@ -178,6 +178,9 @@ public final class LevelService {
             Player online = Bukkit.getPlayer(member.uuid());
             if (online != null) {
                 plugin.messages().send(online, "level.up", "level", String.valueOf(level));
+                // Dispatched per online member: a libreforge trigger needs a player, and an island
+                // belongs to a profile rather than a person.
+                com.mystipixel.royalskyblock.libreforge.IslandTriggers.levelUp(online, island, level);
             }
         }
     }

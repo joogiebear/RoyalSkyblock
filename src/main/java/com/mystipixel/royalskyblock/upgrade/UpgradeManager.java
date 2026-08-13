@@ -82,12 +82,18 @@ public final class UpgradeManager {
         }
         if (next.isInstant()) {
             setTier(island, def, current + 1);
+            // Fired on purchase, not on completion: a timed upgrade finishes on a task tick with
+            // nobody necessarily online, and a libreforge trigger needs a player to dispatch to.
+            com.mystipixel.royalskyblock.libreforge.IslandTriggers.upgradePurchased(
+                    player, def.key(), current + 1);
             return PurchaseResult.COMPLETED;
         }
         PendingUpgrade pu = new PendingUpgrade(island.id(), def.key(), current + 1,
                 System.currentTimeMillis() + next.timeSeconds() * 1000L);
         pending.put(pkey(island.id(), def.key()), pu);
         plugin.storage().savePending(pu);
+        com.mystipixel.royalskyblock.libreforge.IslandTriggers.upgradePurchased(
+                player, def.key(), current + 1);
         return PurchaseResult.STARTED;
     }
 
