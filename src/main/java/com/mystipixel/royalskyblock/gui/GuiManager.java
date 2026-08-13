@@ -223,6 +223,14 @@ public final class GuiManager implements Listener {
                     for (MenuEffect effect : effects) {
                         execute(viewer, effect);
                     }
+                },
+                // Mirrors the legacy dynamic branch exactly: always sound, and defer the action off
+                // the click event. Running it inline opens the next menu from inside
+                // InventoryClickEvent, which Bukkit does not support cleanly — the menu opens mid-event
+                // and its open sound lands on top of the click, which is heard as a double click.
+                (viewer, action, rightClick) -> {
+                    play(viewer, template, "click", CLICK_FALLBACK);
+                    runNextTick(() -> action.accept(viewer, rightClick));
                 });
         // Track AFTER opening, not before. openInventory closes whatever the player had open and fires
         // InventoryCloseEvent synchronously, so registering first means navigating menu-to-menu has the

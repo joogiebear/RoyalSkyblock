@@ -47,6 +47,18 @@ public final class EcoMenuFactory {
     }
 
     /**
+     * What to run when a code-registered (data-driven) slot is clicked.
+     *
+     * <p>Separate from {@link SlotClickHandler} because the two behave differently: a configured slot
+     * consults its own {@code silent} flag and effect list, while a dynamic slot always sounds and its
+     * action must be deferred off the click event. Both decisions belong to the caller.
+     */
+    @FunctionalInterface
+    public interface DynamicClickHandler {
+        void onClick(Player player, BiConsumer<Player, Boolean> action, boolean rightClick);
+    }
+
+    /**
      * One render of a data-driven menu: what every slot holds, and what the code-registered slots do
      * when clicked.
      *
@@ -150,13 +162,15 @@ public final class EcoMenuFactory {
     public Menu buildDynamic(MenuTemplate template,
                              String title,
                              Function<Player, Rendered> render,
-                             SlotClickHandler configuredClick) {
+                             SlotClickHandler configuredClick,
+                             DynamicClickHandler dynamicClick) {
         MenuBuilder builder = Menu.builder(template.size() / 9)
                 .setTitle(Text.legacy(title))
                 .onRender((player, menu) -> menu.setState(player, STATE_RENDER, render.apply(player)));
 
         for (int index = 0; index < template.size(); index++) {
-            builder.setSlot(row(index), column(index), dynamicSlot(template, index, configuredClick));
+            builder.setSlot(row(index), column(index),
+                    dynamicSlot(template, index, configuredClick, dynamicClick));
         }
         return builder.build();
     }
@@ -166,26 +180,30 @@ public final class EcoMenuFactory {
      * render registered no action for this index, which is how a menu mixes fixed buttons (Back, Close)
      * with generated content.
      */
-    private Slot dynamicSlot(MenuTemplate template, int index, SlotClickHandler configuredClick) {
+    private Slot dynamicSlot(MenuTemplate template, int index,
+                             SlotClickHandler configuredClick, DynamicClickHandler dynamicClick) {
         MenuSlot configured = template.slotAt(index);
         return Slot.builder((SlotProvider) (player, menu) -> {
                     Rendered rendered = menu.getState(player, STATE_RENDER);
                     return rendered == null ? null : rendered.items()[index];
                 })
-                .onLeftClick((SlotHandler) (event, slot, menu) -> click(event, menu, index, configured, configuredClick, false))
-                .onRightClick((SlotHandler) (event, slot, menu) -> click(event, menu, index, configured, configuredClick, true))
+                .onLeftClick((SlotHandler) (event, slot, menu) ->
+                        click(event, menu, index, configured, configuredClick, dynamicClick, false))
+                .onRightClick((SlotHandler) (event, slot, menu) ->
+                        click(event, menu, index, configured, configuredClick, dynamicClick, true))
                 .build();
     }
 
-    private void click(InventoryClickEvent event, Menu menu, int index,
-                       MenuSlot configured, SlotClickHandler configuredClick, boolean rightClick) {
+    private void click(InventoryClickEvent event, Menu menu, int index, MenuSlot configured,
+                       SlotClickHandler configuredClick, DynamicClickHandler dynamicClick,
+                       boolean rightClick) {
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
         Rendered rendered = menu.getState(player, STATE_RENDER);
         BiConsumer<Player, Boolean> action = rendered == null ? null : rendered.actions().get(index);
         if (action != null) {
-            action.accept(player, rightClick);
+            dynamicClick.onClick(player, action, rightClick);
             return;
         }
         if (configured != null) {
