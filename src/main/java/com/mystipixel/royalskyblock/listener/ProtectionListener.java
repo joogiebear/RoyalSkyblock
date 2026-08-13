@@ -104,7 +104,7 @@ public final class ProtectionListener implements Listener {
 
     private boolean strictMode() {
         return "strict".equalsIgnoreCase(
-                plugin.getConfig().getString("island.protection.visitor-mode", "read-only"));
+                plugin.conf().getString("island.protection.visitor-mode", "read-only"));
     }
 
     private void deny(Player player) {

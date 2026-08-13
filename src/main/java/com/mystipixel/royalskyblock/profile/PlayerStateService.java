@@ -128,7 +128,7 @@ public final class PlayerStateService {
      * <p>Configured as hotbar positions 1-9, matching how menus and RoyalJoin place things.
      */
     private int[] externallyManagedSlots() {
-        List<Integer> configured = plugin.getConfig().getIntegerList("profile.externally-managed-hotbar-slots");
+        List<Integer> configured = plugin.conf().getIntegerList("profile.externally-managed-hotbar-slots");
         if (configured.isEmpty()) {
             return EMPTY_SLOTS;
         }

@@ -1,0 +1,155 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Language
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Every player-facing string lives here, under `messages:`. Colours use & codes;
+#  placeholders use the %token% form (e.g. %player%, %error%). `prefix` is prepended
+#  to chat feedback; headers and help lines are sent without it. Reload with /is reload.
+#
+#  This file is also eco's own language file — EcoPlugin requires a lang.yml and will
+#  not load without one, which is why RoyalSkyblock's text lives here rather than in a
+#  separate messages.yml. The first four keys below are the strings eco's command layer
+#  emits itself; everything after them is RoyalSkyblock's.
+#
+#  Upgrading from a version with messages.yml? Nothing to do — your existing text is
+#  copied in automatically on first start and the old file is kept as messages.yml.migrated.
+#
+#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+messages:
+  # ── eco framework strings ──────────────────────────────────────────────────────
+  no-permission: "&cYou don't have permission to do this!"
+  not-player: "&cThis command must be run by a player"
+  invalid-command: "&cUnknown subcommand!"
+  reloaded: "Reloaded in %time%ms!"
+
+  # ── RoyalSkyblock ──────────────────────────────────────────────────────────────
+  prefix: "&6&lRoyalSkyblock &8» &r"
+
+  general:
+    no-permission: "&cYou don't have permission to do that."
+    players-only: "&cOnly players can do that."
+    reloaded: "&aConfiguration reloaded."
+
+  island:
+    # Shown when the island portal has nowhere to send a player (no spawn world configured).
+    portal-no-spawn: "&cThe portal has nowhere to send you — ask an admin to set spawn.world."
+    creating: "&7Creating your island..."
+    created: "&aYour island is ready! Welcome home."
+    create-failed: "&cCouldn't create your island: &7%error%"
+    already-have: "&cYou already have an island. Use &e/is home&c."
+    no-permission-create: "&cYou don't have permission to create an island."
+    worlds-unavailable: "&cIsland worlds are unavailable — the server isn't running Advanced Slime Paper yet."
+    world-not-loaded: "&cYour island world isn't loaded yet — try again in a moment."
+    not-on-island: "&cStand on your island to set that."
+    no-permission-manage: "&cOnly the island owner can do that."
+    spawn-set: "&aIsland spawn set to where you're standing."
+    guest-spawn-set: "&aGuest spawn set to where you're standing."
+    kicked-guests: "&aKicked &e%count% &aguest(s) from your island."
+
+  home:
+    no-island: "&cYou don't have an island yet. Use &e/is create&c."
+    failed: "&cCouldn't teleport you home: &7%error%"
+
+  visit:
+    no-permission: "&cYou don't have permission to visit islands."
+    no-target-island: "&c%player% doesn't have an island."
+    visiting: "&aVisiting &e%player%&a's island."
+    private: "&e%player%&c's island is private — only members can visit."
+    full: "&e%player%&c's island is full — try again later."
+    failed: "&cCouldn't take you there: &7%error%"
+
+  delete:
+    warning: "&c&lWarning: &7this permanently deletes your island and everything on it."
+    confirm-hint: "&7Type &e/is delete confirm &7to proceed."
+    deleting: "&7Deleting your island..."
+    deleted: "&aYour island has been deleted."
+    failed: "&cCouldn't delete your island: &7%error%"
+    evicted: "&eThe island you were on has been deleted."
+
+  protection:
+    cannot-build: "&cYou can't build on this island."
+
+  upgrade:
+    completed: "&a%upgrade% &aupgraded to tier &e%tier%&a!"
+    started: "&aStarted &r%upgrade%&a — ready in &e%time%&a. Right-click to skip the wait."
+    skipped: "&aSkipped the wait — &r%upgrade% &ais now tier &e%tier%&a!"
+    maxed: "&r%upgrade% &7is already maxed out."
+    in-progress: "&r%upgrade% &7is already upgrading — &e%time% &7left."
+    not-in-progress: "&7There's no upgrade in progress to skip."
+    cant-afford: "&cYou can't afford that."
+
+  level:
+    scanning: "&7Scanning your island — this runs in the background."
+    done: "&aIsland level recalculated: &e%level%&a."
+    cooldown: "&cThat was scanned recently — try again in &e%seconds%s&c."
+    up: "&6&l✦ &eYour island reached level &6%level%&e!"
+
+  profile:
+    header: "&6&lYour Profiles &7(%count%/%max%)"
+    line: "&8» &e%name% &7(%gamemode%)%active% &8- &7island: %has_island%"
+    active-tag: " &a(active)"
+    hint: "&7Use &e/is profile switch <name> &7or &e/is profile create <mode>&7."
+    created: "&aCreated profile &e%name% &7(%gamemode%)&a — welcome to your new island!"
+    create-failed: "&cCouldn't create profile: &7%error%"
+    switching: "&7Switching to &e%name%&7..."
+    switched: "&aNow on profile &e%name%&a."
+    switch-failed: "&cCouldn't switch profile: &7%error%"
+    not-found: "&cYou have no profile named &e%name%&c."
+    deleted: "&aDeleted profile &e%name%&a."
+    create-usage: "&cUsage: &e/is profile create <solo|coop|ironman> [name]"
+    switch-usage: "&cUsage: &e/is profile switch <name>"
+    delete-usage: "&cUsage: &e/is profile delete <name>"
+    unknown-gamemode: "&cUnknown gamemode. Choose: &esolo&c, &ecoop&c, or &eironman&c."
+    blocked-command: "&cThat command is disabled on your &e%gamemode% &cprofile."
+
+  coop:
+    invite-sent: "&aInvited &e%player% &ato your coop island."
+    invite-received: "&e%player% &7invited you to their coop island."
+    invite-accept-button: "&a&l[✔ Accept]"
+    invite-deny-button: "&c&l[✘ Deny]"
+    invite-expired: "&cThat invite has expired — ask them to invite you again."
+    invite-full: "&cThat coop island is full now."
+    member-joined: "&a%player% &7joined the island!"
+    invite-error: "&c%error%"
+    no-invite: "&cYou don't have a pending coop invite."
+    accepted: "&aYou joined &e%profile%&a! Switch to it with &e/is profile switch %profile%&a."
+    denied: "&7Coop invite declined."
+    kick-usage: "&cUsage: &e/is kick <player>"
+    kicked: "&aRemoved &e%player% &afrom the profile."
+    kick-error: "&c%error%"
+    you-were-kicked: "&cYou were removed from the coop profile."
+    left: "&aYou left the coop profile."
+    leave-error: "&c%error%"
+    promoted: "&aPromoted &e%player% &ato co-owner."
+    demoted: "&e%player% &7is now a regular member."
+    transferred: "&aOwnership transferred to &e%player%&a. You're now a co-owner."
+    transfer-hint: "&7Right-click again to confirm transferring ownership to &e%player%&7."
+    role-error: "&c%error%"
+    you-promoted: "&aYou were promoted to &eco-owner&a of the island!"
+    you-demoted: "&eYou were set back to a regular member."
+    you-owner: "&6&l✦ &eYou are now the &6owner &eof the island!"
+
+  bank:
+    deposited: "&aDeposited &e%amount% &ainto the bank."
+    withdrew: "&aWithdrew &e%amount% &afrom the bank."
+    upgraded: "&aThe bank was upgraded!"
+    interest: "&aInterest claimed into your bank."
+    empty-purse: "&cYou have no money to deposit."
+    empty: "&cThe coop bank is empty."
+
+  perks:
+    disabled: "&cLevel-gated perks are disabled on this server."
+
+  help:
+    header: "&6&l✦ RoyalSkyblock"
+    subtitle: "&7Your Skyblock commands:"
+    island: "&8» &e/is menu &8· &ecreate &8· &ehome &8· &evisit &7— your island"
+    bank: "&8» &e/bank &7— your bank (personal, and coop bank on a coop profile)"
+    level: "&8» &e/is level &8· &etop &7— island level and leaderboard"
+    upgrade: "&8» &e/is upgrade &7— expand your island (size, guests, coop slots)"
+    profile: "&8» &e/is profile &7— manage profiles (Solo / Coop / Ironman)"
+    coop: "&8» &e/is invite &8· &emembers &8· &etransfer &7— coop members and ownership"
+    manage: "&8» &e/is manage &8· &esettings &7— island controls and privacy"
+    delete: "&8» &e/is delete confirm &7— delete your island"
+    admin: "&8» &e/is reload &8· &eadmin &7— admin tools (requires permission)"

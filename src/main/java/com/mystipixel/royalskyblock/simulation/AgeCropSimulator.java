@@ -40,7 +40,7 @@ public final class AgeCropSimulator implements BlockSimulator {
         if (!(block.data() instanceof Ageable age) || age.getAge() >= age.getMaximumAge()) {
             return;                             // already ripe
         }
-        double perStage = plugin.getConfig().getDouble("simulation.crops.seconds-per-stage", 130);
+        double perStage = plugin.conf().getDouble("simulation.crops.seconds-per-stage", 130);
         if (perStage <= 0) {
             return;                             // treated as "disabled", not "instant"
         }

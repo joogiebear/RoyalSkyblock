@@ -75,7 +75,7 @@ public final class IslandManager {
         if (world == null) {
             return null;
         }
-        String prefix = plugin.getConfig().getString("world.world-name-prefix", "island_");
+        String prefix = plugin.conf().getString("world.world-name-prefix", "island_");
         String name = world.getName();
         if (!name.startsWith(prefix)) {
             return null;
@@ -106,7 +106,7 @@ public final class IslandManager {
     /** Allocate a fresh slime world + starter island for a profile and persist it. Does not teleport. */
     public CompletableFuture<Island> createIslandForProfile(UUID profileId) {
         UUID islandId = UUID.randomUUID();
-        String prefix = plugin.getConfig().getString("world.world-name-prefix", "island_");
+        String prefix = plugin.conf().getString("world.world-name-prefix", "island_");
         String worldName = prefix + islandId;
 
         ConfigurationSection paste = section("island.paste");
@@ -114,13 +114,13 @@ public final class IslandManager {
         int px = paste != null ? paste.getInt("x", 0) : 0;
         int py = paste != null ? paste.getInt("y", 100) : 100;
         int pz = paste != null ? paste.getInt("z", 0) : 0;
-        int startingRadius = plugin.getConfig().getInt("island.starting-radius", 50);
+        int startingRadius = plugin.conf().getInt("island.starting-radius", 50);
         long now = Instant.now().toEpochMilli();
 
         return worlds.createIsland(worldName)
                 .thenCompose(world -> onMain(() -> {
                     // Prefer a WorldEdit/FAWE schematic; fall back to the code-generated starter.
-                    String schematic = plugin.getConfig().getString("island.starter.schematic", "default");
+                    String schematic = plugin.conf().getString("island.starter.schematic", "default");
                     if (!plugin.schematics().tryPasteSchematic(world, px, py, pz, schematic)) {
                         StarterIslandBuilder.paste(world, px, py, pz, section("island.starter"), plugin.getLogger());
                     }
@@ -175,14 +175,14 @@ public final class IslandManager {
         island.setUnloadedAt(0);
         runAsync(() -> storage.saveIsland(island));
 
-        if (!plugin.getConfig().getBoolean("simulation.enabled", true)) {
+        if (!plugin.conf().getBoolean("simulation.enabled", true)) {
             return;
         }
         long raw = Math.max(0, (System.currentTimeMillis() - unloadedAt) / 1000L);
         if (raw < 60) {
             return;                             // a hub round-trip owes the island nothing
         }
-        long cap = Math.max(0, plugin.getConfig().getLong("simulation.max-offline-hours", 24)) * 3600L;
+        long cap = Math.max(0, plugin.conf().getLong("simulation.max-offline-hours", 24)) * 3600L;
         long simulated = cap > 0 ? Math.min(raw, cap) : raw;
         if (simulated <= 0) {
             return;
@@ -226,7 +226,7 @@ public final class IslandManager {
     }
 
     private Location safeLocation(Location base) {
-        int scan = plugin.getConfig().getInt("teleport.safe-scan-height", 8);
+        int scan = plugin.conf().getInt("teleport.safe-scan-height", 8);
         World world = base.getWorld();
         if (world == null) {
             return base;
@@ -282,7 +282,7 @@ public final class IslandManager {
     }
 
     public @Nullable Location resolveSpawnLocation() {
-        String worldName = plugin.getConfig().getString("spawn.world", "world");
+        String worldName = plugin.conf().getString("spawn.world", "world");
         World world = plugin.getServer().getWorld(worldName);
         if (world == null) {
             List<World> worldList = plugin.getServer().getWorlds();
@@ -293,15 +293,15 @@ public final class IslandManager {
                     + worldList.get(0).getName() + "' spawn instead.");
             return worldList.get(0).getSpawnLocation();
         }
-        if (plugin.getConfig().getBoolean("spawn.use-world-spawn", true)) {
+        if (plugin.conf().getBoolean("spawn.use-world-spawn", true)) {
             return world.getSpawnLocation();
         }
         return new Location(world,
-                plugin.getConfig().getDouble("spawn.x", 0.5),
-                plugin.getConfig().getDouble("spawn.y", 100.0),
-                plugin.getConfig().getDouble("spawn.z", 0.5),
-                (float) plugin.getConfig().getDouble("spawn.yaw", 0.0),
-                (float) plugin.getConfig().getDouble("spawn.pitch", 0.0));
+                plugin.conf().getDouble("spawn.x", 0.5),
+                plugin.conf().getDouble("spawn.y", 100.0),
+                plugin.conf().getDouble("spawn.z", 0.5),
+                (float) plugin.conf().getDouble("spawn.yaw", 0.0),
+                (float) plugin.conf().getDouble("spawn.pitch", 0.0));
     }
 
     /** Send a player to the configured spawn/hub. Main thread only. */
@@ -322,7 +322,7 @@ public final class IslandManager {
     // ── helpers ────────────────────────────────────────────────────────────────────
 
     private @Nullable ConfigurationSection section(String path) {
-        return plugin.getConfig().getConfigurationSection(path);
+        return plugin.conf().getConfigurationSection(path);
     }
 
     private void runAsync(Runnable runnable) {

@@ -1,6 +1,10 @@
-target/
+build/
+bin/
+.gradle/
 *.class
 *.jar
+# The wrapper jar must be committed — CI builds with ./gradlew and has no preinstalled Gradle.
+!gradle/wrapper/gradle-wrapper.jar
 .idea/
 *.iml
 .settings/

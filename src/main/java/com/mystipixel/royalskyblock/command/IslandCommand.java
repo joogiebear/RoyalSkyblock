@@ -20,7 +20,7 @@ import java.util.UUID;
 
 /**
  * The {@code /island} command tree. Island actions operate on the player's <em>active profile</em>;
- * {@code /is profile} manages the profiles themselves. Player-facing text comes from messages.yml.
+ * {@code /is profile} manages the profiles themselves. Player-facing text comes from lang.yml.
  */
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
@@ -242,7 +242,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     private void profileList(Player player) {
         List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
         UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
-        int max = plugin.getConfig().getInt("profiles.max-profiles", 3);
+        int max = plugin.conf().getInt("profiles.max-profiles", 3);
         plugin.messages().sendPlain(player, "profile.header", "count", String.valueOf(profiles.size()), "max", String.valueOf(max));
         for (Profile p : profiles) {
             boolean hasIsland = plugin.islands().getIslandByProfile(p.id()) != null;
@@ -733,8 +733,9 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage(Text.color("&cUse: blue, red, green, or off."));
             return;
         }
-        plugin.getConfig().set("island.border.color", choice);
-        plugin.saveConfig();
+        // Must go through the plugin, not conf().set() + saveConfig(): conf() hands out a converted
+        // copy of eco's config, so a write there would be dropped on the next read.
+        plugin.setConfigValue("island.border.color", choice);
         plugin.borders().reload();
         plugin.borders().refreshAll();
         sender.sendMessage(Text.color("&aIsland border set to &e" + choice + "&a (applied live)."));
@@ -779,8 +780,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     }
 
     private void handleAdminStatus(CommandSender sender) {
-        String worldSrc = plugin.getConfig().getString("world.slime-data-source", "file");
-        String storage = plugin.getConfig().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
+        String worldSrc = plugin.conf().getString("world.slime-data-source", "file");
+        String storage = plugin.conf().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
         sender.sendMessage(Text.color("&6&l✦ RoyalSkyblock &7— status"));
         sender.sendMessage(Text.color(dep("Islands (ASP)", plugin.isWorldBackendReady(),
                 "source: " + worldSrc, "install Advanced Slime Paper")));
@@ -798,7 +799,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&7Border: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
                 + " &8(per-player; admins bypass)"));
         sender.sendMessage(Text.color("&7Config health:"));
-        String spawnWorld = plugin.getConfig().getString("spawn.world", "world");
+        String spawnWorld = plugin.conf().getString("spawn.world", "world");
         boolean spawnOk = plugin.getServer().getWorld(spawnWorld) != null;
         sender.sendMessage(Text.color(check(spawnOk, "spawn world '" + spawnWorld + "' loaded",
                 "spawn world '" + spawnWorld + "' NOT found — set spawn.world in config.yml")));

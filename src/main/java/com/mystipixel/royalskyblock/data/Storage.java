@@ -9,7 +9,7 @@ import com.mystipixel.royalskyblock.profile.ProfileMember;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.plugin.java.JavaPlugin;
+import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -37,12 +37,12 @@ public final class Storage {
 
     public enum Type { SQLITE, MYSQL }
 
-    private final JavaPlugin plugin;
+    private final RoyalSkyblockPlugin plugin;
 
     private Type type;
     private HikariDataSource dataSource;
 
-    public Storage(JavaPlugin plugin) {
+    public Storage(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
     }
 
@@ -50,9 +50,9 @@ public final class Storage {
 
     public boolean connect() {
         try {
-            ConfigurationSection storage = plugin.getConfig().getConfigurationSection("storage");
+            ConfigurationSection storage = plugin.conf().getConfigurationSection("storage");
             if (storage == null) {
-                storage = plugin.getConfig().createSection("storage");
+                storage = plugin.conf().createSection("storage");
             }
             String rawType = storage.getString("type", "SQLITE").toUpperCase(Locale.ROOT);
             this.type = "MYSQL".equals(rawType) ? Type.MYSQL : Type.SQLITE;

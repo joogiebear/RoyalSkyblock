@@ -58,13 +58,13 @@ jobs:
         with:
           distribution: temurin
           java-version: '25'
-          cache: maven
+          cache: gradle
 
       - name: Compute version and changelog
         id: prep
         run: |
           set -euo pipefail
-          ARTIFACT_ID=$(mvn -q -DforceStdout help:evaluate -Dexpression=project.artifactId)
+          ARTIFACT_ID=$(sed -n 's/^rootProject.name = "\(.*\)"/\1/p' settings.gradle.kts)
           echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
 
           git fetch --tags --force
@@ -98,20 +98,22 @@ jobs:
           touch CHANGELOG.md
           cat RELEASE_NOTES.md CHANGELOG.md > CHANGELOG.new && mv CHANGELOG.new CHANGELOG.md
 
-      - name: Set pom version
+      - name: Set project version
         if: steps.prep.outputs.release == 'true'
-        run: mvn -B versions:set -DnewVersion=${{ steps.prep.outputs.version }} -DgenerateBackupPoms=false
+        run: sed -i 's/^version=.*/version=${{ steps.prep.outputs.version }}/' gradle.properties
 
       - name: Build
         if: steps.prep.outputs.release == 'true'
-        run: mvn -B -DskipTests package
+        run: ./gradlew build -x test --no-daemon
 
+      # bin/ holds only the libreforgeJar output (the jar with libreforge embedded); build/libs
+      # holds the plain and -sources jars, which must NOT be released.
       - name: Locate and name jar
         if: steps.prep.outputs.release == 'true'
         id: jar
         run: |
           set -euo pipefail
-          JAR=$(ls target/*.jar | grep -v -E 'original-|-sources|-javadoc' | head -1)
+          JAR=$(ls bin/*.jar | head -1)
           VJAR="${{ steps.prep.outputs.artifact_id }}-${{ steps.prep.outputs.version }}.jar"
           cp "$JAR" "$VJAR"
           echo "path=$VJAR" >> "$GITHUB_OUTPUT"
@@ -122,7 +124,7 @@ jobs:
           set -euo pipefail
           git config user.name "joogiebear"
           git config user.email "joogiebear@protonmail.com"
-          git add pom.xml CHANGELOG.md
+          git add gradle.properties CHANGELOG.md
           git commit -m "chore(release): ${{ steps.prep.outputs.version }}"
           git tag "${{ steps.prep.outputs.version }}"
           git push origin HEAD:${{ github.ref_name }}

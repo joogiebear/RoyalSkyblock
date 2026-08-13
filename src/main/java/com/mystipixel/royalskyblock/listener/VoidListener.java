@@ -33,11 +33,11 @@ public final class VoidListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
-        if (!plugin.getConfig().getBoolean("island.void.enabled", true)) {
+        if (!plugin.conf().getBoolean("island.void.enabled", true)) {
             return;
         }
         Location to = event.getTo();
-        if (to == null || to.getY() >= plugin.getConfig().getDouble("island.void.below-y", 0.0)) {
+        if (to == null || to.getY() >= plugin.conf().getDouble("island.void.below-y", 0.0)) {
             return;                              // cheap early-out for the 99.9% of moves above the line
         }
         Island island = plugin.islands().getIslandByWorld(to.getWorld());
@@ -46,7 +46,7 @@ public final class VoidListener implements Listener {
         }
 
         Player player = event.getPlayer();
-        String action = plugin.getConfig().getString("island.void.action", "teleport").toLowerCase(Locale.ROOT);
+        String action = plugin.conf().getString("island.void.action", "teleport").toLowerCase(Locale.ROOT);
         if (action.equals("none")) {
             return;
         }
@@ -64,11 +64,11 @@ public final class VoidListener implements Listener {
         }
         player.teleport(home);
 
-        double hearts = plugin.getConfig().getDouble("island.void.damage", 0.0);
+        double hearts = plugin.conf().getDouble("island.void.damage", 0.0);
         if (hearts > 0) {
             player.damage(hearts * 2.0);         // config is in hearts; damage() takes half-hearts
         }
-        String message = plugin.getConfig().getString("island.void.message", "");
+        String message = plugin.conf().getString("island.void.message", "");
         if (message != null && !message.isBlank()) {
             player.sendMessage(Text.color(message));
         }

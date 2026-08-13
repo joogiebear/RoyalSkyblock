@@ -218,6 +218,14 @@ public final class MenuTemplate {
         return null;
     }
 
+    /**
+     * The mask's filler item, or null when the menu declares no mask. Exposed for the eco Menu API
+     * port, which places filler as real slots rather than painting an Inventory after the fact.
+     */
+    public ItemStack maskFiller() {
+        return maskFiller;
+    }
+
     /** Paint the mask filler across every non-content slot. */
     public void applyFiller(Inventory inv) {
         if (maskFiller == null) {

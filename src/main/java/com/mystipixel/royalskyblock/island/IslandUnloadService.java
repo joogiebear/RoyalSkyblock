@@ -38,8 +38,8 @@ public final class IslandUnloadService {
 
     /** Main thread, on a timer. Cheap: it only walks the islands that are actually loaded. */
     public void tick() {
-        long graceMillis = Math.max(0, plugin.getConfig().getLong("world.unload-grace-seconds", 60)) * 1000L;
-        int budget = Math.max(1, plugin.getConfig().getInt("world.max-unloads-per-tick", 2));
+        long graceMillis = Math.max(0, plugin.conf().getLong("world.unload-grace-seconds", 60)) * 1000L;
+        int budget = Math.max(1, plugin.conf().getInt("world.max-unloads-per-tick", 2));
         long now = System.currentTimeMillis();
 
         // Collect first, then unload the longest-empty ones up to the budget. Unloading a world halts
@@ -83,7 +83,7 @@ public final class IslandUnloadService {
         for (int i = 0; i < Math.min(budget, ready.size()); i++) {
             unload(ready.get(i).island(), ready.get(i).world(), now);
         }
-        if (ready.size() > budget && plugin.getConfig().getBoolean("settings.debug", false)) {
+        if (ready.size() > budget && plugin.conf().getBoolean("settings.debug", false)) {
             plugin.getLogger().info("Unload queue: " + ready.size() + " islands empty, unloading "
                     + budget + " this pass.");
         }
@@ -102,7 +102,7 @@ public final class IslandUnloadService {
             if (error != null) {
                 plugin.getLogger().warning("Could not save island " + world.getName()
                         + " after it emptied: " + error.getMessage());
-            } else if (plugin.getConfig().getBoolean("settings.debug", false)) {
+            } else if (plugin.conf().getBoolean("settings.debug", false)) {
                 plugin.getLogger().info("Saved island " + world.getName() + " (now empty).");
             }
         });
@@ -133,7 +133,7 @@ public final class IslandUnloadService {
                         + " — it stays loaded and will be retried.");
                 return;
             }
-            if (plugin.getConfig().getBoolean("settings.debug", false)) {
+            if (plugin.conf().getBoolean("settings.debug", false)) {
                 plugin.getLogger().info("Unloaded empty island " + name + ".");
             }
         }));

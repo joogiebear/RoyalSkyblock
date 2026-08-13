@@ -11,9 +11,17 @@ import java.util.Map;
 import java.util.function.BiConsumer;
 
 /**
- * Marks an inventory as a RoyalSkyblock menu (so the click listener owns it) and carries the menu id
- * plus any per-slot dynamic click actions (used by data-driven menus like the profile list, where the
- * clickable items aren't fixed in the yml).
+ * Collects what a data-driven menu's content builder produced: the menu id, an optional subject, and
+ * the per-slot click actions for items that are not fixed in the yml (the profile list, upgrade tiers,
+ * the visit browser).
+ *
+ * <p><b>No longer a live inventory holder.</b> It originally marked an open inventory as a
+ * RoyalSkyblock menu so the click listener could claim it. Every menu is now an eco Menu and eco owns
+ * clicks, so nothing a player sees is held by one of these. What remains is its use as a scratch
+ * collector: {@code GuiManager.renderDynamic} hands a throwaway inventory and one of these to the
+ * existing {@code fillX} builders, then reads the actions back out. That is what let thirteen content
+ * builders move to eco without being rewritten, and it is why this class and its
+ * {@link InventoryHolder} implementation still exist.
  */
 public final class MenuHolder implements InventoryHolder {
 

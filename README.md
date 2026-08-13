@@ -12,10 +12,11 @@ islands without a bloated single world.
 
 | | |
 |---|---|
+| **eco** | **Required** — RoyalSkyblock is an eco plugin and will not load without the platform. Install [eco](https://polymart.org/resource/eco.773) first, and keep it on the same `YEAR.WEEK` version line as the rest of the suite. |
 | **Advanced Slime Paper** | **Required** — the ASP server fork, *not* vanilla Paper. Without it the plugin still enables, but island create/teleport are disabled (everything else works). |
-| **Java 21+** | Required. |
+| **Java 25** | Required — Paper 26.2 and the ASP API both require JVM 25. |
 | **Vault + an economy** | Needed for the bank and upgrade/coin costs. Any Vault economy works (EcoBits, Essentials, CMI, …). Without it, the bank and coin costs are disabled. |
-| **eco / EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
+| **EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
 | **PlaceholderAPI** | Optional. Used by command-based currencies (e.g. gems) and placeholders. |
 | **WorldEdit / FastAsyncWorldEdit** | Optional. Enables `.schem` starter islands; without it, a built-in generator makes the starter island (grass platform + a cozy oak hut, pond, crop farm, and tree). |
 
@@ -39,7 +40,7 @@ Settings in one place, text and content split out — the same layout across the
 | File / folder | Holds |
 |---|---|
 | `config.yml` | Core settings: storage, world backend, island generation, currencies, coop, spawn, flow limiter, teleport. |
-| `messages.yml` | Every player-facing string. `&` colours, `%token%` placeholders. |
+| `lang.yml` | Every player-facing string. `&` colours, `%token%` placeholders. Also eco's language file. |
 | `bank.yml` | The built-in bank: levels, max balances, interest, upgrade costs. |
 | `levels.yml` | Island-level block values + scan/auto-recalc tuning + level-up rewards. |
 | `upgrades.yml` | Island upgrades (size / guest limit / coop slots): tiers, costs, wait/skip times. |
@@ -105,9 +106,9 @@ RoyalSkyblock adapts to whatever the server has:
 
 - **No ASP** → enables, but island create/teleport are off (clear console message).
 - **No Vault** → bank and coin costs disabled; everything else works.
-- **No eco** → progression isn't per-profile (islands/profiles still work).
+- **No EcoItems** → progression isn't per-profile (islands/profiles still work). eco itself is required and the plugin will not load without it.
 - **No WorldEdit/FAWE** → starter islands use the built-in generator.
 
 ## License / attribution
 
-Part of the Royal suite by Mystipixel. Built for Advanced Slime Paper (MC 1.21+/Java 21).
+Part of the Royal suite by Mystipixel. Built for Advanced Slime Paper (MC 26.2 / Java 25) on the eco platform.

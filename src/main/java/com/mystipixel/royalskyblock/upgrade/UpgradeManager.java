@@ -200,12 +200,26 @@ public final class UpgradeManager {
                 reapplyBorder(island);
             }
         }
+        // The new tier may carry a libreforge effect chain, and libreforge caches a player's holders —
+        // without this the buff would not appear until they next crossed a world boundary.
+        refreshHoldersOnIsland(island);
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+    }
+
+    /** Re-provide libreforge holders for everyone currently standing on the island. */
+    private void refreshHoldersOnIsland(Island island) {
+        org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
+        if (world == null) {
+            return;                              // island not loaded — holders resolve on next join
+        }
+        for (org.bukkit.entity.Player player : world.getPlayers()) {
+            com.mystipixel.royalskyblock.libreforge.RoyalHolders.refresh(player);
+        }
     }
 
     /** Max concurrent visitors allowed on the island (base + guest-slots upgrade). */
     public int guestLimit(Island island) {
-        int base = plugin.getConfig().getInt("island.base-guest-limit", 3);
+        int base = plugin.conf().getInt("island.base-guest-limit", 3);
         UpgradeDef def = firstWithEffect(UpgradeEffect.GUEST_SLOTS);
         int bonus = def == null ? 0 : (int) def.valueAt(island.upgradeTier(def.key()));
         return base + bonus;
@@ -213,7 +227,7 @@ public final class UpgradeManager {
 
     /** Max coop members allowed on the island's profile (base + coop-slots upgrade). */
     public int coopMemberCap(Island island) {
-        int base = plugin.getConfig().getInt("coop.max-members", 4);
+        int base = plugin.conf().getInt("coop.max-members", 4);
         UpgradeDef def = firstWithEffect(UpgradeEffect.COOP_SLOTS);
         int bonus = def == null ? 0 : (int) def.valueAt(island.upgradeTier(def.key()));
         return base + bonus;

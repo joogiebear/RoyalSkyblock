@@ -1,0 +1,5 @@
+# The Gradle wrapper script runs on Linux CI. Committed with CRLF it fails with
+# "bad interpreter: No such file or directory", so pin its line endings explicitly.
+gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary

@@ -15,9 +15,29 @@
 #    icon             menu item
 #    required-level   island level needed to unlock it
 #    description      lore lines in the menu
-#    effects          potion effects while on-island, as NAME:amplifier
-#                     (amplifier is 0-based: 0 = level I, 1 = level II). e.g. haste:1
+#    effects          what the perk grants while on-island. TWO forms, mixable in one list:
+#
+#                       1. potion shorthand — NAME:amplifier, amplifier 0-based
+#                          (0 = level I, 1 = level II). e.g. haste:1
+#
+#                       2. a libreforge effect — the same `id:`/`args:` blocks the rest of
+#                          the eco suite uses, so a perk can grant ANY eco effect, not just
+#                          potions, and can carry its own conditions, chance and filters:
+#
+#                            effects:
+#                              - "haste:0"                    # shorthand, still fine
+#                              - id: give_money               # libreforge effect
+#                                args:
+#                                  amount: 100
+#                                triggers: [ mine_block ]
+#
+#                       Both forms may appear in the same list — each is read by the side
+#                       that understands it. See the eco wiki for the full effect list.
+#    conditions       optional libreforge conditions gating the whole perk, same dialect.
 #    unlock-commands  console commands run ONCE on unlock. %owner% / %level%. Empty = none.
+#
+#  Perks apply only on your OWN island. (Island upgrades in upgrades.yml take the same
+#  `effects:` blocks but apply to anyone standing on the island.)
 #
 #  Part of the RoyalSkyblock config set — see config.yml for the full file map.
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -61,3 +81,27 @@ perks:
     # unlock-commands:
     #   - "eco give %owner% 5000"
     unlock-commands: []
+
+  # Example of the libreforge form — commented out so a fresh install stays vanilla.
+  # This one is not a potion at all: it pays out while you mine on your own island, which
+  # the old potion-only format simply could not express.
+  #
+  # prospector:
+  #   name: "&6&lProspector's Cut"
+  #   icon: gold_ingot
+  #   required-level: 40
+  #   description:
+  #     - "&7Earn a bonus every time you mine"
+  #     - "&7ore on your island."
+  #   effects:
+  #     - id: give_money
+  #       args:
+  #         amount: 25
+  #         chance: 20          # percent
+  #       triggers:
+  #         - mine_block
+  #       filters:
+  #         blocks:
+  #           - diamond_ore
+  #           - emerald_ore
+  #   unlock-commands: []

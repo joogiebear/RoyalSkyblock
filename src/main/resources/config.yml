@@ -9,7 +9,7 @@
 #  CONFIG FILE MAP — RoyalSkyblock splits settings, text, and content:
 #    config.yml       this file — storage, world backend, island gen, currencies,
 #                     coop, spawn, flow limiter, teleport
-#    messages.yml     every player-facing string (& colours, %tokens%)
+#    lang.yml         every player-facing string (& colours, %tokens%)
 #    bank.yml         the built-in bank: levels, interest, upgrade costs
 #    levels.yml       island-level block values, scan tuning, level-up rewards
 #    upgrades.yml     island upgrades (size / guest limit / coop slots)

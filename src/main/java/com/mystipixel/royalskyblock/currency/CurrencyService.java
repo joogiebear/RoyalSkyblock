@@ -39,7 +39,7 @@ public final class CurrencyService {
 
     public void reload() {
         currencies.clear();
-        ConfigurationSection section = plugin.getConfig().getConfigurationSection("currencies");
+        ConfigurationSection section = plugin.conf().getConfigurationSection("currencies");
         if (section == null) {
             return;
         }

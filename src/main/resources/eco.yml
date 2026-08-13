@@ -1,0 +1,17 @@
+# eco plugin descriptor. LibreforgePlugin's constructor reads the "libreforge version" environment
+# variable and throws InvalidLibreforgePluginError if it is missing, so this file is mandatory.
+environment:
+  - name: libreforge version
+    value: ${libreforgeVersion}
+
+options:
+  # SpigotMC resource id, used by eco's update checker. RoyalSkyblock is not published there, so 0
+  # disables the check.
+  resource-id: 0
+  # bStats project id. Identifies the plugin, not the server, so it is fixed rather than
+  # configurable. eco registers bStats itself from this value; the custom charts are supplied by
+  # RoyalSkyblockPlugin.getCustomCharts().
+  bstats-id: 32733
+  color: "&b"
+  # The reflective reload system was removed in eco 6.77.0 — handleReload() does the work instead.
+  uses-reflective-reload: false

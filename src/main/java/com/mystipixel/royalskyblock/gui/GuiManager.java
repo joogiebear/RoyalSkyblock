@@ -1,5 +1,6 @@
 package com.mystipixel.royalskyblock.gui;
 
+import com.willfp.eco.core.gui.menu.Menu;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.bank.BankAccount;
 import com.mystipixel.royalskyblock.bank.BankLevel;
@@ -21,8 +22,8 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
+import org.bukkit.event.inventory.InventoryCloseEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -33,7 +34,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /**
@@ -77,13 +80,47 @@ public final class GuiManager implements Listener {
             "level/level", "level/top", "level/perks",
     };
 
+    /**
+     * Menus rendered through eco's Menu API rather than the legacy Bukkit-inventory path.
+     *
+     * <p>These are exactly the menus {@link #fillDynamic} does not touch — every slot comes from the
+     * config, so there is nothing for code to inject after the fact. The remaining menus still build
+     * their content imperatively against an {@link Inventory} and a {@link MenuHolder}; they move over
+     * once that content is expressed as eco reactive slots.
+     */
+    private static final Set<String> ECO_RENDERED = Set.of(
+            MAIN, CONFIRM_DELETE, CREATE_PROFILE, MANAGE, BANK_HUB);
+
+    /**
+     * Data-driven menus, also rendered through eco but with their contents computed per viewer.
+     *
+     * <p>Their {@code fillX} builders are reused unchanged: each runs against a scratch inventory and
+     * the resulting items and click actions are handed to eco (see {@link #renderDynamic}). That keeps
+     * thirteen non-trivial content builders out of this port entirely.
+     */
+    private static final Set<String> ECO_DYNAMIC = Set.of(
+            PROFILES, SETTINGS, UPGRADES, VISIT, COOP, COOP_INVITE, COOP_MEMBER,
+            BANK_PERSONAL, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP, PERKS);
+
+    /**
+     * eco menus currently open, so {@link #tickOpenMenus} can refresh one in place. The legacy path
+     * found these through the inventory's {@code MenuHolder}, which eco menus do not have.
+     */
+    private final Map<UUID, OpenEcoMenu> openEcoMenus = new ConcurrentHashMap<>();
+
+    /** A player's open eco menu and which menu it is. */
+    private record OpenEcoMenu(String menuId, Menu menu) {
+    }
+
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
+    private final EcoMenuFactory ecoMenus;
     private final Map<String, MenuTemplate> byId = new LinkedHashMap<>();
 
     public GuiManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
         this.ecoHook = new EcoHook();
+        this.ecoMenus = new EcoMenuFactory(ecoHook);
         reload();
     }
 
@@ -96,6 +133,14 @@ public final class GuiManager implements Listener {
             }
             String id = path.substring(path.lastIndexOf('/') + 1); // menu id = basename
             byId.put(id, MenuTemplate.load(file, "&6&lSkyblock", 5));
+        }
+        // Catch a menu added to MENU_PATHS but never classified. Without this the mistake only shows up
+        // as a menu that does nothing when a player runs the command that opens it.
+        for (String id : byId.keySet()) {
+            if (!ECO_RENDERED.contains(id) && !ECO_DYNAMIC.contains(id)) {
+                plugin.getLogger().severe("Menu '" + id + "' is loaded but not registered as static or "
+                        + "dynamic — it will not open. Add it to ECO_RENDERED or ECO_DYNAMIC.");
+            }
         }
     }
 
@@ -116,19 +161,117 @@ public final class GuiManager implements Listener {
         }
         Map<String, String> placeholders = placeholders(player);
 
-        MenuHolder holder = new MenuHolder(menuId, context);
-        Inventory inv = Bukkit.createInventory(holder, template.size(),
-                Text.color(apply(template.title(), placeholders)));
-        holder.setInventory(inv);
-
-        template.applyFiller(inv);
-        for (MenuSlot slot : template.slots()) {
-            ItemStack item = slot.item().build(ecoHook, placeholders, slot.lore());
-            inv.setItem(slot.index(), item);
+        String title = apply(template.title(), placeholders);
+        if (ECO_RENDERED.contains(menuId)) {
+            openEcoMenu(player, template, title);
+            return;
         }
-        fillDynamic(menuId, player, template, inv, holder);
-        player.openInventory(inv);
+        if (ECO_DYNAMIC.contains(menuId)) {
+            openEcoDynamicMenu(player, menuId, template, title, context);
+            return;
+        }
+        // Unreachable for the shipped menus — reload() verifies every loaded id is registered. A new
+        // menu added to MENU_PATHS without being classified lands here, and saying so is better than
+        // silently opening nothing.
+        plugin.getLogger().severe("Menu '" + menuId + "' is not registered as static or dynamic — "
+                + "add it to ECO_RENDERED or ECO_DYNAMIC in GuiManager.");
+    }
+
+    /**
+     * Render a fully config-driven menu through eco.
+     *
+     * <p>The menu is rebuilt per open rather than cached: the title is fixed at build time and may
+     * carry placeholders, and rebuilding keeps a {@code /is reload} taking effect immediately instead
+     * of leaving stale menus behind.
+     *
+     * <p>eco owns the click handling for these, so {@link #onClick} never sees them — it only reacts to
+     * inventories held by a {@link MenuHolder}, which eco menus are not. The click sound and effect
+     * dispatch below therefore have to be done here, mirroring what that listener does for the legacy
+     * path so both feel identical.
+     */
+    private void openEcoMenu(Player player, MenuTemplate template, String title) {
+        Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
+            List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
+                    ? slot.rightClick() : slot.leftClick();
+            if (shouldPlayClick(slot, effects)) {
+                play(viewer, template, "click", CLICK_FALLBACK);
+            }
+            for (MenuEffect effect : effects) {
+                execute(viewer, effect);
+            }
+        });
+        menu.open(player);
         play(player, template, "open", null);
+    }
+
+    /**
+     * Open a data-driven menu through eco, reusing the legacy {@code fillX} builder for its contents.
+     */
+    private void openEcoDynamicMenu(Player player, String menuId, MenuTemplate template,
+                                    String title, String context) {
+        Menu menu = ecoMenus.buildDynamic(template, title,
+                viewer -> renderDynamic(menuId, viewer, template, context),
+                (viewer, slot, rightClick) -> {
+                    List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
+                            ? slot.rightClick() : slot.leftClick();
+                    if (shouldPlayClick(slot, effects)) {
+                        play(viewer, template, "click", CLICK_FALLBACK);
+                    }
+                    for (MenuEffect effect : effects) {
+                        execute(viewer, effect);
+                    }
+                },
+                // Mirrors the legacy dynamic branch exactly: always sound, and defer the action off
+                // the click event. Running it inline opens the next menu from inside
+                // InventoryClickEvent, which Bukkit does not support cleanly — the menu opens mid-event
+                // and its open sound lands on top of the click, which is heard as a double click.
+                (viewer, action, rightClick) -> {
+                    play(viewer, template, "click", CLICK_FALLBACK);
+                    runNextTick(() -> action.accept(viewer, rightClick));
+                });
+        // Track AFTER opening, not before. openInventory closes whatever the player had open and fires
+        // InventoryCloseEvent synchronously, so registering first means navigating menu-to-menu has the
+        // outgoing menu's close wipe the entry for the menu just opened.
+        menu.open(player);
+        openEcoMenus.put(player.getUniqueId(), new OpenEcoMenu(menuId, menu));
+        play(player, template, "open", null);
+    }
+
+    /**
+     * Run a menu's existing content builder against a throwaway inventory and capture what it produced.
+     *
+     * <p>This is the bridge that let all thirteen data-driven menus move to eco without their builders
+     * being rewritten: they still think they are filling an {@link Inventory} and registering actions on
+     * a {@link MenuHolder}, and the results are read back out afterwards. The scratch inventory is never
+     * shown to anyone.
+     *
+     * <p>Every index is captured, not just the mask's content slots, because several builders also
+     * overwrite configured slots — pinning an upgrade to a named slot, greying out a button the viewer
+     * cannot use. Reading the whole inventory reproduces that exactly.
+     */
+    private EcoMenuFactory.Rendered renderDynamic(String menuId, Player player,
+                                                  MenuTemplate template, String context) {
+        MenuHolder holder = new MenuHolder(menuId, context);
+        Inventory scratch = Bukkit.createInventory(holder, template.size());
+        holder.setInventory(scratch);
+
+        Map<String, String> placeholders = placeholders(player);
+        template.applyFiller(scratch);
+        for (MenuSlot slot : template.slots()) {
+            scratch.setItem(slot.index(), slot.item().build(ecoHook, placeholders, slot.lore()));
+        }
+        fillDynamic(menuId, player, template, scratch, holder);
+
+        ItemStack[] items = new ItemStack[template.size()];
+        Map<Integer, BiConsumer<Player, Boolean>> actions = new LinkedHashMap<>();
+        for (int index = 0; index < template.size(); index++) {
+            items[index] = scratch.getItem(index);
+            BiConsumer<Player, Boolean> action = holder.action(index);
+            if (action != null) {
+                actions.put(index, action);
+            }
+        }
+        return new EcoMenuFactory.Rendered(items, actions);
     }
 
     /** Fill data-driven menus (profile list, settings toggles) into their mask content slots. */
@@ -262,12 +405,27 @@ public final class GuiManager implements Listener {
             return;
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder holder
-                    && UPGRADES.equals(holder.menuId())) {
-                // Re-render (cheap: a few icons) so pinned/auto slots + countdowns stay correct.
-                fillUpgrades(player, template, holder.getInventory(), holder);
+            // refresh() re-runs the render snapshot, which rebuilds the upgrade icons and so re-derives
+            // the countdown, without reopening the menu under the player.
+            OpenEcoMenu open = openEcoMenus.get(player.getUniqueId());
+            if (open != null && UPGRADES.equals(open.menuId())) {
+                open.menu().refresh(player);
             }
         }
+    }
+
+    /** Forget a player's eco menu once it closes, so the tick loop stops refreshing a dead menu. */
+    @EventHandler
+    public void onEcoMenuClose(InventoryCloseEvent event) {
+        if (event.getPlayer() instanceof Player player) {
+            openEcoMenus.remove(player.getUniqueId());
+        }
+    }
+
+    /** Drop tracked menus on quit — a player who logs out never fires a close for the open inventory. */
+    @EventHandler
+    public void onQuit(PlayerQuitEvent event) {
+        openEcoMenus.remove(event.getPlayer().getUniqueId());
     }
 
     /** A loaded menu template by id, or null if that file isn't registered. */
@@ -661,12 +819,12 @@ public final class GuiManager implements Listener {
         }
 
         boolean canWithdraw = true;
-        if (coop && plugin.getConfig().getBoolean("coop.bank.withdraw-requires-manager", false)) {
+        if (coop && plugin.conf().getBoolean("coop.bank.withdraw-requires-manager", false)) {
             IslandRole role = profile.roleOf(player.getUniqueId());
             canWithdraw = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
         }
 
-        List<Integer> amounts = plugin.getConfig().getIntegerList("coop.bank.amounts");
+        List<Integer> amounts = plugin.conf().getIntegerList("coop.bank.amounts");
         if (amounts.isEmpty()) {
             amounts = List.of(100, 1000, 10000);
         }
@@ -914,7 +1072,7 @@ public final class GuiManager implements Listener {
     private int coopMax(Profile profile) {
         Island island = plugin.islands().getIslandByProfile(profile.id());
         return island != null ? plugin.upgrades().coopMemberCap(island)
-                : plugin.getConfig().getInt("coop.max-members", 4);
+                : plugin.conf().getInt("coop.max-members", 4);
     }
 
     private ItemStack coopInfoIcon(Profile profile, int max) {
@@ -1176,48 +1334,10 @@ public final class GuiManager implements Listener {
     }
 
     // ── click handling ───────────────────────────────────────────────────────────
-
-    @EventHandler
-    public void onClick(InventoryClickEvent event) {
-        if (!(event.getInventory().getHolder() instanceof MenuHolder holder)) {
-            return;
-        }
-        event.setCancelled(true); // menus are read-only; buttons act via effects
-        if (!(event.getWhoClicked() instanceof Player player)) {
-            return;
-        }
-        int raw = event.getRawSlot();
-        MenuTemplate template = byId.get(holder.menuId());
-        if (template == null || raw < 0 || raw >= template.size()) {
-            return;
-        }
-        BiConsumer<Player, Boolean> dynamic = holder.action(raw);
-        if (dynamic != null) {
-            boolean rightClick = event.isRightClick();
-            play(player, template, "click", CLICK_FALLBACK);
-            runNextTick(() -> dynamic.accept(player, rightClick));
-            return;
-        }
-        MenuSlot slot = template.slotAt(raw);
-        if (slot == null) {
-            return;
-        }
-        List<MenuEffect> effects = event.isRightClick() && !slot.rightClick().isEmpty()
-                ? slot.rightClick() : slot.leftClick();
-        if (!effects.isEmpty() && !slot.silent()) {
-            play(player, template, "click", CLICK_FALLBACK);
-        }
-        for (MenuEffect effect : effects) {
-            execute(player, effect);
-        }
-    }
-
-    @EventHandler
-    public void onDrag(InventoryDragEvent event) {
-        if (event.getInventory().getHolder() instanceof MenuHolder) {
-            event.setCancelled(true);
-        }
-    }
+    //
+    // There is no InventoryClickEvent listener here any more. Every menu is an eco Menu and eco owns
+    // its clicks, dispatching them to the per-slot handlers built in EcoMenuFactory. The old listener
+    // matched on the inventory's MenuHolder, which no opened inventory has any more.
 
     private void execute(Player player, MenuEffect effect) {
         switch (effect.id().toLowerCase(Locale.ROOT)) {
@@ -1241,6 +1361,34 @@ public final class GuiManager implements Listener {
             }
             default -> plugin.getLogger().warning("Unknown menu effect '" + effect.id() + "'.");
         }
+    }
+
+    /**
+     * Whether clicking a slot should play the menu's click sound.
+     *
+     * <p>A button that opens another menu stays silent, because the destination plays its own open
+     * sound a tick later and the two are heard as a single doubled click. That is exactly what the
+     * per-slot {@code silent} flag was added for — deriving it here means the ~20 navigation buttons
+     * across the menus no longer each need the flag set by hand, and one that is missing it can no
+     * longer produce a double.
+     *
+     * <p>The destination is checked for an open sound rather than assumed: a menu that configures none
+     * would otherwise leave the click completely silent, which is worse than a doubled one.
+     */
+    private boolean shouldPlayClick(MenuSlot slot, List<MenuEffect> effects) {
+        if (effects.isEmpty() || slot.silent()) {
+            return false;
+        }
+        for (MenuEffect effect : effects) {
+            if (!"open_menu".equalsIgnoreCase(effect.id())) {
+                continue;
+            }
+            MenuTemplate destination = byId.get(effect.argString("menu", MAIN));
+            if (destination != null && destination.sound("open") != null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void runNextTick(Runnable runnable) {

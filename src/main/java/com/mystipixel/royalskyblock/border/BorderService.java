@@ -37,8 +37,8 @@ public final class BorderService implements Listener {
     }
 
     public void reload() {
-        enabled = plugin.getConfig().getBoolean("island.border.enabled", true);
-        color = BorderColor.from(plugin.getConfig().getString("island.border.color", "blue"));
+        enabled = plugin.conf().getBoolean("island.border.enabled", true);
+        color = BorderColor.from(plugin.conf().getString("island.border.color", "blue"));
     }
 
     public BorderColor color() {
@@ -90,7 +90,7 @@ public final class BorderService implements Listener {
         World world = player.getWorld();
         Island island = plugin.islands().getIslandByWorld(world);
         boolean bypass = player.hasPermission("royalskyblock.bypass");
-        boolean debug = plugin.getConfig().getBoolean("island.border.debug", false);
+        boolean debug = plugin.conf().getBoolean("island.border.debug", false);
         if (island == null || bypass) {
             player.setWorldBorder(null); // not an island world, or an admin who bypasses
             if (debug) {
@@ -99,14 +99,14 @@ public final class BorderService implements Listener {
             }
             return;
         }
-        ConfigurationSection paste = plugin.getConfig().getConfigurationSection("island.paste");
+        ConfigurationSection paste = plugin.conf().getConfigurationSection("island.paste");
         double cx = (paste != null ? paste.getInt("x", 0) : 0) + 0.5;
         double cz = (paste != null ? paste.getInt("z", 0) : 0) + 0.5;
         double size = Math.max(1.0, island.radius() * 2.0);
 
         WorldBorder border = Bukkit.createWorldBorder();
         border.setCenter(cx, cz);
-        border.setWarningDistance(Math.max(0, plugin.getConfig().getInt("island.border.warning-blocks", 2)));
+        border.setWarningDistance(Math.max(0, plugin.conf().getInt("island.border.warning-blocks", 2)));
         border.setDamageAmount(0.0);
         border.setDamageBuffer(0.0);
         switch (color) {
