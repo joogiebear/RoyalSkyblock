@@ -37,7 +37,7 @@
 #                   3:
 #                     value: 3
 #                     cost: 40000 coins
-#                     time: "1d"
+#                     time: 1d
 #                     effects:
 #                       - id: permanent_potion_effect
 #                         args:
@@ -73,52 +73,52 @@ size:
       value: 84
       cost: 0 coins
       skip-cost: 144 coins
-      time: "2d"
+      time: 2d
     2:
       value: 88
       cost: 175 coins
       skip-cost: 288 coins
-      time: "4d"
+      time: 4d
     3:
       value: 92
       cost: 175 coins
       skip-cost: 432 coins
-      time: "6d"
+      time: 6d
     4:
       value: 96
       cost: 175 coins
       skip-cost: 576 coins
-      time: "8d"
+      time: 8d
     5:
       value: 100
       cost: 175 coins
       skip-cost: 720 coins
-      time: "10d"
+      time: 10d
     6:
       value: 104
       cost: 175 coins
       skip-cost: 720 coins
-      time: "10d"
+      time: 10d
     7:
       value: 108
       cost: 200 coins
       skip-cost: 720 coins
-      time: "10d"
+      time: 10d
     8:
       value: 112
       cost: 200 coins
       skip-cost: 720 coins
-      time: "10d"
+      time: 10d
     9:
       value: 116
       cost: 200 coins
       skip-cost: 720 coins
-      time: "10d"
+      time: 10d
     10:
       value: 120
       cost: 200 coins
       skip-cost: 720 coins
-      time: "10d"
+      time: 10d
 guest-limit:
   display-name: "&b&lGuest Limit"
   icon: player_head
@@ -130,27 +130,27 @@ guest-limit:
       value: 1
       cost: 0 coins
       skip-cost: 288 coins
-      time: "2d"
+      time: 2d
     2:
       value: 2
       cost: 50 coins
       skip-cost: 576 coins
-      time: "4d"
+      time: 4d
     3:
       value: 3
       cost: 50 coins
       skip-cost: 864 coins
-      time: "6d"
+      time: 6d
     4:
       value: 4
       cost: 50 coins
       skip-cost: 1152 coins
-      time: "8d"
+      time: 8d
     5:
       value: 5
       cost: 50 coins
       skip-cost: 2304 coins
-      time: "16d"
+      time: 16d
 coop-slots:
   display-name: "&d&lCoop Slots"
   icon: cyan_bed
@@ -162,20 +162,20 @@ coop-slots:
       value: 1
       cost: 600 coins
       skip-cost: 0 coins
-      time: "0"
+      time: 0
     2:
       value: 2
       cost: 600 coins
       skip-cost: 0 coins
-      time: "0"
+      time: 0
     3:
       value: 3
       cost: 600 coins
       skip-cost: 0 coins
-      time: "0"
+      time: 0
 generator:
   display-name: "&b&lOre Generator"
-  icon: "cobblestone"
+  icon: cobblestone
   description: "Better ores from your cobblestone generator."
   effect: generator
   # 'value' is the generator tier used from generators.yml.
@@ -183,42 +183,41 @@ generator:
   # unlocks a permanent, unlimited income, so the price should reflect what it earns
   # rather than what it costs to build.
   tiers:
-    "1":
+    1:
       value: 1
       cost: 0 coins
       skip-cost: 0 coins
-      time: "0"
-    "2":
+      time: 0
+    2:
       value: 2
       cost: 2500 coins
       skip-cost: 4000 coins
-      time: "6h"
-    "3":
+      time: 6h
+    3:
       value: 3
       cost: 10000 coins
       skip-cost: 16000 coins
-      time: "12h"
-    "4":
+      time: 12h
+    4:
       value: 4
       cost: 35000 coins
       skip-cost: 56000 coins
-      time: "1d"
-    "5":
+      time: 1d
+    5:
       value: 5
       cost: 100000 coins
       skip-cost: 160000 coins
-      time: "2d"
-    "6":
+      time: 2d
+    6:
       value: 6
       cost: 300000 coins
       skip-cost: 480000 coins
-      time: "3d"
-    "7":
+      time: 3d
+    7:
       value: 7
       cost: 750000 coins
       skip-cost: 1200000 coins
-      time: "5d"
-
+      time: 5d
 minions:
   display-name: "&e&lMinion Slots"
   icon: armor_stand
@@ -231,28 +230,27 @@ minions:
       value: 1
       cost: 5000 coins
       skip-cost: 8000 coins
-      time: "6h"
+      time: 6h
     2:
       value: 2
       cost: 15000 coins
       skip-cost: 24000 coins
-      time: "12h"
+      time: 12h
     3:
       value: 3
       cost: 40000 coins
       skip-cost: 64000 coins
-      time: "1d"
+      time: 1d
     4:
       value: 4
       cost: 100000 coins
       skip-cost: 160000 coins
-      time: "2d"
+      time: 2d
     5:
       value: 5
       cost: 250000 coins
       skip-cost: 400000 coins
-      time: "3d"
-
+      time: 3d
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Sanctuary — an upgrade track made entirely of libreforge effects.
 #
@@ -276,7 +274,7 @@ sanctuary:
       value: 0
       cost: 25000 coins
       skip-cost: 40000 coins
-      time: "6h"
+      time: 6h
       effects:
         - id: permanent_potion_effect
           args:
@@ -286,7 +284,7 @@ sanctuary:
       value: 0
       cost: 75000 coins
       skip-cost: 120000 coins
-      time: "12h"
+      time: 12h
       effects:
         - id: permanent_potion_effect
           args:
@@ -300,7 +298,7 @@ sanctuary:
       value: 0
       cost: 200000 coins
       skip-cost: 320000 coins
-      time: "1d"
+      time: 1d
       effects:
         - id: permanent_potion_effect
           args:
@@ -318,7 +316,7 @@ sanctuary:
       value: 0
       cost: 500000 coins
       skip-cost: 800000 coins
-      time: "2d"
+      time: 2d
       effects:
         - id: permanent_potion_effect
           args:
@@ -339,7 +337,7 @@ sanctuary:
       value: 0
       cost: 1200000 coins
       skip-cost: 2000000 coins
-      time: "3d"
+      time: 3d
       effects:
         - id: permanent_potion_effect
           args:
