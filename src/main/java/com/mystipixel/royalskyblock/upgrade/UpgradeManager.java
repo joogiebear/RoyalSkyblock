@@ -255,12 +255,42 @@ public final class UpgradeManager {
 
     // ── parsing ────────────────────────────────────────────────────────────────────
 
+    /**
+     * Read a tier's cost, in either of two shapes.
+     *
+     * <p>The compact one — {@code cost: 5000 coins} — keeps a tier down to a handful of lines. Written
+     * out as a block, a five-tier track is fifty lines of mostly punctuation, which is hard to scan and
+     * tedious to extend. The block form still works and is the right choice when a value needs a
+     * comment of its own:
+     *
+     * <pre>
+     *   cost: 5000 coins        cost:
+     *                             currency: coins
+     *                             amount: 5000
+     * </pre>
+     *
+     * <p>The amount comes first because that is the part being tuned; the currency is usually the same
+     * across a whole file. {@code 0} on its own means free.
+     */
     private Cost parseCost(ConfigurationSection tier, String key) {
         ConfigurationSection c = tier.getConfigurationSection(key);
-        if (c == null) {
+        if (c != null) {
+            return new Cost(c.getString("currency", "coins"), c.getDouble("amount", 0));
+        }
+        String compact = tier.getString(key);
+        if (compact == null || compact.isBlank()) {
             return new Cost("", 0);
         }
-        return new Cost(c.getString("currency", "coins"), c.getDouble("amount", 0));
+        String[] parts = compact.trim().split("\\s+", 2);
+        double amount;
+        try {
+            amount = Double.parseDouble(parts[0]);
+        } catch (NumberFormatException notANumber) {
+            plugin.getLogger().warning("upgrades.yml: '" + key + ": " + compact
+                    + "' is not a cost — expected e.g. '5000 coins'. Treating as free.");
+            return new Cost("", 0);
+        }
+        return new Cost(parts.length > 1 ? parts[1].trim() : "coins", amount);
     }
 
     /** Parse {@code 2d} / {@code 4h} / {@code 30m} / {@code 45s} / {@code 0} into seconds. */

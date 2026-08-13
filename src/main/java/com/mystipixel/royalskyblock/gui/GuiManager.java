@@ -108,6 +108,16 @@ public final class GuiManager implements Listener {
      */
     private final Map<UUID, OpenEcoMenu> openEcoMenus = new ConcurrentHashMap<>();
 
+    /**
+     * Shortest gap between two menu sounds for one player. Roughly three ticks — long enough to fold a
+     * click and the resulting menu's open sound into one, short enough that deliberate clicks in a row
+     * still each sound.
+     */
+    private static final long SOUND_DEBOUNCE_MS = 150L;
+
+    /** Last time a menu sound played for a player, for the debounce in {@link #play}. */
+    private final Map<UUID, Long> lastMenuSound = new ConcurrentHashMap<>();
+
     /** A player's open eco menu and which menu it is. */
     private record OpenEcoMenu(String menuId, Menu menu) {
     }
@@ -419,6 +429,7 @@ public final class GuiManager implements Listener {
     public void onEcoMenuClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
             openEcoMenus.remove(player.getUniqueId());
+            lastMenuSound.remove(player.getUniqueId());
         }
     }
 
@@ -426,6 +437,7 @@ public final class GuiManager implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         openEcoMenus.remove(event.getPlayer().getUniqueId());
+        lastMenuSound.remove(event.getPlayer().getUniqueId());
     }
 
     /** A loaded menu template by id, or null if that file isn't registered. */
@@ -522,8 +534,9 @@ public final class GuiManager implements Listener {
                 if (next == null) {
                     lore.add(noItalic("&a✔ Maxed out."));
                 } else {
-                    lore.add(noItalic("&7Next: tier " + next.tier() + " &8("
-                            + effectLabel(def.effect(), next.value()) + ")"));
+                    String label = effectLabel(def.effect(), next.value());
+                    lore.add(noItalic("&7Next: tier " + next.tier()
+                            + (label.isEmpty() ? "" : " &8(" + label + ")")));
                     lore.add(noItalic("&7Cost: &e" + plugin.currency().format(next.cost())
                             + (next.isInstant() ? "" : " &7+ " + formatDuration(next.timeSeconds()) + " wait")));
                     if (!next.skipCost().isFree()) {
@@ -552,6 +565,8 @@ public final class GuiManager implements Listener {
             case COOP_SLOTS -> "+" + v + " coop slot" + (v == 1 ? "" : "s");
             case GENERATOR -> "Tier " + v + " ores";
             case MINIONS -> "+" + v + " minion slot" + (v == 1 ? "" : "s");
+            // A chain-only track has no meaningful value to advertise; the caller drops the label.
+            case NONE -> "";
         };
     }
 
@@ -1412,6 +1427,19 @@ public final class GuiManager implements Listener {
         if (spec == null) {
             return;
         }
+        // One menu sound per player per SOUND_DEBOUNCE_MS. Clicking a button that opens a menu makes
+        // two sounds a tick apart — the click, then the destination's open — and the ear hears a
+        // doubled click. Suppressing the click per-slot only fixed the cases we could see coming: it
+        // needs `silent` on the slot, or an effect list we can inspect for an open_menu. A
+        // code-registered action is an opaque callback, so a settings toggle or an upgrade purchase
+        // that reopens its own menu still doubled. Debouncing at the single point every menu sound
+        // passes through catches all of them, whatever produced the second sound.
+        long now = System.currentTimeMillis();
+        Long last = lastMenuSound.get(player.getUniqueId());
+        if (last != null && now - last < SOUND_DEBOUNCE_MS) {
+            return;
+        }
+        lastMenuSound.put(player.getUniqueId(), now);
         try {
             player.playSound(player.getLocation(), spec.name(), spec.volume(), spec.pitch());
         } catch (Throwable ignored) {
