@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.config;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.currency.Cost;
 import com.mystipixel.royalskyblock.upgrade.UpgradeDef;
+import com.mystipixel.royalskyblock.upgrade.UpgradeEffect;
 import com.mystipixel.royalskyblock.upgrade.UpgradeTier;
 import org.bukkit.Bukkit;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -25,6 +26,42 @@ public final class ConfigValidator {
 
     public ConfigValidator(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    /**
+     * The generator upgrade track and {@code generators.yml} have to agree about tier numbers.
+     *
+     * <p>They are two halves of one feature — the track sets the price of a tier, generators.yml sets
+     * what that tier actually drops — joined only by the track's {@code value}. Nothing enforces the
+     * join, and the mismatch is invisible: an unknown tier falls back to the highest one below it, so
+     * a player buys tier 8, is charged for tier 8, and quietly keeps tier 7's ores. Whoever added the
+     * tier sees a successful purchase and no error anywhere.
+     */
+    private void checkGeneratorTiers(List<String> warnings) {
+        UpgradeDef def = plugin.upgrades().firstWithEffect(UpgradeEffect.GENERATOR);
+        if (def == null) {
+            return;                                     // no generator track configured; nothing to join
+        }
+        Set<Integer> defined = plugin.generators().definedTiers();
+        if (defined.isEmpty()) {
+            return;                                     // generators disabled entirely — a separate switch
+        }
+        List<String> missing = new ArrayList<>();
+        for (int t = 1; t <= def.maxTier(); t++) {
+            if (def.tier(t) == null) {
+                continue;
+            }
+            int value = (int) def.valueAt(t);
+            if (!defined.contains(value)) {
+                missing.add(t + " (wants generator tier " + value + ")");
+            }
+        }
+        if (!missing.isEmpty()) {
+            warnings.add("upgrade '" + def.key() + "' has tier(s) " + String.join(", ", missing)
+                    + " with no matching entry in generators.yml — buying them charges full price and"
+                    + " silently leaves the generator on the closest lower tier. Add those tiers to"
+                    + " generators.yml.");
+        }
     }
 
     public void validate() {
@@ -96,6 +133,8 @@ public final class ConfigValidator {
                         + " menu. Add a slot with 'content: <upgrade key>', or free some mask 0-slots.");
             }
         }
+
+        checkGeneratorTiers(warnings);
 
         boolean papi = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
         Set<String> reported = new HashSet<>();

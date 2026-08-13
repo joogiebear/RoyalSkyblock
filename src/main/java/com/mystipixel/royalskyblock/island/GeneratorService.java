@@ -204,4 +204,15 @@ public final class GeneratorService {
     public void invalidate(UUID islandId) {
         tierCache.remove(islandId);
     }
+
+    /**
+     * The tier numbers generators.yml actually defines.
+     *
+     * <p>Exposed so the config check can confirm the generator upgrade track has somewhere to land.
+     * {@link #tierFor} answers an unknown tier with the closest one below it — the right behaviour at
+     * runtime, and a silent one at configuration time.
+     */
+    public java.util.Set<Integer> definedTiers() {
+        return java.util.Set.copyOf(tiers.keySet());
+    }
 }
