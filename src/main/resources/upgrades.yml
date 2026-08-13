@@ -321,3 +321,112 @@ minions:
       cost: {currency: coins, amount: 250000}
       skip-cost: {currency: coins, amount: 400000}
       time: "3d"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Sanctuary — an upgrade track made entirely of libreforge effects.
+#
+#  Nothing here changes island mechanics, so its `effect:` is the inert `minions`
+#  slot type and every tier's `value` is 0: the track exists purely to carry an
+#  `effects:` chain. That is the shape to copy for any "buy a buff" upgrade.
+#
+#  These apply to ANYONE standing on the island — members and visitors — because
+#  the island is what was upgraded. And only the CURRENT tier's chain is active,
+#  never the ones beneath it, so each tier restates the full effect it should give
+#  rather than adding an increment.
+# ═══════════════════════════════════════════════════════════════════════════════
+sanctuary:
+  display-name: "&d&lSanctuary"
+  icon: beacon
+  description: "Bless your island. Everyone standing on it shares the effect."
+  effect: minions
+  tiers:
+    1:
+      value: 0
+      cost: {currency: coins, amount: 25000}
+      skip-cost: {currency: coins, amount: 40000}
+      time: "6h"
+      effects:
+        - id: permanent_potion_effect
+          args:
+            effect: haste
+            level: 1              # 1 = level I
+    2:
+      value: 0
+      cost: {currency: coins, amount: 75000}
+      skip-cost: {currency: coins, amount: 120000}
+      time: "12h"
+      effects:
+        - id: permanent_potion_effect
+          args:
+            effect: haste
+            level: 1
+        - id: permanent_potion_effect
+          args:
+            effect: speed
+            level: 1
+    3:
+      value: 0
+      cost: {currency: coins, amount: 200000}
+      skip-cost: {currency: coins, amount: 320000}
+      time: "1d"
+      effects:
+        - id: permanent_potion_effect
+          args:
+            effect: haste
+            level: 2
+        - id: permanent_potion_effect
+          args:
+            effect: speed
+            level: 1
+        # From here the track stops being potions and starts touching EcoSkills.
+        - id: multiply_all_stats
+          args:
+            multiplier: 1.1
+    4:
+      value: 0
+      cost: {currency: coins, amount: 500000}
+      skip-cost: {currency: coins, amount: 800000}
+      time: "2d"
+      effects:
+        - id: permanent_potion_effect
+          args:
+            effect: haste
+            level: 2
+        - id: permanent_potion_effect
+          args:
+            effect: speed
+            level: 1
+        - id: permanent_potion_effect
+          args:
+            effect: regeneration
+            level: 1
+        - id: multiply_all_stats
+          args:
+            multiplier: 1.2
+    5:
+      value: 0
+      cost: {currency: coins, amount: 1200000}
+      skip-cost: {currency: coins, amount: 2000000}
+      time: "3d"
+      effects:
+        - id: permanent_potion_effect
+          args:
+            effect: haste
+            level: 3
+        - id: permanent_potion_effect
+          args:
+            effect: speed
+            level: 2
+        - id: permanent_potion_effect
+          args:
+            effect: regeneration
+            level: 1
+        - id: multiply_all_stats
+          args:
+            multiplier: 1.3
+        # Mining fortune is the stat that actually multiplies ore drops on this
+        # server — see the mining-fortune sourcing notes before retuning it.
+        - id: add_stat
+          args:
+            stat: mining_fortune
+            amount: 25

@@ -6,38 +6,37 @@
 #  both — flip `enabled` to true only if you want them.
 #
 #  While OFF: no effects, no menu button, no overhead.
-#  While ON:  each perk applies its potion effects to a player standing on their own
-#             island (once the island is high enough), and runs its unlock-commands
-#             ONCE the first time the island reaches that level.
+#  While ON:  each perk is a libreforge effect holder, active while its owner stands
+#             on their own island and the island is high enough level. It also runs
+#             its unlock-commands ONCE the first time the island reaches that level.
 #
 #  Each perk:
 #    name             shown in the perks menu (& colour codes)
 #    icon             menu item
 #    required-level   island level needed to unlock it
 #    description      lore lines in the menu
-#    effects          what the perk grants while on-island. TWO forms, mixable in one list:
+#    effects          what the perk grants. TWO forms, mixable in one list:
 #
 #                       1. potion shorthand — NAME:amplifier, amplifier 0-based
 #                          (0 = level I, 1 = level II). e.g. haste:1
 #
-#                       2. a libreforge effect — the same `id:`/`args:` blocks the rest of
-#                          the eco suite uses, so a perk can grant ANY eco effect, not just
-#                          potions, and can carry its own conditions, chance and filters:
+#                       2. a libreforge effect — the same `id:`/`args:` blocks the
+#                          rest of the eco suite uses, so a perk can grant ANY eco
+#                          effect and carry its own conditions, chance and filters.
 #
-#                            effects:
-#                              - "haste:0"                    # shorthand, still fine
-#                              - id: give_money               # libreforge effect
-#                                args:
-#                                  amount: 100
-#                                triggers: [ mine_block ]
-#
-#                       Both forms may appear in the same list — each is read by the side
-#                       that understands it. See the eco wiki for the full effect list.
-#    conditions       optional libreforge conditions gating the whole perk, same dialect.
+#                     Both forms may appear in the same list — each is read by the
+#                     side that understands it.
+#    conditions       optional libreforge conditions gating the whole perk.
 #    unlock-commands  console commands run ONCE on unlock. %owner% / %level%. Empty = none.
 #
-#  Perks apply only on your OWN island. (Island upgrades in upgrades.yml take the same
-#  `effects:` blocks but apply to anyone standing on the island.)
+#  Perks apply only on your OWN island. (Island upgrades in upgrades.yml take the
+#  same `effects:` blocks but apply to anyone standing on the island.)
+#
+#  ── A NOTE ON TRIGGERS, worth reading before you write your own ──────────────
+#  A triggered effect only fires if its trigger supplies what the effect needs. The
+#  commonest mistake is pairing `multiply_drops` with `mine_block`: mining does not
+#  produce the drop data, so the effect never runs and nothing is logged. Drop
+#  effects want a DROP trigger — block_item_drop, entity_item_drop, catch_fish, shear.
 #
 #  Part of the RoyalSkyblock config set — see config.yml for the full file map.
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -49,6 +48,7 @@ enabled: false
 effect-refresh-seconds: 6
 
 perks:
+  # ── Early game ────────────────────────────────────────────────────────────────
   haste:
     name: "&e&lMiner's Haste"
     icon: golden_pickaxe
@@ -59,7 +59,7 @@ perks:
       - "haste:0"
     unlock-commands: []
 
-  regen:
+  renewal:
     name: "&a&lIsland Renewal"
     icon: golden_apple
     required-level: 15
@@ -69,39 +69,90 @@ perks:
       - "regeneration:0"
     unlock-commands: []
 
-  swift:
-    name: "&b&lSwift Steps"
-    icon: feather
+  # ── Mid game: the first perk that isn't a potion ──────────────────────────────
+  # Pays out while you mine on your own island. The old potion-only format could not
+  # express this at all.
+  prospector:
+    name: "&6&lProspector's Cut"
+    icon: gold_ingot
     required-level: 30
     description:
-      - "&7Move quicker across your island."
+      - "&7A one-in-five chance of a bonus"
+      - "&7payout whenever you mine ore"
+      - "&7on your island."
     effects:
-      - "speed:0"
+      - id: give_money
+        args:
+          amount: 25
+          chance: 20            # percent
+        triggers:
+          - mine_block
+        filters:
+          blocks:
+            - coal_ore
+            - iron_ore
+            - gold_ore
+            - diamond_ore
+            - emerald_ore
+            - deepslate_coal_ore
+            - deepslate_iron_ore
+            - deepslate_gold_ore
+            - deepslate_diamond_ore
+            - deepslate_emerald_ore
+    unlock-commands: []
+
+  # Doubles ore drops outright. NOTE the trigger: block_item_drop, not mine_block —
+  # multiply_drops needs the drop data, which only a drop trigger provides.
+  bountiful_veins:
+    name: "&b&lBountiful Veins"
+    icon: raw_iron
+    required-level: 45
+    description:
+      - "&7Ore you mine on your island"
+      - "&7sometimes drops twice."
+    effects:
+      - id: multiply_drops
+        args:
+          multiplier: 2
+          chance: 25
+        triggers:
+          - block_item_drop
+    unlock-commands: []
+
+  # ── Late game: stats, not potions ─────────────────────────────────────────────
+  # A permanent EcoSkills stat bonus for as long as the holder is active — i.e. while
+  # standing on your own island. Nothing to re-apply and no potion icon clutter.
+  homefield:
+    name: "&d&lHome Advantage"
+    icon: nether_star
+    required-level: 60
+    description:
+      - "&7Your island makes you stronger."
+      - "&7+15% to every stat while you"
+      - "&7are standing on it."
+    effects:
+      - id: multiply_all_stats
+        args:
+          multiplier: 1.15
+    unlock-commands: []
+
+  # Skill xp earned on your own island is worth more, which quietly rewards building
+  # your base up rather than grinding elsewhere.
+  scholar:
+    name: "&5&lIsland Scholar"
+    icon: enchanted_book
+    required-level: 80
+    description:
+      - "&7Bonus mining skill xp for"
+      - "&7every ore you break at home."
+    effects:
+      - id: give_skill_xp_naturally
+        args:
+          skill: mining
+          amount: 5
+        triggers:
+          - mine_block
     # Example one-time unlock reward (needs an economy command; edit for your setup):
     # unlock-commands:
     #   - "eco give %owner% 5000"
     unlock-commands: []
-
-  # Example of the libreforge form — commented out so a fresh install stays vanilla.
-  # This one is not a potion at all: it pays out while you mine on your own island, which
-  # the old potion-only format simply could not express.
-  #
-  # prospector:
-  #   name: "&6&lProspector's Cut"
-  #   icon: gold_ingot
-  #   required-level: 40
-  #   description:
-  #     - "&7Earn a bonus every time you mine"
-  #     - "&7ore on your island."
-  #   effects:
-  #     - id: give_money
-  #       args:
-  #         amount: 25
-  #         chance: 20          # percent
-  #       triggers:
-  #         - mine_block
-  #       filters:
-  #         blocks:
-  #           - diamond_ore
-  #           - emerald_ore
-  #   unlock-commands: []
