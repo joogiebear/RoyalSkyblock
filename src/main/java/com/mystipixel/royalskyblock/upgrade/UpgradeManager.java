@@ -153,17 +153,59 @@ public final class UpgradeManager {
         }
     }
 
+    /**
+     * Load every upgrade track, from {@code upgrades/*.yml} and from a legacy {@code upgrades.yml}.
+     *
+     * <p>One file per track is the layout every eco plugin uses — enchants, talismans, jobs — so
+     * someone arriving from EcoItems can drop in {@code upgrades/mythic.yml} and have it load without
+     * being told anything. The track's id is the file's name.
+     *
+     * <p><b>Both sources are read, deliberately.</b> A server that already has a commented
+     * {@code upgrades.yml} keeps working untouched: nothing is auto-split, because rewriting YAML
+     * through Bukkit would strip every comment in it. New tracks go in the folder, old ones stay put,
+     * and an admin can move them across whenever they feel like it. A folder file wins if both define
+     * the same id.
+     */
     public void reload() {
         upgrades.clear();
-        File file = new File(plugin.getDataFolder(), "upgrades.yml");
-        if (!file.exists()) {
-            plugin.saveResource("upgrades.yml", false);
+
+        // Legacy monolith first, so folder files take precedence over the same id.
+        File legacy = new File(plugin.getDataFolder(), "upgrades.yml");
+        if (legacy.isFile()) {
+            YamlConfiguration cfg = YamlConfiguration.loadConfiguration(legacy);
+            for (String key : cfg.getKeys(false)) {
+                loadTrack(key, cfg.getConfigurationSection(key));
+            }
         }
-        YamlConfiguration cfg = YamlConfiguration.loadConfiguration(file);
-        for (String key : cfg.getKeys(false)) {
-            ConfigurationSection sec = cfg.getConfigurationSection(key);
+
+        File dir = new File(plugin.getDataFolder(), "upgrades");
+        if (!dir.isDirectory() && !legacy.isFile()) {
+            // Fresh install: ship the folder, not the monolith.
+            for (String name : DEFAULT_TRACKS) {
+                plugin.saveResource("upgrades/" + name + ".yml", false);
+            }
+        }
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".yml") && !name.startsWith("_"));
+        if (files != null) {
+            for (File f : files) {
+                String id = f.getName().substring(0, f.getName().length() - 4);
+                loadTrack(id, YamlConfiguration.loadConfiguration(f));
+            }
+        }
+    }
+
+    /** The tracks shipped in the jar, written out on a fresh install. */
+    private static final String[] DEFAULT_TRACKS =
+            {"size", "guest-limit", "coop-slots", "generator", "minions", "sanctuary"};
+
+    /**
+     * Read one track. {@code sec} is the file itself for a folder track, or the named section of the
+     * legacy monolith — both are {@link ConfigurationSection}, so one reader serves both layouts.
+     */
+    private void loadTrack(String key, ConfigurationSection sec) {
+        {
             if (sec == null) {
-                continue;
+                return;
             }
             UpgradeEffect effect = UpgradeEffect.fromString(sec.getString("effect"), UpgradeEffect.RADIUS);
             List<UpgradeTier> tiers = new ArrayList<>();

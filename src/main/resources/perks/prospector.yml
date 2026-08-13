@@ -1,0 +1,56 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Perk: prospector
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per perk. The FILE NAME is the perk's id — copy this file to add a
+#  perk, nothing to register. Perks are OFF until you set `enabled: true` in
+#  perks.yml, and each applies only while its owner stands on their OWN island.
+#
+#    name            shown in the perks menu (& colour codes)
+#    icon            menu item
+#    required-level  island level needed to unlock it
+#    description     lore lines in the menu
+#    effects         what the perk grants. Two forms, mixable in one list:
+#                      "haste:0"                  potion shorthand, 0-based level
+#                      - id: give_money           any of the 275 eco effects,
+#                        args: {amount: 25}       with conditions/chance/triggers
+#    conditions      OPTIONAL libreforge conditions gating the whole perk
+#    unlock-commands console commands run ONCE on unlock (%owner% / %level%)
+#
+#  A triggered effect only fires if its trigger supplies what it needs — pairing
+#  multiply_drops with mine_block silently never runs, because mining carries no
+#  drop data. Drop effects want block_item_drop / entity_item_drop / catch_fish.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Mid game: the first perk that isn't a potion ──────────────────────────────
+# Pays out while you mine on your own island. The old potion-only format could not
+# express this at all.
+name: "&6&lProspector's Cut"
+icon: gold_ingot
+required-level: 30
+description:
+  - "&7A one-in-five chance of a bonus"
+  - "&7payout whenever you mine ore"
+  - "&7on your island."
+effects:
+  - id: give_money
+    args:
+      amount: 25
+      chance: 20            # percent
+    triggers:
+      - mine_block
+    filters:
+      blocks:
+        - coal_ore
+        - iron_ore
+        - gold_ore
+        - diamond_ore
+        - emerald_ore
+        - deepslate_coal_ore
+        - deepslate_iron_ore
+        - deepslate_gold_ore
+        - deepslate_diamond_ore
+        - deepslate_emerald_ore
+unlock-commands: []
+
+# Doubles ore drops outright. NOTE the trigger: block_item_drop, not mine_block —
+# multiply_drops needs the drop data, which only a drop trigger provides.

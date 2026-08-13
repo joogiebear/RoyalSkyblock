@@ -1,0 +1,67 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Upgrade track: generator
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per upgrade track. The FILE NAME is the track's id — copy this file to
+#  add a new track, no registration needed anywhere.
+#
+#    display-name : shown in the menu (& colour codes)
+#    icon         : the menu item
+#    description  : one-line summary in the icon lore
+#    effect       : what a tier changes — radius / guest_slots / coop_slots /
+#                   generator / minions / none (none = the effects chain IS the upgrade)
+#
+#  Per tier (1, 2, 3, ...):
+#    value      : the effect number at that tier
+#    cost       : pay this, then wait `time`            (e.g. 5000 coins)
+#    skip-cost  : pay this instead to finish instantly
+#    time       : the wait — 2d / 4h / 30m / 45s / 0    (0 = instant)
+#    effects    : OPTIONAL libreforge chain granted while the island is at this tier.
+#                 Applies to anyone standing on the island. Only the CURRENT tier's
+#                 chain is active, so write each tier as the full effect you want.
+#    conditions : OPTIONAL libreforge conditions.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+display-name: "&b&lOre Generator"
+icon: cobblestone
+description: "Better ores from your cobblestone generator."
+effect: generator
+# 'value' is the generator tier used from generators.yml.
+# Costs are deliberately modest at the low end and steepen sharply: each tier
+# unlocks a permanent, unlimited income, so the price should reflect what it earns
+# rather than what it costs to build.
+tiers:
+  1:
+    value: 1
+    cost: 0 coins
+    skip-cost: 0 coins
+    time: 0
+  2:
+    value: 2
+    cost: 2500 coins
+    skip-cost: 4000 coins
+    time: 6h
+  3:
+    value: 3
+    cost: 10000 coins
+    skip-cost: 16000 coins
+    time: 12h
+  4:
+    value: 4
+    cost: 35000 coins
+    skip-cost: 56000 coins
+    time: 1d
+  5:
+    value: 5
+    cost: 100000 coins
+    skip-cost: 160000 coins
+    time: 2d
+  6:
+    value: 6
+    cost: 300000 coins
+    skip-cost: 480000 coins
+    time: 3d
+  7:
+    value: 7
+    cost: 750000 coins
+    skip-cost: 1200000 coins
+    time: 5d

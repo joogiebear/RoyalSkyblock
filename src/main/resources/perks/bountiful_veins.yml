@@ -1,0 +1,43 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Perk: bountiful_veins
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per perk. The FILE NAME is the perk's id — copy this file to add a
+#  perk, nothing to register. Perks are OFF until you set `enabled: true` in
+#  perks.yml, and each applies only while its owner stands on their OWN island.
+#
+#    name            shown in the perks menu (& colour codes)
+#    icon            menu item
+#    required-level  island level needed to unlock it
+#    description     lore lines in the menu
+#    effects         what the perk grants. Two forms, mixable in one list:
+#                      "haste:0"                  potion shorthand, 0-based level
+#                      - id: give_money           any of the 275 eco effects,
+#                        args: {amount: 25}       with conditions/chance/triggers
+#    conditions      OPTIONAL libreforge conditions gating the whole perk
+#    unlock-commands console commands run ONCE on unlock (%owner% / %level%)
+#
+#  A triggered effect only fires if its trigger supplies what it needs — pairing
+#  multiply_drops with mine_block silently never runs, because mining carries no
+#  drop data. Drop effects want block_item_drop / entity_item_drop / catch_fish.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Doubles ore drops outright. NOTE the trigger: block_item_drop, not mine_block —
+# multiply_drops needs the drop data, which only a drop trigger provides.
+name: "&b&lBountiful Veins"
+icon: raw_iron
+required-level: 45
+description:
+  - "&7Ore you mine on your island"
+  - "&7sometimes drops twice."
+effects:
+  - id: multiply_drops
+    args:
+      multiplier: 2
+      chance: 25
+    triggers:
+      - block_item_drop
+unlock-commands: []
+
+# ── Late game: stats, not potions ─────────────────────────────────────────────
+# A permanent EcoSkills stat bonus for as long as the holder is active — i.e. while
+# standing on your own island. Nothing to re-apply and no potion icon clutter.

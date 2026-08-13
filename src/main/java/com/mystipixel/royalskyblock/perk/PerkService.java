@@ -31,6 +31,10 @@ import java.util.UUID;
  */
 public final class PerkService {
 
+    /** The perks shipped in the jar, written out on a fresh install. */
+    private static final String[] DEFAULT_PERKS =
+            {"haste", "renewal", "prospector", "bountiful_veins", "homefield", "scholar"};
+
     private final RoyalSkyblockPlugin plugin;
     private final List<Perk> perks = new ArrayList<>();
     private boolean enabled;
@@ -41,21 +45,59 @@ public final class PerkService {
         if (!new File(plugin.getDataFolder(), "perks.yml").exists()) {
             plugin.saveResource("perks.yml", false);
         }
+        // Fresh install ships the folder, not a monolith. Skipped when perks/ already exists so a
+        // deleted perk stays deleted.
+        if (!new File(plugin.getDataFolder(), "perks").isDirectory()) {
+            for (String id : DEFAULT_PERKS) {
+                plugin.saveResource("perks/" + id + ".yml", false);
+            }
+        }
         reload();
     }
 
+    /**
+     * Load every perk, from {@code perks/*.yml} and from a legacy {@code perks.yml}.
+     *
+     * <p>One file per perk is the layout every eco plugin uses, so a perk can be added by copying a
+     * file — its name is the perk's id — with nothing to register anywhere. The toggle and refresh
+     * interval stay in {@code perks.yml}, which is settings rather than content.
+     *
+     * <p><b>Both sources are read.</b> A server with a commented {@code perks.yml} keeps working
+     * untouched; nothing is auto-split, because rewriting YAML through Bukkit strips every comment.
+     * A folder file wins if both define the same id.
+     */
     public void reload() {
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "perks.yml"));
         enabled = cfg.getBoolean("enabled", false);
         refreshSeconds = Math.max(2, cfg.getInt("effect-refresh-seconds", 6));
         perks.clear();
+
+        File dir = new File(plugin.getDataFolder(), "perks");
+        File[] files = dir.listFiles((d, name) -> name.endsWith(".yml") && !name.startsWith("_"));
+        if (files != null) {
+            for (File f : files) {
+                String id = f.getName().substring(0, f.getName().length() - 4);
+                loadPerk(id, YamlConfiguration.loadConfiguration(f));
+            }
+        }
+
         ConfigurationSection section = cfg.getConfigurationSection("perks");
         if (section != null) {
             for (String key : section.getKeys(false)) {
                 ConfigurationSection p = section.getConfigurationSection(key);
-                if (p == null) {
-                    continue;
+                if (p == null || perks.stream().anyMatch(existing -> existing.id().equals(key))) {
+                    continue; // a folder file already defined this id
                 }
+                loadPerk(key, p);
+            }
+        }
+        perks.sort(Comparator.comparingInt(Perk::requiredLevel));
+    }
+
+    /** Read one perk. {@code p} is the file itself for a folder perk, or a section of the legacy file. */
+    private void loadPerk(String key, ConfigurationSection p) {
+        {
+            {
                 Material icon = Material.matchMaterial(p.getString("icon", "nether_star").toUpperCase(Locale.ROOT));
                 if (icon == null || !icon.isItem()) {
                     icon = Material.NETHER_STAR;
@@ -73,7 +115,6 @@ public final class PerkService {
                         p.getStringList("description"), effects, p.getStringList("unlock-commands")));
             }
         }
-        perks.sort(Comparator.comparingInt(Perk::requiredLevel));
     }
 
     public boolean enabled() {

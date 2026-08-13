@@ -1,0 +1,131 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Upgrade track: sanctuary
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per upgrade track. The FILE NAME is the track's id — copy this file to
+#  add a new track, no registration needed anywhere.
+#
+#    display-name : shown in the menu (& colour codes)
+#    icon         : the menu item
+#    description  : one-line summary in the icon lore
+#    effect       : what a tier changes — radius / guest_slots / coop_slots /
+#                   generator / minions / none (none = the effects chain IS the upgrade)
+#
+#  Per tier (1, 2, 3, ...):
+#    value      : the effect number at that tier
+#    cost       : pay this, then wait `time`            (e.g. 5000 coins)
+#    skip-cost  : pay this instead to finish instantly
+#    time       : the wait — 2d / 4h / 30m / 45s / 0    (0 = instant)
+#    effects    : OPTIONAL libreforge chain granted while the island is at this tier.
+#                 Applies to anyone standing on the island. Only the CURRENT tier's
+#                 chain is active, so write each tier as the full effect you want.
+#    conditions : OPTIONAL libreforge conditions.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Sanctuary — an upgrade track made entirely of libreforge effects.
+#
+#  Nothing here changes island mechanics, so its `effect:` is `none` and every tier's
+#  `value` is 0: the track exists purely to carry an `effects:` chain. That is the
+#  shape to copy for any "buy a buff" upgrade.
+#
+#  These apply to ANYONE standing on the island — members and visitors — because
+#  the island is what was upgraded. And only the CURRENT tier's chain is active,
+#  never the ones beneath it, so each tier restates the full effect it should give
+#  rather than adding an increment.
+# ═══════════════════════════════════════════════════════════════════════════════
+display-name: "&d&lSanctuary"
+icon: beacon
+description: "Bless your island. Everyone standing on it shares the effect."
+effect: none
+
+tiers:
+  1:
+    value: 0
+    cost: 25000 coins
+    skip-cost: 40000 coins
+    time: 6h
+    effects:
+      - id: permanent_potion_effect
+        args:
+          effect: haste
+          level: 1              # 1 = level I
+  2:
+    value: 0
+    cost: 75000 coins
+    skip-cost: 120000 coins
+    time: 12h
+    effects:
+      - id: permanent_potion_effect
+        args:
+          effect: haste
+          level: 1
+      - id: permanent_potion_effect
+        args:
+          effect: speed
+          level: 1
+  3:
+    value: 0
+    cost: 200000 coins
+    skip-cost: 320000 coins
+    time: 1d
+    effects:
+      - id: permanent_potion_effect
+        args:
+          effect: haste
+          level: 2
+      - id: permanent_potion_effect
+        args:
+          effect: speed
+          level: 1
+      # From here the track stops being potions and starts touching EcoSkills.
+      - id: multiply_all_stats
+        args:
+          multiplier: 1.1
+  4:
+    value: 0
+    cost: 500000 coins
+    skip-cost: 800000 coins
+    time: 2d
+    effects:
+      - id: permanent_potion_effect
+        args:
+          effect: haste
+          level: 2
+      - id: permanent_potion_effect
+        args:
+          effect: speed
+          level: 1
+      - id: permanent_potion_effect
+        args:
+          effect: regeneration
+          level: 1
+      - id: multiply_all_stats
+        args:
+          multiplier: 1.2
+  5:
+    value: 0
+    cost: 1200000 coins
+    skip-cost: 2000000 coins
+    time: 3d
+    effects:
+      - id: permanent_potion_effect
+        args:
+          effect: haste
+          level: 3
+      - id: permanent_potion_effect
+        args:
+          effect: speed
+          level: 2
+      - id: permanent_potion_effect
+        args:
+          effect: regeneration
+          level: 1
+      - id: multiply_all_stats
+        args:
+          multiplier: 1.3
+      # Mining fortune is the stat that actually multiplies ore drops on this
+      # server — see the mining-fortune sourcing notes before retuning it.
+      - id: add_stat
+        args:
+          stat: mining_fortune
+          amount: 25

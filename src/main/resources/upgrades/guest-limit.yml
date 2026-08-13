@@ -1,0 +1,54 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Upgrade track: guest-limit
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per upgrade track. The FILE NAME is the track's id — copy this file to
+#  add a new track, no registration needed anywhere.
+#
+#    display-name : shown in the menu (& colour codes)
+#    icon         : the menu item
+#    description  : one-line summary in the icon lore
+#    effect       : what a tier changes — radius / guest_slots / coop_slots /
+#                   generator / minions / none (none = the effects chain IS the upgrade)
+#
+#  Per tier (1, 2, 3, ...):
+#    value      : the effect number at that tier
+#    cost       : pay this, then wait `time`            (e.g. 5000 coins)
+#    skip-cost  : pay this instead to finish instantly
+#    time       : the wait — 2d / 4h / 30m / 45s / 0    (0 = instant)
+#    effects    : OPTIONAL libreforge chain granted while the island is at this tier.
+#                 Applies to anyone standing on the island. Only the CURRENT tier's
+#                 chain is active, so write each tier as the full effect you want.
+#    conditions : OPTIONAL libreforge conditions.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+display-name: "&b&lGuest Limit"
+icon: player_head
+description: "Allow extra guests to /visit your island at the same time."
+effect: guest_slots
+
+tiers:
+  1:
+    value: 1
+    cost: 0 coins
+    skip-cost: 288 coins
+    time: 2d
+  2:
+    value: 2
+    cost: 50 coins
+    skip-cost: 576 coins
+    time: 4d
+  3:
+    value: 3
+    cost: 50 coins
+    skip-cost: 864 coins
+    time: 6d
+  4:
+    value: 4
+    cost: 50 coins
+    skip-cost: 1152 coins
+    time: 8d
+  5:
+    value: 5
+    cost: 50 coins
+    skip-cost: 2304 coins
+    time: 16d

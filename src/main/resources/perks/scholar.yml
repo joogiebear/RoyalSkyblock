@@ -1,0 +1,72 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Perk: scholar
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per perk. The FILE NAME is the perk's id — copy this file to add a
+#  perk, nothing to register. Perks are OFF until you set `enabled: true` in
+#  perks.yml, and each applies only while its owner stands on their OWN island.
+#
+#    name            shown in the perks menu (& colour codes)
+#    icon            menu item
+#    required-level  island level needed to unlock it
+#    description     lore lines in the menu
+#    effects         what the perk grants. Two forms, mixable in one list:
+#                      "haste:0"                  potion shorthand, 0-based level
+#                      - id: give_money           any of the 275 eco effects,
+#                        args: {amount: 25}       with conditions/chance/triggers
+#    conditions      OPTIONAL libreforge conditions gating the whole perk
+#    unlock-commands console commands run ONCE on unlock (%owner% / %level%)
+#
+#  A triggered effect only fires if its trigger supplies what it needs — pairing
+#  multiply_drops with mine_block silently never runs, because mining carries no
+#  drop data. Drop effects want block_item_drop / entity_item_drop / catch_fish.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Skill xp earned on your own island is worth more, which quietly rewards building
+# your base up rather than grinding elsewhere.
+name: "&5&lIsland Scholar"
+icon: enchanted_book
+required-level: 80
+description:
+  - "&7Bonus mining skill xp for"
+  - "&7every ore you break at home."
+effects:
+  - id: give_skill_xp_naturally
+    args:
+      skill: mining
+      amount: 5
+    triggers:
+      - mine_block
+# Example one-time unlock reward (needs an economy command; edit for your setup):
+# unlock-commands:
+#   - "eco give %owner% 5000"
+unlock-commands: []
+
+# ── Requires EcoMinions ───────────────────────────────────────────────────────
+# Commented out because minion_pickup and minion_count_above only exist when
+# EcoMinions is installed — on a server without it, libreforge would report both as
+# unknown ids. Uncomment if you run EcoMinions.
+#
+# RoyalSkyblock registers those two elements itself: EcoMinions fires Bukkit events
+# but no libreforge elements, so nothing in any eco config could see minion activity
+# until this plugin published it. They are ordinary libreforge elements, so they also
+# work in EcoItems, EcoQuests, Talismans and anywhere else conditions and triggers do.
+#
+# overseer:
+#   name: "&6&lMinion Overseer"
+#   icon: armor_stand
+#   required-level: 70
+#   description:
+#     - "&7Run a real operation — more than"
+#     - "&7ten minions — and every collection"
+#     - "&7pays you a finder's fee."
+#   conditions:
+#     - id: minion_count_above
+#       args:
+#         count: 10
+#   effects:
+#     - id: give_money
+#       args:
+#         amount: 100
+#       triggers:
+#         - minion_pickup
+#   unlock-commands: []

@@ -1,0 +1,32 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Perk: haste
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per perk. The FILE NAME is the perk's id — copy this file to add a
+#  perk, nothing to register. Perks are OFF until you set `enabled: true` in
+#  perks.yml, and each applies only while its owner stands on their OWN island.
+#
+#    name            shown in the perks menu (& colour codes)
+#    icon            menu item
+#    required-level  island level needed to unlock it
+#    description     lore lines in the menu
+#    effects         what the perk grants. Two forms, mixable in one list:
+#                      "haste:0"                  potion shorthand, 0-based level
+#                      - id: give_money           any of the 275 eco effects,
+#                        args: {amount: 25}       with conditions/chance/triggers
+#    conditions      OPTIONAL libreforge conditions gating the whole perk
+#    unlock-commands console commands run ONCE on unlock (%owner% / %level%)
+#
+#  A triggered effect only fires if its trigger supplies what it needs — pairing
+#  multiply_drops with mine_block silently never runs, because mining carries no
+#  drop data. Drop effects want block_item_drop / entity_item_drop / catch_fish.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# ── Early game ────────────────────────────────────────────────────────────────
+name: "&e&lMiner's Haste"
+icon: golden_pickaxe
+required-level: 5
+description:
+  - "&7Mine faster while on your island."
+effects:
+  - "haste:0"
+unlock-commands: []

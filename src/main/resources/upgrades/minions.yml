@@ -1,0 +1,67 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalSkyblock  ·  Upgrade track: minions
+# ═══════════════════════════════════════════════════════════════════════════════
+#  One file per upgrade track. The FILE NAME is the track's id — copy this file to
+#  add a new track, no registration needed anywhere.
+#
+#    display-name : shown in the menu (& colour codes)
+#    icon         : the menu item
+#    description  : one-line summary in the icon lore
+#    effect       : what a tier changes — radius / guest_slots / coop_slots /
+#                   generator / minions / none (none = the effects chain IS the upgrade)
+#
+#  Per tier (1, 2, 3, ...):
+#    value      : the effect number at that tier
+#    cost       : pay this, then wait `time`            (e.g. 5000 coins)
+#    skip-cost  : pay this instead to finish instantly
+#    time       : the wait — 2d / 4h / 30m / 45s / 0    (0 = instant)
+#    effects    : OPTIONAL libreforge chain granted while the island is at this tier.
+#                 Applies to anyone standing on the island. Only the CURRENT tier's
+#                 chain is active, so write each tier as the full effect you want.
+#    conditions : OPTIONAL libreforge conditions.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+display-name: "&e&lMinion Slots"
+icon: armor_stand
+description: "Place more AFK minions on your island."
+effect: minions
+# 'value' is the total bonus slots at that tier (each tier adds one). RoyalMinions reads the tier
+# count and grants that many slots on top of its own `slot-limit`, so tier 5 here = 5 extra minions.
+tiers:
+  1:
+    value: 1
+    cost: 5000 coins
+    skip-cost: 8000 coins
+    time: 6h
+  2:
+    value: 2
+    cost: 15000 coins
+    skip-cost: 24000 coins
+    time: 12h
+  3:
+    value: 3
+    cost: 40000 coins
+    skip-cost: 64000 coins
+    time: 1d
+  4:
+    value: 4
+    cost: 100000 coins
+    skip-cost: 160000 coins
+    time: 2d
+  5:
+    value: 5
+    cost: 250000 coins
+    skip-cost: 400000 coins
+    time: 3d
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Sanctuary — an upgrade track made entirely of libreforge effects.
+#
+#  Nothing here changes island mechanics, so its `effect:` is the inert `minions`
+#  slot type and every tier's `value` is 0: the track exists purely to carry an
+#  `effects:` chain. That is the shape to copy for any "buy a buff" upgrade.
+#
+#  These apply to ANYONE standing on the island — members and visitors — because
+#  the island is what was upgraded. And only the CURRENT tier's chain is active,
+#  never the ones beneath it, so each tier restates the full effect it should give
+#  rather than adding an increment.
+# ═══════════════════════════════════════════════════════════════════════════════
