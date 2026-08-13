@@ -20,7 +20,7 @@ import java.util.UUID;
 
 /**
  * The {@code /island} command tree. Island actions operate on the player's <em>active profile</em>;
- * {@code /is profile} manages the profiles themselves. Player-facing text comes from messages.yml.
+ * {@code /is profile} manages the profiles themselves. Player-facing text comes from lang.yml.
  */
 public final class IslandCommand implements CommandExecutor, TabCompleter {
 
