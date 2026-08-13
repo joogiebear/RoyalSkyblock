@@ -57,3 +57,22 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+  # Returns to the main menu. player_command closes the inventory itself in
+  # RoyalSkyblock, so this needs no separate close effect — unlike the other
+  # menus, which reach main with open_menu.
+  - item: arrow name:"&fBack"
+    lore:
+      - "&7Return to the main menu."
+    row: 6
+    column: 3
+    # The menu plays its own open sound; without this the two land together and
+    # are heard as one doubled click.
+    silent: true
+    left-click:
+      - id: player_command
+        args: {command: "menu"}
+    sound:
+      name: UI_BUTTON_CLICK
+      volume: 0.6
+      pitch: 1.2
