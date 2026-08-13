@@ -1,5 +1,6 @@
 package com.mystipixel.royalskyblock.gui;
 
+import com.willfp.eco.core.gui.menu.Menu;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.bank.BankAccount;
 import com.mystipixel.royalskyblock.bank.BankLevel;
@@ -33,6 +34,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
@@ -77,13 +79,26 @@ public final class GuiManager implements Listener {
             "level/level", "level/top", "level/perks",
     };
 
+    /**
+     * Menus rendered through eco's Menu API rather than the legacy Bukkit-inventory path.
+     *
+     * <p>These are exactly the menus {@link #fillDynamic} does not touch — every slot comes from the
+     * config, so there is nothing for code to inject after the fact. The remaining menus still build
+     * their content imperatively against an {@link Inventory} and a {@link MenuHolder}; they move over
+     * once that content is expressed as eco reactive slots.
+     */
+    private static final Set<String> ECO_RENDERED = Set.of(
+            MAIN, CONFIRM_DELETE, CREATE_PROFILE, MANAGE, BANK_HUB);
+
     private final RoyalSkyblockPlugin plugin;
     private final EcoHook ecoHook;
+    private final EcoMenuFactory ecoMenus;
     private final Map<String, MenuTemplate> byId = new LinkedHashMap<>();
 
     public GuiManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
         this.ecoHook = new EcoHook();
+        this.ecoMenus = new EcoMenuFactory(ecoHook);
         reload();
     }
 
@@ -116,6 +131,11 @@ public final class GuiManager implements Listener {
         }
         Map<String, String> placeholders = placeholders(player);
 
+        if (ECO_RENDERED.contains(menuId)) {
+            openEcoMenu(player, template, apply(template.title(), placeholders));
+            return;
+        }
+
         MenuHolder holder = new MenuHolder(menuId, context);
         Inventory inv = Bukkit.createInventory(holder, template.size(),
                 Text.color(apply(template.title(), placeholders)));
@@ -128,6 +148,33 @@ public final class GuiManager implements Listener {
         }
         fillDynamic(menuId, player, template, inv, holder);
         player.openInventory(inv);
+        play(player, template, "open", null);
+    }
+
+    /**
+     * Render a fully config-driven menu through eco.
+     *
+     * <p>The menu is rebuilt per open rather than cached: the title is fixed at build time and may
+     * carry placeholders, and rebuilding keeps a {@code /is reload} taking effect immediately instead
+     * of leaving stale menus behind.
+     *
+     * <p>eco owns the click handling for these, so {@link #onClick} never sees them — it only reacts to
+     * inventories held by a {@link MenuHolder}, which eco menus are not. The click sound and effect
+     * dispatch below therefore have to be done here, mirroring what that listener does for the legacy
+     * path so both feel identical.
+     */
+    private void openEcoMenu(Player player, MenuTemplate template, String title) {
+        Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
+            List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
+                    ? slot.rightClick() : slot.leftClick();
+            if (!effects.isEmpty() && !slot.silent()) {
+                play(viewer, template, "click", CLICK_FALLBACK);
+            }
+            for (MenuEffect effect : effects) {
+                execute(viewer, effect);
+            }
+        });
+        menu.open(player);
         play(player, template, "open", null);
     }
 

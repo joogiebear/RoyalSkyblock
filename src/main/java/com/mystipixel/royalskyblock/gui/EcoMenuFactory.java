@@ -52,14 +52,19 @@ public final class EcoMenuFactory {
      * Convert a template into a live eco menu.
      *
      * @param template     the parsed {@code gui/*.yml}
+     * @param title        the menu title, already {@code %token%}-substituted. Passed in rather than
+     *                     read off the template because eco fixes the title at build time while
+     *                     placeholders resolve per viewer, so the caller — which knows the viewer —
+     *                     owns that substitution and the two render paths cannot drift apart.
      * @param placeholders per-viewer {@code %token%} values for item names and lore
      * @param onClick      invoked for a configured slot; dynamic content slots are left to the caller
      */
     public Menu build(MenuTemplate template,
+                      String title,
                       Function<Player, Map<String, String>> placeholders,
                       SlotClickHandler onClick) {
         MenuBuilder builder = Menu.builder(template.size() / 9)
-                .setTitle(Text.legacy(template.title()));
+                .setTitle(Text.legacy(title));
 
         applyFiller(template, builder);
 
