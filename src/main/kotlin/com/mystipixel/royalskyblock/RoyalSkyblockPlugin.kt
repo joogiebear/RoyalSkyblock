@@ -272,11 +272,18 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         scanner.register(StackingPlantSimulator(this))
         server.pluginManager.registerEvents(scanner, this)
 
-        // EcoMobs strength bridge — soft hook. Only register when EcoMobs is present, so the bridge
-        // class (which references EcoMobs types) is never loaded otherwise.
+        // EcoMobs strength bridge — soft hook. The bridge resolves EcoMobs' spawn event reflectively
+        // (no publishable artifact exists to compile against; see the class docs) and reports whether
+        // it managed to bind.
         if (server.pluginManager.isPluginEnabled("EcoMobs")) {
-            server.pluginManager.registerEvents(EcoMobsStrengthBridge(this), this)
-            logger.info("EcoMobs detected — island-level mob strength scaling active.")
+            if (EcoMobsStrengthBridge.register(this)) {
+                logger.info("EcoMobs detected — island-level mob strength scaling active.")
+            } else {
+                logger.warning(
+                    "EcoMobs is installed but its spawn event could not be resolved — "
+                        + "island mob strength scaling is off."
+                )
+            }
         }
 
         this.generatorService = GeneratorService(this)

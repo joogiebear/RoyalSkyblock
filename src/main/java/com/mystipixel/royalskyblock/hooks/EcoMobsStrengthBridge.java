@@ -2,15 +2,18 @@ package com.mystipixel.royalskyblock.hooks;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.island.Island;
-import com.willfp.ecomobs.event.EcoMobSpawnEvent;
+import org.bukkit.Bukkit;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Registry;
 import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeInstance;
 import org.bukkit.entity.Mob;
-import org.bukkit.event.EventHandler;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.plugin.Plugin;
+
+import java.lang.reflect.Method;
 
 /**
  * Scales an EcoMobs custom mob's health and damage by the level of the island it spawns on.
@@ -22,45 +25,90 @@ import org.bukkit.event.Listener;
  * dead end. Here we read the island level straight from the mob's world after it has spawned, which
  * needs no player at all.
  *
- * <p><b>Soft dependency.</b> This class references EcoMobs types, so it is only instantiated and
- * registered when EcoMobs is actually installed (guarded in {@code onEnable}). If EcoMobs is absent,
- * the class is never loaded and RoyalSkyblock is unaffected.
+ * <p><b>Why reflection instead of a compile dependency.</b> Every published
+ * {@code com.willfp:EcoMobs} artifact is an empty two-entry stub containing no classes — verified
+ * across 2026.27, .29, .30, .31 and .32 — so there is nothing to compile against. A build can appear
+ * to work when a real jar has been hand-installed into the developer's local Maven repository, but
+ * that is invisible to CI and to anyone else cloning the project. The shipped plugin jar does contain
+ * {@code com.willfp.ecomobs.event.EcoMobSpawnEvent}, so the event is resolved and registered at
+ * runtime instead. This matches how {@link EcoSkillsCombatSource} already hooks EcoSkills, for the
+ * same reason.
  *
  * <p><b>Version independence.</b> The attributes are looked up by their stable registry key
  * ({@code minecraft:max_health} / {@code minecraft:attack_damage}) rather than the {@code Attribute}
- * enum constant, whose Java name churned across Bukkit versions (the {@code GENERIC_} prefix). The
- * registry keys have been stable since the attribute rename, so this compiles and resolves the same
- * whatever paper-api version the plugin is built against.
+ * enum constant, whose Java name churned across Bukkit versions (the {@code GENERIC_} prefix).
  */
 public final class EcoMobsStrengthBridge implements Listener {
+
+    private static final String EVENT_CLASS = "com.willfp.ecomobs.event.EcoMobSpawnEvent";
 
     private static final Attribute MAX_HEALTH = attribute("max_health");
     private static final Attribute ATTACK_DAMAGE = attribute("attack_damage");
 
     private final RoyalSkyblockPlugin plugin;
+    private final Method getMob;
+    private final Method getEntity;
 
-    public EcoMobsStrengthBridge(RoyalSkyblockPlugin plugin) {
+    private EcoMobsStrengthBridge(RoyalSkyblockPlugin plugin, Method getMob, Method getEntity) {
         this.plugin = plugin;
+        this.getMob = getMob;
+        this.getEntity = getEntity;
     }
 
-    private static Attribute attribute(String key) {
+    /**
+     * Resolve EcoMobs' spawn event and register the bridge against it. Returns false when EcoMobs
+     * isn't present or its event isn't shaped the way we expect; the caller logs and carries on, and
+     * island mobs simply aren't scaled.
+     *
+     * <p>Registered at HIGH rather than MONITOR: MONITOR is for observers and this mutates the mob.
+     * HIGH still runs after EcoMobs has finished configuring the entity.
+     */
+    @SuppressWarnings("unchecked")
+    public static boolean register(RoyalSkyblockPlugin plugin) {
         try {
-            return Registry.ATTRIBUTE.get(NamespacedKey.minecraft(key));
-        } catch (Throwable t) {
-            return null;                         // very old/odd API — the scale() guard handles null
+            Plugin ecoMobs = Bukkit.getPluginManager().getPlugin("EcoMobs");
+            if (ecoMobs == null) {
+                return false;
+            }
+            Class<?> eventClass = Class.forName(EVENT_CLASS, false, ecoMobs.getClass().getClassLoader());
+            if (!Event.class.isAssignableFrom(eventClass)) {
+                return false;
+            }
+            Method getMob = eventClass.getMethod("getMob");
+            // Resolve getEntity() off the DECLARED return type (EcoMobs' public mob interface) rather
+            // than the runtime object's class, which may be a non-public implementation that would
+            // reject the call.
+            Method getEntity = getMob.getReturnType().getMethod("getEntity");
+
+            EcoMobsStrengthBridge bridge = new EcoMobsStrengthBridge(plugin, getMob, getEntity);
+            Bukkit.getPluginManager().registerEvent(
+                    (Class<? extends Event>) eventClass,
+                    bridge,
+                    EventPriority.HIGH,
+                    (listener, event) -> bridge.handle(event),
+                    plugin);
+            return true;
+        } catch (Throwable notEcoMobs) {
+            return false;
         }
     }
 
-    // HIGH, not MONITOR: MONITOR is for observers, and we mutate the mob. Runs after EcoMobs has
-    // finished configuring the entity (the event carries an already-set-up LivingMob).
-    @EventHandler(priority = EventPriority.HIGH)
-    public void onSpawn(EcoMobSpawnEvent event) {
+    private void handle(Event event) {
         if (!plugin.conf().getBoolean("ecomobs.enabled", true)) {
             return;
         }
-        Mob entity = event.getMob().getEntity();
-        if (entity == null) {
-            return;
+        Mob entity;
+        try {
+            Object mob = getMob.invoke(event);
+            if (mob == null) {
+                return;
+            }
+            if (!(getEntity.invoke(mob) instanceof Mob resolved)) {
+                return;
+            }
+            entity = resolved;
+        } catch (Throwable failed) {
+            return;                              // EcoMobs changed shape — degrade to no scaling
         }
         Island island = plugin.islands().getIslandByWorld(entity.getWorld());
         if (island == null || island.level() <= 0) {
@@ -71,6 +119,14 @@ public final class EcoMobsStrengthBridge implements Listener {
                 multiplier(level, "health-scale-per-level", 0.002), true);
         scale(entity, ATTACK_DAMAGE,
                 multiplier(level, "damage-scale-per-level", 0.0015), false);
+    }
+
+    private static Attribute attribute(String key) {
+        try {
+            return Registry.ATTRIBUTE.get(NamespacedKey.minecraft(key));
+        } catch (Throwable t) {
+            return null;                         // very old/odd API — the scale() guard handles null
+        }
     }
 
     /** {@code 1 + level*scale}, clamped to {@code [1, max-multiplier]}. */
