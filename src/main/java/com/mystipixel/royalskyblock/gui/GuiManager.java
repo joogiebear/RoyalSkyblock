@@ -108,15 +108,6 @@ public final class GuiManager implements Listener {
      */
     private final Map<UUID, OpenEcoMenu> openEcoMenus = new ConcurrentHashMap<>();
 
-    /**
-     * Shortest gap between two menu sounds for one player. Roughly three ticks — long enough to fold a
-     * click and the resulting menu's open sound into one, short enough that deliberate clicks in a row
-     * still each sound.
-     */
-    private static final long SOUND_DEBOUNCE_MS = 150L;
-
-    /** Last time a menu sound played for a player, for the debounce in {@link #play}. */
-    private final Map<UUID, Long> lastMenuSound = new ConcurrentHashMap<>();
 
     /** A player's open eco menu and which menu it is. */
     private record OpenEcoMenu(String menuId, Menu menu) {
@@ -203,9 +194,7 @@ public final class GuiManager implements Listener {
         Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
             List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
                     ? slot.rightClick() : slot.leftClick();
-            if (shouldPlayClick(slot, effects)) {
-                play(viewer, template, "click", CLICK_FALLBACK);
-            }
+            playSlotSound(viewer, slot);
             for (MenuEffect effect : effects) {
                 execute(viewer, effect);
             }
@@ -224,9 +213,7 @@ public final class GuiManager implements Listener {
                 (viewer, slot, rightClick) -> {
                     List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
                             ? slot.rightClick() : slot.leftClick();
-                    if (shouldPlayClick(slot, effects)) {
-                        play(viewer, template, "click", CLICK_FALLBACK);
-                    }
+                    playSlotSound(viewer, slot);
                     for (MenuEffect effect : effects) {
                         execute(viewer, effect);
                     }
@@ -235,8 +222,8 @@ public final class GuiManager implements Listener {
                 // the click event. Running it inline opens the next menu from inside
                 // InventoryClickEvent, which Bukkit does not support cleanly — the menu opens mid-event
                 // and its open sound lands on top of the click, which is heard as a double click.
-                (viewer, action, rightClick) -> {
-                    play(viewer, template, "click", CLICK_FALLBACK);
+                (viewer, action, rightClick, configured) -> {
+                    playSlotSound(viewer, configured);
                     runNextTick(() -> action.accept(viewer, rightClick));
                 });
         // Track AFTER opening, not before. openInventory closes whatever the player had open and fires
@@ -429,7 +416,6 @@ public final class GuiManager implements Listener {
     public void onEcoMenuClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
             openEcoMenus.remove(player.getUniqueId());
-            lastMenuSound.remove(player.getUniqueId());
         }
     }
 
@@ -437,7 +423,6 @@ public final class GuiManager implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         openEcoMenus.remove(event.getPlayer().getUniqueId());
-        lastMenuSound.remove(event.getPlayer().getUniqueId());
     }
 
     /** A loaded menu template by id, or null if that file isn't registered. */
@@ -1378,45 +1363,23 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /**
-     * Whether clicking a slot should play the menu's click sound.
-     *
-     * <p>A button that opens another menu stays silent, because the destination plays its own open
-     * sound a tick later and the two are heard as a single doubled click. That is exactly what the
-     * per-slot {@code silent} flag was added for — deriving it here means the ~20 navigation buttons
-     * across the menus no longer each need the flag set by hand, and one that is missing it can no
-     * longer produce a double.
-     *
-     * <p>The destination is checked for an open sound rather than assumed: a menu that configures none
-     * would otherwise leave the click completely silent, which is worse than a doubled one.
-     */
-    private boolean shouldPlayClick(MenuSlot slot, List<MenuEffect> effects) {
-        if (effects.isEmpty() || slot.silent()) {
-            return false;
-        }
-        for (MenuEffect effect : effects) {
-            if (!"open_menu".equalsIgnoreCase(effect.id())) {
-                continue;
-            }
-            MenuTemplate destination = byId.get(effect.argString("menu", MAIN));
-            if (destination != null && destination.sound("open") != null) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private void runNextTick(Runnable runnable) {
         Bukkit.getScheduler().runTask(plugin, runnable);
     }
 
     /**
-     * What a click sounds like when a menu doesn't say. Menus were silent in config and this was
-     * hardcoded, so it stays the default — a menu that adds a {@code sounds:} block overrides it, and
-     * one that sets {@code enabled: false} turns it off.
+     * Play a slot's own click sound, if it declares one.
+     *
+     * <p>The only thing that makes a click audible. There is no menu-wide click sound and no built-in
+     * fallback, so a button is silent unless its config asks otherwise — which is what stops a
+     * navigation button doubling with the sound of the menu it opens.
      */
-    private static final MenuTemplate.SoundSpec CLICK_FALLBACK =
-            new MenuTemplate.SoundSpec("ui.button.click", 0.6f, 1.2f);
+    private void playSlotSound(Player player, MenuSlot slot) {
+        if (slot == null || slot.sound() == null) {
+            return;
+        }
+        play(player, null, null, slot.sound());
+    }
 
     /** Play a menu's configured sound for {@code key}, or {@code fallback} when it defines none. */
     private void play(Player player, MenuTemplate template, String key, MenuTemplate.SoundSpec fallback) {
@@ -1427,19 +1390,6 @@ public final class GuiManager implements Listener {
         if (spec == null) {
             return;
         }
-        // One menu sound per player per SOUND_DEBOUNCE_MS. Clicking a button that opens a menu makes
-        // two sounds a tick apart — the click, then the destination's open — and the ear hears a
-        // doubled click. Suppressing the click per-slot only fixed the cases we could see coming: it
-        // needs `silent` on the slot, or an effect list we can inspect for an open_menu. A
-        // code-registered action is an opaque callback, so a settings toggle or an upgrade purchase
-        // that reopens its own menu still doubled. Debouncing at the single point every menu sound
-        // passes through catches all of them, whatever produced the second sound.
-        long now = System.currentTimeMillis();
-        Long last = lastMenuSound.get(player.getUniqueId());
-        if (last != null && now - last < SOUND_DEBOUNCE_MS) {
-            return;
-        }
-        lastMenuSound.put(player.getUniqueId(), now);
         try {
             player.playSound(player.getLocation(), spec.name(), spec.volume(), spec.pitch());
         } catch (Throwable ignored) {

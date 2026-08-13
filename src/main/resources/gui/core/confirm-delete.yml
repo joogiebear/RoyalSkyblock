@@ -7,8 +7,10 @@
 #  RoyalSkyblock's own menu engine (not eco/libreforge):
 #    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
 #    click ids: open_menu · close · player_command · console_command · message · play_sound
-#    slot options: silent: true — suppress this menu’s click sound for one slot, for a
-#      button whose destination plays its own open sound (the two land together otherwise)
+#    slot options: sound: — the sound clicking this slot makes (name / volume / pitch,
+#      or enabled: false). A slot with no sound: block is SILENT. There is no menu-wide
+#      click sound: a button that opens another menu should stay silent and let the
+#      destination's open sound speak, or the two land together as one doubled click.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&8Skyblock &7» &cDelete Island"
@@ -52,6 +54,10 @@ slots:
       - id: player_command
         args:
           command: "is delete confirm"
+    sound:
+      name: UI_BUTTON_CLICK
+      volume: 0.6
+      pitch: 1.2
 
   - item: barrier name:"&c&lWarning"
     lore:

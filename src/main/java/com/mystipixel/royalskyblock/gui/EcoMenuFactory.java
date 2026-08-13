@@ -55,7 +55,13 @@ public final class EcoMenuFactory {
      */
     @FunctionalInterface
     public interface DynamicClickHandler {
-        void onClick(Player player, BiConsumer<Player, Boolean> action, boolean rightClick);
+        /**
+         * @param configured the config slot sitting at that index, or null when the mask left it empty.
+         *                   Carries the sound the slot should make; generated content inherits whatever
+         *                   the admin put on the slot it lands in.
+         */
+        void onClick(Player player, BiConsumer<Player, Boolean> action, boolean rightClick,
+                     MenuSlot configured);
     }
 
     /**
@@ -205,7 +211,7 @@ public final class EcoMenuFactory {
         Rendered rendered = menu.getState(player, STATE_RENDER);
         BiConsumer<Player, Boolean> action = rendered == null ? null : rendered.actions().get(index);
         if (action != null) {
-            dynamicClick.onClick(player, action, rightClick);
+            dynamicClick.onClick(player, action, rightClick, configured);
             return;
         }
         if (configured != null) {

@@ -70,7 +70,7 @@ public final class MenuTemplate {
                 continue;
             }
             out.put(key.toLowerCase(Locale.ROOT), new SoundSpec(
-                    name.trim().toLowerCase(Locale.ROOT).replace('_', '.'),
+                    normaliseSoundName(name),
                     (float) entry.getDouble("volume", 0.7),
                     (float) entry.getDouble("pitch", 1.0)));
         }
@@ -149,7 +149,7 @@ public final class MenuTemplate {
         return new MenuSlot(index, id, content, item, stringList(raw.get("lore")),
                 MenuEffect.parseList(castMapList(raw.get("left-click"))),
                 MenuEffect.parseList(castMapList(raw.get("right-click"))),
-                Boolean.parseBoolean(String.valueOf(raw.get("silent"))));
+                parseSlotSound(raw.get("sound")));
     }
 
     /** Slots that pin a named dynamic entry ({@code content: <key>}) → their 0-based index. */
@@ -239,6 +239,52 @@ public final class MenuTemplate {
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────
+
+    /** Bukkit enum ids ({@code UI_BUTTON_CLICK}) are what the configs use; Paper wants the namespaced key. */
+    private static String normaliseSoundName(String name) {
+        return name.trim().toLowerCase(Locale.ROOT).replace('_', '.');
+    }
+
+    /**
+     * A slot's own {@code sound:} block — the same {@code name}/{@code volume}/{@code pitch}/{@code enabled}
+     * shape as a menu-level entry. Null when the slot declares none, or sets {@code enabled: false},
+     * which means clicking it is silent.
+     */
+    private static SoundSpec parseSlotSound(Object raw) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        if (raw instanceof ConfigurationSection cs) {
+            for (String k : cs.getKeys(false)) {
+                map.put(k, cs.get(k));
+            }
+        } else if (raw instanceof Map<?, ?> m) {
+            for (Map.Entry<?, ?> e : m.entrySet()) {
+                map.put(String.valueOf(e.getKey()), e.getValue());
+            }
+        } else {
+            return null;
+        }
+        Object name = map.getOrDefault("name", map.get("sound"));
+        if (name == null || String.valueOf(name).isBlank()) {
+            return null;
+        }
+        Object enabled = map.get("enabled");
+        if (enabled != null && !Boolean.parseBoolean(String.valueOf(enabled))) {
+            return null;
+        }
+        return new SoundSpec(normaliseSoundName(String.valueOf(name)),
+                (float) doubleOf(map.get("volume"), 0.7), (float) doubleOf(map.get("pitch"), 1.0));
+    }
+
+    private static double doubleOf(Object o, double def) {
+        if (o instanceof Number n) {
+            return n.doubleValue();
+        }
+        try {
+            return o == null ? def : Double.parseDouble(String.valueOf(o));
+        } catch (NumberFormatException e) {
+            return def;
+        }
+    }
 
     private static List<String> stringList(Object o) {
         List<String> out = new ArrayList<>();
