@@ -99,6 +99,10 @@ dependencies {
     // supplies its charts through EcoPlugin.getCustomCharts(). Shading our own copy as well would
     // double-report.
 
+    // eco on the test classpath so the menu coordinate conversion can be asserted against eco's own
+    // MenuUtils rather than a hand-copied formula — a silent off-by-one there displaces every button.
+    testImplementation("com.willfp:eco:$ecoVersion")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.mockito:mockito-core:5.14.2")
     // Platform version tracks junit-jupiter 5.11.3 (Maven's surefire supplied this implicitly).
