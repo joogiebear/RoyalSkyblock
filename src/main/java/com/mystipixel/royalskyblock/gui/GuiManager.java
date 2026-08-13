@@ -135,6 +135,12 @@ public final class GuiManager implements Listener {
             String id = path.substring(path.lastIndexOf('/') + 1); // menu id = basename
             byId.put(id, MenuTemplate.load(file, "&6&lSkyblock", 5));
         }
+        // Compile every menu's effect chains now, so a broken one is reported here with its file and
+        // slot named rather than the first time a player presses that button.
+        com.mystipixel.royalskyblock.libreforge.MenuChains.invalidate();
+        for (Map.Entry<String, MenuTemplate> entry : byId.entrySet()) {
+            com.mystipixel.royalskyblock.libreforge.MenuChains.precompile(entry.getKey(), entry.getValue());
+        }
         // Catch a menu added to MENU_PATHS but never classified. Without this the mistake only shows up
         // as a menu that does nothing when a player runs the command that opens it.
         for (String id : byId.keySet()) {

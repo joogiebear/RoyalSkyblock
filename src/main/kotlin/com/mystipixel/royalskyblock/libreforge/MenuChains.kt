@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.libreforge
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin
 import com.mystipixel.royalskyblock.gui.menu.MenuEffect
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot
+import com.mystipixel.royalskyblock.gui.menu.MenuTemplate
 import com.willfp.eco.core.config.TransientConfig
 import com.willfp.eco.core.config.interfaces.Config
 import com.willfp.libreforge.ViolationContext
@@ -37,8 +38,10 @@ import java.util.concurrent.ConcurrentHashMap
  * implementing any of them — which is the difference between a bespoke menu system and one an eco
  * user already knows how to configure.
  *
- * Chains are compiled once per slot and cached, because compiling on every click would parse config
- * inside an inventory event. [invalidate] drops the cache on reload.
+ * Chains are compiled when menus load, not when a button is first clicked. That is deliberate: it
+ * keeps config parsing out of inventory events, and it means a broken chain is reported at startup
+ * with the file and slot named — the way every other eco plugin reports its violations — instead of
+ * the first time some player happens to press that button.
  */
 object MenuChains {
 
@@ -68,10 +71,22 @@ object MenuChains {
         Triggers.register(TRIGGER)
     }
 
-    /** Drop every compiled chain. Called on reload so edited configs take effect. */
+    /** Drop every compiled chain. Called before menus reload. */
     @JvmStatic
     fun invalidate() {
         cache.clear()
+    }
+
+    /**
+     * Compile every chain in a menu up front, so violations are reported at load rather than on the
+     * first click. Safe to call repeatedly; each slot is compiled once.
+     */
+    @JvmStatic
+    fun precompile(menuId: String, template: MenuTemplate) {
+        for (slot in template.slots()) {
+            compileFor(menuId, slot, false)
+            compileFor(menuId, slot, true)
+        }
     }
 
     /** Whether an id is handled by the menu engine rather than libreforge. */
@@ -84,24 +99,28 @@ object MenuChains {
      */
     @JvmStatic
     fun run(menuId: String, slot: MenuSlot, rightClick: Boolean, player: Player) {
-        val effects: List<MenuEffect> =
-            if (rightClick && slot.rightClick().isNotEmpty()) slot.rightClick() else slot.leftClick()
-        val custom = effects.filterNot { isBuiltIn(it.id()) }
-        if (custom.isEmpty()) {
-            return
-        }
-        val key = "$menuId:${slot.index()}:$rightClick"
-        val chain = cache.getOrPut(key) {
-            Effects.compileChain(
-                custom.map { it.toConfig() },
-                ViolationContext(RoyalSkyblockPlugin.get(), "menu $menuId slot ${slot.index()}")
-            )
-        }
+        val chain = compileFor(menuId, slot, rightClick) ?: return
         chain.trigger(
             player.toDispatcher(),
             TriggerData(player = player, location = player.location),
             TRIGGER
         )
+    }
+
+    /** Compile (and cache) one slot's chain for one click type, or null when it has no eco effects. */
+    private fun compileFor(menuId: String, slot: MenuSlot, rightClick: Boolean): Chain? {
+        val effects: List<MenuEffect> =
+            if (rightClick && slot.rightClick().isNotEmpty()) slot.rightClick() else slot.leftClick()
+        val custom = effects.filterNot { isBuiltIn(it.id()) }
+        if (custom.isEmpty()) {
+            return null
+        }
+        return cache.getOrPut("$menuId:${slot.index()}:$rightClick") {
+            Effects.compileChain(
+                custom.map { it.toConfig() },
+                ViolationContext(RoyalSkyblockPlugin.get(), "menu $menuId slot ${slot.index()}")
+            )
+        }
     }
 
     /** A MenuEffect is already id + args; wrap it as the config libreforge expects. */
