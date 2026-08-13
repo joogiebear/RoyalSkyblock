@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.command;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.config.ContentSplitter;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.profile.Gamemode;
@@ -712,13 +713,51 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             handleMobSpawnAdmin(sender, args);
             return;
         }
+        if (action.equals("split-content")) {
+            handleSplitContent(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
+        sender.sendMessage(Text.color("&8» &e/is admin split-content [confirm] &7— upgrades.yml/perks.yml → one file each"));
         sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7— island mob spawning"));
         sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7— island border colour"));
         sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
         sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7— island load/unload + heap benchmark"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
         sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
+    }
+
+    /**
+     * {@code /is admin split-content [confirm]} — convert legacy monoliths to the folder layout.
+     *
+     * <p>Runs as a preview unless {@code confirm} is passed. Nothing about this is urgent — both
+     * layouts load — so it asks first rather than rewriting an admin's config the moment they type
+     * a command they may have been exploring.
+     */
+    private void handleSplitContent(CommandSender sender, String[] args) {
+        boolean apply = args.length >= 3 && args[2].equalsIgnoreCase("confirm");
+        ContentSplitter.Result result = new ContentSplitter(plugin).run(apply);
+
+        sender.sendMessage(Text.color("&8» &e&lContent split &7" + (apply ? "— applied" : "— preview")));
+        for (String note : result.notes()) {
+            sender.sendMessage(Text.color("&8  · &7" + note));
+        }
+        for (String file : result.written()) {
+            sender.sendMessage(Text.color("&8  · &a" + (apply ? "wrote " : "would write ") + "&f" + file));
+        }
+        for (String file : result.skipped()) {
+            sender.sendMessage(Text.color("&8  · &e skipped &f" + file));
+        }
+        if (result.isEmpty()) {
+            sender.sendMessage(Text.color("&7Nothing to do — content is already one file per thing."));
+            return;
+        }
+        if (apply) {
+            sender.sendMessage(Text.color("&7Done. The originals are kept alongside as &f.pre-split&7."));
+        } else {
+            sender.sendMessage(Text.color("&7Run &e/is admin split-content confirm &7to apply. "
+                    + "Originals are kept, not deleted."));
+        }
     }
 
     /** {@code /is admin border <blue|red|green|off>} — set the island border colour live. */
@@ -1174,7 +1213,8 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             return filter(names, args[1], sender);
         }
         if (args.length == 2 && sub.equals("admin") && sender.hasPermission("royalskyblock.admin")) {
-            return filter(List.of("status", "border", "testworld", "loadtest", "schematic", "upgrade", "chesttest"), args[1], sender);
+            return filter(List.of("status", "border", "testworld", "loadtest", "schematic", "upgrade",
+                    "chesttest", "split-content"), args[1], sender);
         }
         if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("border")) {
             return filter(List.of("blue", "red", "green", "off"), args[2], sender);
