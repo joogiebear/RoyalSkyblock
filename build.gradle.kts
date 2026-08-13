@@ -103,6 +103,10 @@ dependencies {
     // MenuUtils rather than a hand-copied formula — a silent off-by-one there displaces every button.
     testImplementation("com.willfp:eco:$ecoVersion")
 
+    // Paper on the test classpath so config parsing can be tested against a real YamlConfiguration.
+    // compileOnly does not reach tests, which is why the parsers had no coverage until now.
+    testImplementation("io.papermc.paper:paper-api:26.2.build.40-alpha")
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.mockito:mockito-core:5.14.2")
     // Platform version tracks junit-jupiter 5.11.3 (Maven's surefire supplied this implicitly).

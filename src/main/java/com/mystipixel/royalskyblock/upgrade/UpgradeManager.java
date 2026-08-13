@@ -176,7 +176,7 @@ public final class UpgradeManager {
                         break;
                     }
                     tiers.add(new UpgradeTier(n, t.getDouble("value"),
-                            parseCost(t, "cost"), parseCost(t, "skip-cost"), parseTime(t.getString("time", "0"))));
+                            parseCost(t, "cost", plugin.getLogger()), parseCost(t, "skip-cost", plugin.getLogger()), parseTime(t.getString("time", "0"))));
                     n++;
                 }
             }
@@ -278,7 +278,9 @@ public final class UpgradeManager {
      * <p>The amount comes first because that is the part being tuned; the currency is usually the same
      * across a whole file. {@code 0} on its own means free.
      */
-    private Cost parseCost(ConfigurationSection tier, String key) {
+    // Static and taking a logger rather than reading plugin state, so both config shapes can be
+    // tested without standing up a plugin instance.
+    static Cost parseCost(ConfigurationSection tier, String key, java.util.logging.Logger log) {
         ConfigurationSection c = tier.getConfigurationSection(key);
         if (c != null) {
             return new Cost(c.getString("currency", "coins"), c.getDouble("amount", 0));
@@ -292,7 +294,7 @@ public final class UpgradeManager {
         try {
             amount = Double.parseDouble(parts[0]);
         } catch (NumberFormatException notANumber) {
-            plugin.getLogger().warning("upgrades.yml: '" + key + ": " + compact
+            log.warning("upgrades.yml: '" + key + ": " + compact
                     + "' is not a cost — expected e.g. '5000 coins'. Treating as free.");
             return new Cost("", 0);
         }
