@@ -196,7 +196,7 @@ public final class GuiManager implements Listener {
         Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
             List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
                     ? slot.rightClick() : slot.leftClick();
-            if (!effects.isEmpty() && !slot.silent()) {
+            if (shouldPlayClick(slot, effects)) {
                 play(viewer, template, "click", CLICK_FALLBACK);
             }
             for (MenuEffect effect : effects) {
@@ -217,7 +217,7 @@ public final class GuiManager implements Listener {
                 (viewer, slot, rightClick) -> {
                     List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
                             ? slot.rightClick() : slot.leftClick();
-                    if (!effects.isEmpty() && !slot.silent()) {
+                    if (shouldPlayClick(slot, effects)) {
                         play(viewer, template, "click", CLICK_FALLBACK);
                     }
                     for (MenuEffect effect : effects) {
@@ -1372,7 +1372,7 @@ public final class GuiManager implements Listener {
         }
         List<MenuEffect> effects = event.isRightClick() && !slot.rightClick().isEmpty()
                 ? slot.rightClick() : slot.leftClick();
-        if (!effects.isEmpty() && !slot.silent()) {
+        if (shouldPlayClick(slot, effects)) {
             play(player, template, "click", CLICK_FALLBACK);
         }
         for (MenuEffect effect : effects) {
@@ -1409,6 +1409,34 @@ public final class GuiManager implements Listener {
             }
             default -> plugin.getLogger().warning("Unknown menu effect '" + effect.id() + "'.");
         }
+    }
+
+    /**
+     * Whether clicking a slot should play the menu's click sound.
+     *
+     * <p>A button that opens another menu stays silent, because the destination plays its own open
+     * sound a tick later and the two are heard as a single doubled click. That is exactly what the
+     * per-slot {@code silent} flag was added for — deriving it here means the ~20 navigation buttons
+     * across the menus no longer each need the flag set by hand, and one that is missing it can no
+     * longer produce a double.
+     *
+     * <p>The destination is checked for an open sound rather than assumed: a menu that configures none
+     * would otherwise leave the click completely silent, which is worse than a doubled one.
+     */
+    private boolean shouldPlayClick(MenuSlot slot, List<MenuEffect> effects) {
+        if (effects.isEmpty() || slot.silent()) {
+            return false;
+        }
+        for (MenuEffect effect : effects) {
+            if (!"open_menu".equalsIgnoreCase(effect.id())) {
+                continue;
+            }
+            MenuTemplate destination = byId.get(effect.argString("menu", MAIN));
+            if (destination != null && destination.sound("open") != null) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private void runNextTick(Runnable runnable) {
