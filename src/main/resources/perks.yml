@@ -156,3 +156,33 @@ perks:
     # unlock-commands:
     #   - "eco give %owner% 5000"
     unlock-commands: []
+
+  # ── Requires EcoMinions ───────────────────────────────────────────────────────
+  # Commented out because minion_pickup and minion_count_above only exist when
+  # EcoMinions is installed — on a server without it, libreforge would report both as
+  # unknown ids. Uncomment if you run EcoMinions.
+  #
+  # RoyalSkyblock registers those two elements itself: EcoMinions fires Bukkit events
+  # but no libreforge elements, so nothing in any eco config could see minion activity
+  # until this plugin published it. They are ordinary libreforge elements, so they also
+  # work in EcoItems, EcoQuests, Talismans and anywhere else conditions and triggers do.
+  #
+  # overseer:
+  #   name: "&6&lMinion Overseer"
+  #   icon: armor_stand
+  #   required-level: 70
+  #   description:
+  #     - "&7Run a real operation — more than"
+  #     - "&7ten minions — and every collection"
+  #     - "&7pays you a finder's fee."
+  #   conditions:
+  #     - id: minion_count_above
+  #       args:
+  #         count: 10
+  #   effects:
+  #     - id: give_money
+  #       args:
+  #         amount: 100
+  #       triggers:
+  #         - minion_pickup
+  #   unlock-commands: []
