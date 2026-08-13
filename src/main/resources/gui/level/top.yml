@@ -16,19 +16,15 @@
 title: "&8Skyblock &7» &fLeaderboard"
 rows: 6
 
-# Sounds this menu plays. Delete a key to silence it, or set enabled: false.
+# The sound this menu makes when it opens. Delete it or set enabled: false to silence.
+# Click sounds are NOT here — each slot carries its own sound: block, and a slot without
+# one is silent. See the slot options above.
 #   open  - when the menu is opened
-#   click - when a button is clicked
 sounds:
   open:
     enabled: true
     name: UI_BUTTON_CLICK
     volume: 0.7
-    pitch: 1.2
-  click:
-    enabled: true
-    name: UI_BUTTON_CLICK
-    volume: 0.6
     pitch: 1.2
 
 pages:
