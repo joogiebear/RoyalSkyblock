@@ -7,6 +7,7 @@ import com.mystipixel.royalskyblock.command.BankCommand
 import com.mystipixel.royalskyblock.command.IslandCommand
 import com.mystipixel.royalskyblock.config.ConfigValidator
 import com.mystipixel.royalskyblock.currency.CurrencyService
+import com.mystipixel.royalskyblock.data.SqlStorage
 import com.mystipixel.royalskyblock.data.Storage
 import com.mystipixel.royalskyblock.gui.GuiManager
 import com.mystipixel.royalskyblock.hooks.CombatLevelSource
@@ -209,7 +210,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     override fun handleEnable() {
         this.messageManager = MessageManager(this)
 
-        val store = Storage(this)
+        val store = SqlStorage(this)
         this.storage = store
         if (!store.connect()) {
             logger.severe("Storage failed to initialise — disabling RoyalSkyblock.")
