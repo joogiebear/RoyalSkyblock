@@ -223,7 +223,7 @@ public final class GuiManager implements Listener {
                 // InventoryClickEvent, which Bukkit does not support cleanly — the menu opens mid-event
                 // and its open sound lands on top of the click, which is heard as a double click.
                 (viewer, action, rightClick, configured) -> {
-                    playSlotSound(viewer, configured);
+                    playDynamicSound(viewer, template, configured);
                     runNextTick(() -> action.accept(viewer, rightClick));
                 });
         // Track AFTER opening, not before. openInventory closes whatever the player had open and fires
@@ -1365,6 +1365,26 @@ public final class GuiManager implements Listener {
 
     private void runNextTick(Runnable runnable) {
         Bukkit.getScheduler().runTask(plugin, runnable);
+    }
+
+    /**
+     * The sound a generated button makes.
+     *
+     * <p>Content filled into a mask slot has no config entry of its own to carry a {@code sound:},
+     * so its sound comes from the menu's {@code sounds.content}. A slot that WAS pinned in config
+     * still wins, so an admin can give one generated entry its own sound.
+     *
+     * <p>Most menus deliberately leave {@code content} unset: their generated buttons reopen a menu
+     * when clicked, and that menu's own open sound already covers the click. Only the ones that close
+     * the inventory instead — the profile list and the visit browser — have nothing else to speak for
+     * them.
+     */
+    private void playDynamicSound(Player player, MenuTemplate template, MenuSlot configured) {
+        if (configured != null && configured.sound() != null) {
+            play(player, null, null, configured.sound());
+            return;
+        }
+        play(player, template, "content", null);
     }
 
     /**

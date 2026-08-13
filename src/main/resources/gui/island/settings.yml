@@ -20,7 +20,10 @@ rows: 3
 # The sound this menu makes when it opens. Delete it or set enabled: false to silence.
 # Click sounds are NOT here — each slot carries its own sound: block, and a slot without
 # one is silent. See the slot options above.
-#   open  - when the menu is opened
+#   open     - when the menu is opened
+#   content  - when a GENERATED button is clicked (only on menus whose generated
+#              buttons close the inventory; the rest are covered by the open sound
+#              of whatever menu they reopen)
 sounds:
   open:
     enabled: true
