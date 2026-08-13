@@ -133,8 +133,10 @@ public final class EcoMenuFactory {
     private Slot toSlot(MenuSlot slot,
                         Function<Player, Map<String, String>> placeholders,
                         SlotClickHandler onClick) {
-        SlotBuilder builder = Slot.builder(
-                (Player player) -> slot.item().build(eco, placeholders.apply(player), slot.lore()));
+        // SlotProvider, not the Function<Player, ItemStack> overload — eco has that one deprecated and
+        // marked for removal.
+        SlotBuilder builder = Slot.builder((SlotProvider) (player, menu) ->
+                slot.item().build(eco, placeholders.apply(player), slot.lore()));
 
         // Right-click falls through to the left-click effects when a slot declares none of its own,
         // matching the old engine: a button with a single action responds to either click.

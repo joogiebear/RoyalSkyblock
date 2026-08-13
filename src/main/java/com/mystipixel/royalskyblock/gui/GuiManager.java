@@ -22,9 +22,7 @@ import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryCloseEvent;
-import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
@@ -136,6 +134,14 @@ public final class GuiManager implements Listener {
             String id = path.substring(path.lastIndexOf('/') + 1); // menu id = basename
             byId.put(id, MenuTemplate.load(file, "&6&lSkyblock", 5));
         }
+        // Catch a menu added to MENU_PATHS but never classified. Without this the mistake only shows up
+        // as a menu that does nothing when a player runs the command that opens it.
+        for (String id : byId.keySet()) {
+            if (!ECO_RENDERED.contains(id) && !ECO_DYNAMIC.contains(id)) {
+                plugin.getLogger().severe("Menu '" + id + "' is loaded but not registered as static or "
+                        + "dynamic — it will not open. Add it to ECO_RENDERED or ECO_DYNAMIC.");
+            }
+        }
     }
 
     /** Open a menu for a player, rendering items with their placeholders. */
@@ -164,20 +170,11 @@ public final class GuiManager implements Listener {
             openEcoDynamicMenu(player, menuId, template, title, context);
             return;
         }
-
-        MenuHolder holder = new MenuHolder(menuId, context);
-        Inventory inv = Bukkit.createInventory(holder, template.size(),
-                Text.color(apply(template.title(), placeholders)));
-        holder.setInventory(inv);
-
-        template.applyFiller(inv);
-        for (MenuSlot slot : template.slots()) {
-            ItemStack item = slot.item().build(ecoHook, placeholders, slot.lore());
-            inv.setItem(slot.index(), item);
-        }
-        fillDynamic(menuId, player, template, inv, holder);
-        player.openInventory(inv);
-        play(player, template, "open", null);
+        // Unreachable for the shipped menus — reload() verifies every loaded id is registered. A new
+        // menu added to MENU_PATHS without being classified lands here, and saying so is better than
+        // silently opening nothing.
+        plugin.getLogger().severe("Menu '" + menuId + "' is not registered as static or dynamic — "
+                + "add it to ECO_RENDERED or ECO_DYNAMIC in GuiManager.");
     }
 
     /**
@@ -408,15 +405,8 @@ public final class GuiManager implements Listener {
             return;
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            if (player.getOpenInventory().getTopInventory().getHolder() instanceof MenuHolder holder
-                    && UPGRADES.equals(holder.menuId())) {
-                // Re-render (cheap: a few icons) so pinned/auto slots + countdowns stay correct.
-                fillUpgrades(player, template, holder.getInventory(), holder);
-                continue;
-            }
-            // eco menus have no MenuHolder, so the check above never sees them. refresh() re-runs the
-            // render snapshot, which re-derives the countdowns — without this the timers would simply
-            // stop moving, with nothing logged.
+            // refresh() re-runs the render snapshot, which rebuilds the upgrade icons and so re-derives
+            // the countdown, without reopening the menu under the player.
             OpenEcoMenu open = openEcoMenus.get(player.getUniqueId());
             if (open != null && UPGRADES.equals(open.menuId())) {
                 open.menu().refresh(player);
@@ -1344,48 +1334,10 @@ public final class GuiManager implements Listener {
     }
 
     // ── click handling ───────────────────────────────────────────────────────────
-
-    @EventHandler
-    public void onClick(InventoryClickEvent event) {
-        if (!(event.getInventory().getHolder() instanceof MenuHolder holder)) {
-            return;
-        }
-        event.setCancelled(true); // menus are read-only; buttons act via effects
-        if (!(event.getWhoClicked() instanceof Player player)) {
-            return;
-        }
-        int raw = event.getRawSlot();
-        MenuTemplate template = byId.get(holder.menuId());
-        if (template == null || raw < 0 || raw >= template.size()) {
-            return;
-        }
-        BiConsumer<Player, Boolean> dynamic = holder.action(raw);
-        if (dynamic != null) {
-            boolean rightClick = event.isRightClick();
-            play(player, template, "click", CLICK_FALLBACK);
-            runNextTick(() -> dynamic.accept(player, rightClick));
-            return;
-        }
-        MenuSlot slot = template.slotAt(raw);
-        if (slot == null) {
-            return;
-        }
-        List<MenuEffect> effects = event.isRightClick() && !slot.rightClick().isEmpty()
-                ? slot.rightClick() : slot.leftClick();
-        if (shouldPlayClick(slot, effects)) {
-            play(player, template, "click", CLICK_FALLBACK);
-        }
-        for (MenuEffect effect : effects) {
-            execute(player, effect);
-        }
-    }
-
-    @EventHandler
-    public void onDrag(InventoryDragEvent event) {
-        if (event.getInventory().getHolder() instanceof MenuHolder) {
-            event.setCancelled(true);
-        }
-    }
+    //
+    // There is no InventoryClickEvent listener here any more. Every menu is an eco Menu and eco owns
+    // its clicks, dispatching them to the per-slot handlers built in EcoMenuFactory. The old listener
+    // matched on the inventory's MenuHolder, which no opened inventory has any more.
 
     private void execute(Player player, MenuEffect effect) {
         switch (effect.id().toLowerCase(Locale.ROOT)) {
