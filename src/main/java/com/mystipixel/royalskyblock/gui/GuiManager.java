@@ -164,7 +164,7 @@ public final class GuiManager implements Listener {
 
         String title = apply(template.title(), placeholders);
         if (ECO_RENDERED.contains(menuId)) {
-            openEcoMenu(player, template, title);
+            openEcoMenu(player, menuId, template, title);
             return;
         }
         if (ECO_DYNAMIC.contains(menuId)) {
@@ -190,7 +190,7 @@ public final class GuiManager implements Listener {
      * dispatch below therefore have to be done here, mirroring what that listener does for the legacy
      * path so both feel identical.
      */
-    private void openEcoMenu(Player player, MenuTemplate template, String title) {
+    private void openEcoMenu(Player player, String menuId, MenuTemplate template, String title) {
         Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
             List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
                     ? slot.rightClick() : slot.leftClick();
@@ -198,6 +198,7 @@ public final class GuiManager implements Listener {
             for (MenuEffect effect : effects) {
                 execute(viewer, effect);
             }
+            com.mystipixel.royalskyblock.libreforge.MenuChains.run(menuId, slot, rightClick, viewer);
         });
         menu.open(player);
         play(player, template, "open", null);
@@ -217,6 +218,7 @@ public final class GuiManager implements Listener {
                     for (MenuEffect effect : effects) {
                         execute(viewer, effect);
                     }
+                    com.mystipixel.royalskyblock.libreforge.MenuChains.run(menuId, slot, rightClick, viewer);
                 },
                 // Mirrors the legacy dynamic branch exactly: always sound, and defer the action off
                 // the click event. Running it inline opens the next menu from inside
@@ -1359,7 +1361,10 @@ public final class GuiManager implements Listener {
                     // bad sound key — ignore
                 }
             }
-            default -> plugin.getLogger().warning("Unknown menu effect '" + effect.id() + "'.");
+            // Anything else is a libreforge effect, compiled and run by MenuChains. libreforge
+            // reports its own violation at compile time if the id is genuinely unknown, which is a
+            // better diagnostic than a warning on every click.
+            default -> { }
         }
     }
 

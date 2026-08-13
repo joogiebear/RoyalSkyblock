@@ -30,6 +30,7 @@ import com.mystipixel.royalskyblock.level.LevelService
 import com.mystipixel.royalskyblock.libreforge.ConditionMinionCount
 import com.mystipixel.royalskyblock.libreforge.IslandConditions
 import com.mystipixel.royalskyblock.libreforge.IslandTriggers
+import com.mystipixel.royalskyblock.libreforge.MenuChains
 import com.mystipixel.royalskyblock.libreforge.MinionTriggers
 import com.mystipixel.royalskyblock.libreforge.RoyalHolderListener
 import com.mystipixel.royalskyblock.libreforge.RoyalHolders
@@ -298,6 +299,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // plugin's own perks and upgrades — can ask questions about an island in config.
         IslandConditions.register()
         IslandTriggers.register()
+        MenuChains.register()
 
         // Publish EcoMinions activity to libreforge. EcoMinions registers no elements of its own, so
         // without this nothing in any eco config can react to a minion.
@@ -474,6 +476,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         borderService?.reload()
         borderService?.refreshAll() // re-apply borders live (colour/size/toggle changes)
         guiManager?.reload()
+        MenuChains.invalidate() // recompile menu click chains from the edited configs
         mobSpawnService?.reloadSettings() // toggling island-mobs.enabled on/off still needs a restart
         RoyalHolders.reload(this) // recompile perk/upgrade effect chains and re-provide them
         ConfigValidator(this).validate()
