@@ -15,11 +15,16 @@ depend:
   - eco
 # ASP provides its world API as part of the server fork, so it is not listed as a (soft)depend.
 # libreforge is only a softdepend because it ships bundled inside this jar.
+# Every eco addon RoyalSkyblock soft-hooks MUST be listed here. Bukkit enables softdepends first, and
+# the hooks are all guarded by isPluginEnabled() during handleEnable — a plugin missing from this list
+# can enable *after* RoyalSkyblock, so the guard reads false and the hook is skipped silently, with no
+# error to find. That is exactly how the EcoMinions triggers failed to register the first time.
 softdepend:
   - libreforge
   - Vault
   - EcoItems
   - EcoMobs
+  - EcoMinions
   - EcoSkills
   - PlaceholderAPI
   - WorldEdit
