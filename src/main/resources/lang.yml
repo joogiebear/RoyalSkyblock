@@ -1,0 +1,12 @@
+# eco's own language file. Required: EcoPlugin loads it in its constructor and throws
+# "Failed to load lang.yml!" if it is missing, before the plugin ever reaches onEnable.
+#
+# This file is only for the strings eco itself emits (its command framework and reload
+# handling). Every player-facing RoyalSkyblock message lives in messages.yml and is served by
+# MessageManager — do not move gameplay text here.
+messages:
+  prefix: "&6&lRoyalSkyblock &8» &r"
+  no-permission: "&cYou don't have permission to do this!"
+  not-player: "&cThis command must be run by a player"
+  invalid-command: "&cUnknown subcommand!"
+  reloaded: "Reloaded in %time%ms!"
