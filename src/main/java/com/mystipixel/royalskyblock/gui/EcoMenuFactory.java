@@ -8,11 +8,15 @@ import com.willfp.eco.core.gui.menu.Menu;
 import com.willfp.eco.core.gui.menu.MenuBuilder;
 import com.willfp.eco.core.gui.slot.Slot;
 import com.willfp.eco.core.gui.slot.SlotBuilder;
+import com.willfp.eco.core.gui.slot.functional.SlotHandler;
+import com.willfp.eco.core.gui.slot.functional.SlotProvider;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.function.Function;
 
 /**
@@ -41,6 +45,24 @@ public final class EcoMenuFactory {
     public interface SlotClickHandler {
         void onClick(Player player, MenuSlot slot, boolean rightClick);
     }
+
+    /**
+     * One render of a data-driven menu: what every slot holds, and what the code-registered slots do
+     * when clicked.
+     *
+     * <p>The legacy engine builds these menus imperatively against an {@link org.bukkit.inventory.Inventory}
+     * and a {@code MenuHolder}. Rather than rewriting thirteen such builders, the caller runs them
+     * against a scratch inventory and hands the result over as one of these — so the existing content
+     * logic is reused verbatim and only the rendering changes.
+     *
+     * @param items   slot index -> item, sized to the menu; nulls are empty slots
+     * @param actions slot index -> what a click does, taking the viewer and whether it was a right-click
+     */
+    public record Rendered(ItemStack[] items, Map<Integer, BiConsumer<Player, Boolean>> actions) {
+    }
+
+    /** Per-player menu-state key holding the current render snapshot. */
+    private static final String STATE_RENDER = "royalskyblock_render";
 
     private final EcoHook eco;
 
@@ -108,6 +130,67 @@ public final class EcoMenuFactory {
         builder.onRightClick((event, clicked) -> onClick.onClick((Player) event.getWhoClicked(), slot,
                 !slot.rightClick().isEmpty()));
         return builder.build();
+    }
+
+    /**
+     * Build a data-driven menu, where slot contents are computed per viewer rather than read from
+     * config.
+     *
+     * <p>{@code render} is invoked once per render pass via eco's {@code onRender} and its result is
+     * stashed in per-player menu state; every slot then reads that one snapshot. Calling it per slot
+     * instead would run the whole content build fifty-four times a render.
+     *
+     * <p>Because the snapshot is recomputed on every render, {@link Menu#refresh(Player)} is all that
+     * a live-updating menu needs — the upgrade countdowns re-derive themselves without the menu being
+     * reopened under the player.
+     *
+     * @param render        produces this viewer's slot contents and click actions
+     * @param configuredClick fallback for slots the render did not claim, i.e. ordinary config buttons
+     */
+    public Menu buildDynamic(MenuTemplate template,
+                             String title,
+                             Function<Player, Rendered> render,
+                             SlotClickHandler configuredClick) {
+        MenuBuilder builder = Menu.builder(template.size() / 9)
+                .setTitle(Text.legacy(title))
+                .onRender((player, menu) -> menu.setState(player, STATE_RENDER, render.apply(player)));
+
+        for (int index = 0; index < template.size(); index++) {
+            builder.setSlot(row(index), column(index), dynamicSlot(template, index, configuredClick));
+        }
+        return builder.build();
+    }
+
+    /**
+     * A slot backed by the render snapshot. Falls back to the configured slot's click effects when the
+     * render registered no action for this index, which is how a menu mixes fixed buttons (Back, Close)
+     * with generated content.
+     */
+    private Slot dynamicSlot(MenuTemplate template, int index, SlotClickHandler configuredClick) {
+        MenuSlot configured = template.slotAt(index);
+        return Slot.builder((SlotProvider) (player, menu) -> {
+                    Rendered rendered = menu.getState(player, STATE_RENDER);
+                    return rendered == null ? null : rendered.items()[index];
+                })
+                .onLeftClick((SlotHandler) (event, slot, menu) -> click(event, menu, index, configured, configuredClick, false))
+                .onRightClick((SlotHandler) (event, slot, menu) -> click(event, menu, index, configured, configuredClick, true))
+                .build();
+    }
+
+    private void click(InventoryClickEvent event, Menu menu, int index,
+                       MenuSlot configured, SlotClickHandler configuredClick, boolean rightClick) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
+            return;
+        }
+        Rendered rendered = menu.getState(player, STATE_RENDER);
+        BiConsumer<Player, Boolean> action = rendered == null ? null : rendered.actions().get(index);
+        if (action != null) {
+            action.accept(player, rightClick);
+            return;
+        }
+        if (configured != null) {
+            configuredClick.onClick(player, configured, rightClick && !configured.rightClick().isEmpty());
+        }
     }
 
     /** 0-based inventory index -> eco's 1-based row. Package-private so the round-trip is tested. */
