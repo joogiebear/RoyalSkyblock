@@ -7,12 +7,8 @@ import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
-import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,13 +19,7 @@ import java.util.UUID;
  * The {@code /island} command tree. Island actions operate on the player's <em>active profile</em>;
  * {@code /is profile} manages the profiles themselves. Player-facing text comes from lang.yml.
  */
-public final class IslandCommand implements CommandExecutor, TabCompleter {
-
-    private static final List<String> ROOT_SUBS = List.of(
-            "menu", "create", "home", "go", "visit", "profile", "invite", "accept", "deny",
-            "kick", "leave", "members", "manage", "bank", "transfer", "promote", "demote", "settings",
-            "setspawn", "sethome", "setguestspawn", "kickall",
-            "level", "top", "perks", "upgrade", "delete", "reload", "admin");
+public final class IslandCommand {
 
     private final RoyalSkyblockPlugin plugin;
 
@@ -37,48 +27,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         this.plugin = plugin;
     }
 
-    @Override
-    public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command,
-                             @NotNull String label, @NotNull String[] args) {
-        if (args.length == 0) {
-            sendHelp(sender);
-            return true;
-        }
-        switch (args[0].toLowerCase(Locale.ROOT)) {
-            case "menu" -> handleMenu(sender);
-            case "reload" -> handleReload(sender);
-            case "create" -> handleCreate(sender);
-            case "home", "go" -> handleHome(sender);
-            case "visit" -> handleVisit(sender, args);
-            case "profile", "profiles" -> handleProfile(sender, args);
-            case "invite" -> handleInvite(sender, args);
-            case "accept" -> handleAccept(sender);
-            case "deny", "decline" -> handleDeny(sender);
-            case "kick" -> handleKick(sender, args);
-            case "transfer" -> handleTransfer(sender, args);
-            case "promote" -> handlePromote(sender, args);
-            case "demote" -> handleDemote(sender, args);
-            case "leave" -> handleLeave(sender);
-            case "members" -> handleMembers(sender);
-            case "manage" -> handleManage(sender);
-            case "bank" -> handleBank(sender);
-            case "level" -> handleLevel(sender, args);
-            case "top" -> handleTop(sender);
-            case "perks" -> handlePerks(sender);
-            case "settings" -> handleSettings(sender);
-            case "upgrade", "upgrades" -> handleUpgrades(sender);
-            case "sethome", "setspawn" -> handleSetSpawn(sender, false);
-            case "setguestspawn" -> handleSetSpawn(sender, true);
-            case "kickall" -> handleKickAll(sender);
-            case "delete" -> handleDelete(sender, args);
-            case "admin" -> handleAdmin(sender, args);
-            default -> sender.sendMessage(Text.color("&cUnknown subcommand &e/is " + args[0]
-                    + "&c. Try &e/is help&c."));
-        }
-        return true;
-    }
-
-    private void handleMenu(CommandSender sender) {
+    void handleMenu(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -86,7 +35,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.MAIN);
     }
 
-    private void handleReload(CommandSender sender) {
+    void handleReload(CommandSender sender) {
         if (!sender.hasPermission("royalskyblock.admin")) {
             plugin.messages().send(sender, "general.no-permission");
             return;
@@ -95,7 +44,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.messages().send(sender, "general.reloaded");
     }
 
-    private void handleCreate(CommandSender sender) {
+    void handleCreate(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -122,7 +71,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }));
     }
 
-    private void handleHome(CommandSender sender) {
+    void handleHome(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -140,7 +89,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }));
     }
 
-    private void handleVisit(CommandSender sender, String[] args) {
+    void handleVisit(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -198,7 +147,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }));
     }
 
-    private void handleDelete(CommandSender sender, String[] args) {
+    void handleDelete(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -226,7 +175,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     // ── profiles ──────────────────────────────────────────────────────────────────
 
-    private void handleProfile(CommandSender sender, String[] args) {
+    void handleProfile(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -240,7 +189,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void profileList(Player player) {
+    void profileList(Player player) {
         List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
         UUID active = plugin.profiles().getActiveProfileId(player.getUniqueId());
         int max = plugin.conf().getInt("profiles.max-profiles", 3);
@@ -257,7 +206,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.messages().sendPlain(player, "profile.hint");
     }
 
-    private void profileCreate(Player player, String[] args) {
+    void profileCreate(Player player, String[] args) {
         if (args.length < 3) {
             plugin.messages().send(player, "profile.create-usage");
             return;
@@ -282,7 +231,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }));
     }
 
-    private void profileSwitch(Player player, String[] args) {
+    void profileSwitch(Player player, String[] args) {
         if (args.length < 3) {
             plugin.messages().send(player, "profile.switch-usage");
             return;
@@ -302,7 +251,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }));
     }
 
-    private void profileDelete(Player player, String[] args) {
+    void profileDelete(Player player, String[] args) {
         if (args.length < 3) {
             plugin.messages().send(player, "profile.delete-usage");
             return;
@@ -340,7 +289,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     }
 
     /** Set the island home ({@code setspawn}/{@code sethome}) or the guest spawn ({@code setguestspawn}). */
-    private void handleSetSpawn(CommandSender sender, boolean guest) {
+    void handleSetSpawn(CommandSender sender, boolean guest) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -369,7 +318,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.messages().send(player, guest ? "island.guest-spawn-set" : "island.spawn-set");
     }
 
-    private void handleKickAll(CommandSender sender) {
+    void handleKickAll(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -412,7 +361,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 || role == com.mystipixel.royalskyblock.island.IslandRole.CO_OWNER;
     }
 
-    private void handleSettings(CommandSender sender) {
+    void handleSettings(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -428,7 +377,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.SETTINGS);
     }
 
-    private void handleUpgrades(CommandSender sender) {
+    void handleUpgrades(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -442,7 +391,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     // ── coop invites ──────────────────────────────────────────────────────────────
 
-    private void handleInvite(CommandSender sender, String[] args) {
+    void handleInvite(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -469,7 +418,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.messages().sendInvite(target, player.getName());
     }
 
-    private void handleAccept(CommandSender sender) {
+    void handleAccept(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -486,7 +435,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleDeny(CommandSender sender) {
+    void handleDeny(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -498,7 +447,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleKick(CommandSender sender, String[] args) {
+    void handleKick(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -519,7 +468,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleTransfer(CommandSender sender, String[] args) {
+    void handleTransfer(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -532,7 +481,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 "coop.transferred", "coop.you-owner");
     }
 
-    private void handlePromote(CommandSender sender, String[] args) {
+    void handlePromote(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -545,7 +494,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
                 "coop.promoted", "coop.you-promoted");
     }
 
-    private void handleDemote(CommandSender sender, String[] args) {
+    void handleDemote(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -571,7 +520,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleLeave(CommandSender sender) {
+    void handleLeave(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -584,7 +533,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         }
     }
 
-    private void handleMembers(CommandSender sender) {
+    void handleMembers(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -596,7 +545,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.COOP);
     }
 
-    private void handleManage(CommandSender sender) {
+    void handleManage(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -608,7 +557,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.MANAGE);
     }
 
-    private void handleBank(CommandSender sender) {
+    void handleBank(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -622,7 +571,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     }
 
     /** {@code /is level} opens the level menu; {@code /is level recalc} triggers a fresh scan. */
-    private void handleLevel(CommandSender sender, String[] args) {
+    void handleLevel(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -653,7 +602,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.LEVEL);
     }
 
-    private void handleTop(CommandSender sender) {
+    void handleTop(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -661,7 +610,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.gui().open(player, GuiManager.TOP);
     }
 
-    private void handlePerks(CommandSender sender) {
+    void handlePerks(CommandSender sender) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -675,7 +624,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     // ── admin / spike diagnostics ────────────────────────────────────────────────
 
-    private void handleAdmin(CommandSender sender, String[] args) {
+    void handleAdmin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("royalskyblock.admin")) {
             plugin.messages().send(sender, "general.no-permission");
             return;
@@ -734,7 +683,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
      * layouts load — so it asks first rather than rewriting an admin's config the moment they type
      * a command they may have been exploring.
      */
-    private void handleSplitContent(CommandSender sender, String[] args) {
+    void handleSplitContent(CommandSender sender, String[] args) {
         boolean apply = args.length >= 3 && args[2].equalsIgnoreCase("confirm");
         ContentSplitter.Result result = new ContentSplitter(plugin).run(apply);
 
@@ -761,7 +710,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     }
 
     /** {@code /is admin border <blue|red|green|off>} — set the island border colour live. */
-    private void handleBorderAdmin(CommandSender sender, String[] args) {
+    void handleBorderAdmin(CommandSender sender, String[] args) {
         if (args.length < 3) {
             sender.sendMessage(Text.color("&7Border colour: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
                     + "  &8· &e/is admin border <blue|red|green|off>"));
@@ -781,7 +730,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
     }
 
     /** In-game version of the boot status panel: which dependencies are active + config health. */
-    private void handleMobSpawnAdmin(CommandSender sender, String[] args) {
+    void handleMobSpawnAdmin(CommandSender sender, String[] args) {
         com.mystipixel.royalskyblock.island.IslandMobSpawnService svc = plugin.mobSpawns();
         if (svc == null) {
             sender.sendMessage(Text.color("&cIsland mob spawning isn't running — it's disabled, or its "
@@ -818,7 +767,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(Text.color("&8» &e/is admin mobspawn test <family> [level] &7— force-spawn near you"));
     }
 
-    private void handleAdminStatus(CommandSender sender) {
+    void handleAdminStatus(CommandSender sender) {
         String worldSrc = plugin.conf().getString("world.slime-data-source", "file");
         String storage = plugin.conf().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
         sender.sendMessage(Text.color("&6&l✦ RoyalSkyblock &7— status"));
@@ -860,7 +809,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         return ok ? "  &a✔ &7" + okMsg : "  &c✘ &f" + failMsg;
     }
 
-    private void handleSchematic(CommandSender sender, String[] args) {
+    void handleSchematic(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -885,7 +834,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     /** Diagnostic: place a chest with items, save+unload+reload the world, count items each step —
      *  tells us whether an empty starter chest is a placement bug or an ASP persistence bug. */
-    private void handleChestTest(CommandSender sender) {
+    void handleChestTest(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready."));
             return;
@@ -942,7 +891,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         return f;
     }
 
-    private void handleUpgradeAdmin(CommandSender sender, String[] args) {
+    void handleUpgradeAdmin(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
             return;
@@ -999,7 +948,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         plugin.getLogger().info("[loadtest] " + msg);
     }
 
-    private void handleLoadTest(CommandSender sender, String[] args) {
+    void handleLoadTest(CommandSender sender, String[] args) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
             return;
@@ -1109,7 +1058,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
         return String.format("%.1fMB", kb / 1024.0);
     }
 
-    private void handleTestWorld(CommandSender sender) {
+    void handleTestWorld(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
             return;
@@ -1132,7 +1081,7 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
 
     // ── help / tab-complete ──────────────────────────────────────────────────────
 
-    private void sendHelp(CommandSender sender) {
+    void sendHelp(CommandSender sender) {
         plugin.messages().sendPlain(sender, "help.header");
         plugin.messages().sendPlain(sender, "help.subtitle");
         plugin.messages().sendPlain(sender, "help.island");
@@ -1162,87 +1111,5 @@ public final class IslandCommand implements CommandExecutor, TabCompleter {
             cause = cause.getCause();
         }
         return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
-    }
-
-    @Override
-    public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command command,
-                                      @NotNull String alias, @NotNull String[] args) {
-        if (args.length == 1) {
-            return filter(ROOT_SUBS, args[0], sender);
-        }
-        String sub = args[0].toLowerCase(Locale.ROOT);
-        if (args.length == 2 && sub.equals("delete")) {
-            return List.of("confirm");
-        }
-        if (args.length == 2 && sub.equals("level")) {
-            return filter(List.of("recalc"), args[1], sender);
-        }
-        if (args.length == 2 && (sub.equals("profile") || sub.equals("profiles"))) {
-            return filter(List.of("list", "create", "switch", "delete"), args[1], sender);
-        }
-        if (args.length == 3 && (sub.equals("profile") || sub.equals("profiles")) && args[1].equalsIgnoreCase("create")) {
-            return filter(List.of("solo", "coop", "ironman"), args[2], sender);
-        }
-        if (args.length == 3 && (sub.equals("profile") || sub.equals("profiles"))
-                && (args[1].equalsIgnoreCase("switch") || args[1].equalsIgnoreCase("delete"))
-                && sender instanceof Player player) {
-            List<String> names = new ArrayList<>();
-            for (Profile p : plugin.profiles().getProfiles(player.getUniqueId())) {
-                names.add(p.name());
-            }
-            return filter(names, args[2], sender);
-        }
-        if (args.length == 2 && (sub.equals("visit") || sub.equals("invite"))) {
-            List<String> names = new ArrayList<>();
-            for (Player online : plugin.getServer().getOnlinePlayers()) {
-                names.add(online.getName());
-            }
-            return filter(names, args[1], sender);
-        }
-        if (args.length == 2 && (sub.equals("kick") || sub.equals("transfer") || sub.equals("promote")
-                || sub.equals("demote")) && sender instanceof Player player) {
-            List<String> names = new ArrayList<>();
-            Profile active = plugin.profiles().getActiveProfile(player);
-            if (active != null) {
-                for (var m : active.members()) {
-                    if (!m.uuid().equals(player.getUniqueId())) {
-                        names.add(m.name());
-                    }
-                }
-            }
-            return filter(names, args[1], sender);
-        }
-        if (args.length == 2 && sub.equals("admin") && sender.hasPermission("royalskyblock.admin")) {
-            return filter(List.of("status", "border", "testworld", "loadtest", "schematic", "upgrade",
-                    "chesttest", "split-content"), args[1], sender);
-        }
-        if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("border")) {
-            return filter(List.of("blue", "red", "green", "off"), args[2], sender);
-        }
-        if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("schematic")) {
-            return filter(List.of("save"), args[2], sender);
-        }
-        if (args.length == 3 && sub.equals("admin") && args[1].equalsIgnoreCase("upgrade")) {
-            List<String> keys = new ArrayList<>();
-            for (var def : plugin.upgrades().all()) {
-                keys.add(def.key());
-            }
-            return filter(keys, args[2], sender);
-        }
-        return List.of();
-    }
-
-    private List<String> filter(List<String> options, String prefix, CommandSender sender) {
-        String p = prefix.toLowerCase(Locale.ROOT);
-        List<String> out = new ArrayList<>();
-        for (String s : options) {
-            if ((s.equals("reload") || s.equals("admin")) && !sender.hasPermission("royalskyblock.admin")) {
-                continue;
-            }
-            if (s.toLowerCase(Locale.ROOT).startsWith(p)) {
-                out.add(s);
-            }
-        }
-        return out;
     }
 }

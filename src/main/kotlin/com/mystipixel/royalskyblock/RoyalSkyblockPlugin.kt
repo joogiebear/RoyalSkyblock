@@ -4,7 +4,7 @@ import com.mystipixel.royalskyblock.bank.BankLevelManager
 import com.mystipixel.royalskyblock.bank.BankService
 import com.mystipixel.royalskyblock.border.BorderService
 import com.mystipixel.royalskyblock.command.BankCommand
-import com.mystipixel.royalskyblock.command.IslandCommand
+import com.mystipixel.royalskyblock.command.CommandIsland
 import com.mystipixel.royalskyblock.config.ConfigValidator
 import com.mystipixel.royalskyblock.currency.CurrencyService
 import com.mystipixel.royalskyblock.data.EcoStorage
@@ -572,16 +572,16 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         EcoMetricsChart.simplePie("perks_enabled") { (perkService?.enabled() == true).toString() }
     )
 
+    /**
+     * Register the commands with eco.
+     *
+     * eco injects them into the server's command map itself, so neither needs a `commands:` entry in
+     * plugin.yml any more — the name, aliases, description, permission and players-only flag all come
+     * from the command class, which is where every other plugin in the suite declares them.
+     */
     private fun registerCommands() {
-        val island = IslandCommand(this)
-        val command = getCommand("island")
-        if (command != null) {
-            command.setExecutor(island)
-            command.tabCompleter = island
-        } else {
-            logger.warning("Command 'island' missing from plugin.yml — command not registered.")
-        }
-        getCommand("bank")?.setExecutor(BankCommand(this))
+        CommandIsland(this).register()
+        BankCommand(this).register()
     }
 
     /** Whether a Vault economy is present and ready (bank & coin costs depend on it). */

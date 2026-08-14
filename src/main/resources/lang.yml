@@ -30,6 +30,7 @@ messages:
     no-permission: "&cYou don't have permission to do that."
     players-only: "&cOnly players can do that."
     reloaded: "&aConfiguration reloaded."
+    unknown-subcommand: "&cUnknown subcommand &e/is %command%&c. Try &e/is help&c."
 
   island:
     # Shown when the island portal has nowhere to send a player (no spawn world configured).

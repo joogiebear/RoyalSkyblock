@@ -29,14 +29,10 @@ softdepend:
   - PlaceholderAPI
   - WorldEdit
   - FastAsyncWorldEdit
-commands:
-  island:
-    description: RoyalSkyblock island command.
-    usage: /island [create|home|visit|menu|profile|manage|members|invite|kick|leave|bank|level|top|upgrade|perks|settings|admin]
-    aliases: [is, sb, skyblock]
-  bank:
-    description: Open your bank (personal + coop).
-    usage: /bank
+# Commands are registered by eco from the command classes themselves (CommandIsland, BankCommand),
+# which is where the rest of the suite declares its name, aliases, description and permission. There
+# is deliberately no `commands:` block here — a second declaration would be a second source of truth.
+
 permissions:
   royalskyblock.use:
     description: Base access to island commands.
