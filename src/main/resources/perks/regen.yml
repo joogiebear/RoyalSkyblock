@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock  ·  Perk: renewal
+#  RoyalSkyblock  ·  Perk: regen
 # ═══════════════════════════════════════════════════════════════════════════════
 #  One file per perk. The FILE NAME is the perk's id — copy this file to add a
 #  perk, nothing to register. Perks are OFF until you set `enabled: true` in

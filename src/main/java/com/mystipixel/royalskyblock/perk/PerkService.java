@@ -34,7 +34,7 @@ public final class PerkService {
 
     /** The perks shipped in the jar, written out on a fresh install, in unlock order. */
     private static final String[] DEFAULT_PERKS =
-            {"haste", "renewal", "prospector", "swift", "bountiful_veins", "homefield", "overseer",
+            {"haste", "regen", "prospector", "swift", "bountiful_veins", "homefield", "overseer",
              "scholar"};
 
     /** Shipped perks that need another plugin, and the plugin each needs. */
