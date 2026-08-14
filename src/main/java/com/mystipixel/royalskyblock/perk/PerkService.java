@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
@@ -31,19 +32,13 @@ import java.util.UUID;
  */
 public final class PerkService {
 
-    /**
-     * The perks shipped in the jar, written out on a fresh install, in unlock order.
-     *
-     * <p>{@code _overseer} keeps its underscore deliberately: {@link #reload()} skips {@code _}-prefixed
-     * files, so it ships as an example to rename rather than as live content. It is the only perk that
-     * depends on another plugin — both its {@code minion_pickup} trigger and its {@code
-     * minion_count_above} condition come from the EcoMinions bridge — and shipping it enabled would log
-     * violations on every server without EcoMinions and, worse, load the perk with its minion-count gate
-     * silently dropped, handing the bonus to everyone at the required level.
-     */
+    /** The perks shipped in the jar, written out on a fresh install, in unlock order. */
     private static final String[] DEFAULT_PERKS =
-            {"haste", "renewal", "prospector", "swift", "bountiful_veins", "homefield", "_overseer",
+            {"haste", "renewal", "prospector", "swift", "bountiful_veins", "homefield", "overseer",
              "scholar"};
+
+    /** Shipped perks that need another plugin, and the plugin each needs. */
+    private static final Map<String, String> PERK_REQUIREMENTS = Map.of("overseer", "EcoMinions");
 
     private final RoyalSkyblockPlugin plugin;
     private final List<Perk> perks = new ArrayList<>();
@@ -62,9 +57,35 @@ public final class PerkService {
         if (!new File(plugin.getDataFolder(), "perks").isDirectory() && !legacyDefinesPerks()) {
             for (String id : DEFAULT_PERKS) {
                 plugin.saveResource("perks/" + id + ".yml", false);
+                parkIfUnsupported(id);
             }
         }
         reload();
+    }
+
+    /**
+     * Park a shipped perk as {@code _<id>.yml} when the plugin it needs isn't installed.
+     *
+     * <p>{@link #reload()} skips {@code _}-prefixed files, the same convention eco uses for its
+     * {@code _example.yml} templates, so the perk still ships and is still documented — it just isn't
+     * live on a server that cannot run it. The alternative is worse than log noise: libreforge drops a
+     * condition it cannot resolve and keeps the rest, so an ungated {@code overseer} would hand the
+     * minion bonus to everyone at the required level, no minions required.
+     *
+     * <p>Only ever runs on a fresh install, and only for perks with a declared requirement. The
+     * required plugins are all in {@code softdepend}, so they have enabled by the time this asks.
+     */
+    private void parkIfUnsupported(String id) {
+        String required = PERK_REQUIREMENTS.get(id);
+        if (required == null || Bukkit.getPluginManager().isPluginEnabled(required)) {
+            return;
+        }
+        File file = new File(plugin.getDataFolder(), "perks/" + id + ".yml");
+        File parked = new File(plugin.getDataFolder(), "perks/_" + id + ".yml");
+        if (file.isFile() && file.renameTo(parked)) {
+            plugin.getLogger().info("Perk '" + id + "' needs " + required + ", which isn't installed — "
+                    + "shipped as _" + id + ".yml (rename it to enable once " + required + " is in).");
+        }
     }
 
     /**

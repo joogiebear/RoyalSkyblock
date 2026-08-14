@@ -20,16 +20,14 @@
 #  multiply_drops with mine_block silently never runs, because mining carries no
 #  drop data. Drop effects want block_item_drop / entity_item_drop / catch_fish.
 #
-#  NOT LOADED AS SHIPPED. The leading underscore marks this an example, the same
-#  way eco ships _example.yml files — rename it to overseer.yml to enable it.
-#
-#  It is off by default because it is the one perk with a hard dependency: both
-#  its minion_pickup trigger and its minion_count_above condition come from
-#  RoyalSkyblock's EcoMinions bridge, and without EcoMinions installed they do
-#  not exist. libreforge would report an invalid effect and an invalid condition
-#  at every boot, and — worse — the perk would still load with its condition
-#  dropped, handing the bonus to everyone at the required level regardless of
-#  how many minions they run.
+#  REQUIRES ECOMINIONS. Its minion_pickup trigger and minion_count_above
+#  condition both come from RoyalSkyblock's EcoMinions bridge. On a first run
+#  without EcoMinions installed this file is written as _overseer.yml instead —
+#  the loader skips a leading underscore — because enabled without it libreforge
+#  reports an invalid effect and an invalid condition at every boot AND the perk
+#  still loads with its condition dropped, handing the bonus to everyone at the
+#  required level regardless of how many minions they run. Install EcoMinions,
+#  drop the underscore, and it works.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
