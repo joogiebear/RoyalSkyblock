@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.island;
 
 import org.bukkit.Bukkit;
+import com.willfp.eco.core.items.Items;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
@@ -506,25 +507,45 @@ public final class StarterIslandBuilder {
         chest.update(true, false);
     }
 
+    /**
+     * One starter-chest line: {@code <item>} or {@code <item>:<amount>}.
+     *
+     * <p>The item goes through eco's own {@link Items#lookup lookup}, so anything the suite knows
+     * about works and not just a vanilla material — {@code ecominions:stone}, {@code ecoitems:<id>},
+     * {@code ecoarmor:<id>}. Starting every island with a minion is then a line of config rather than
+     * a special case in this class, and a server seeds whatever its own content plugins provide.
+     *
+     * <p>The amount is the <b>last</b> colon-separated segment, and only when it parses as a number.
+     * Splitting on the first colon would have been simpler and wrong: an eco lookup key contains one,
+     * so {@code ecominions:stone} would have been read as the material "ecominions" and skipped with a
+     * baffling warning.
+     */
     private static @Nullable ItemStack parseItem(String line, Logger logger) {
         if (line == null || line.isBlank()) {
             return null;
         }
-        String[] parts = line.split(":");
-        Material material = Material.matchMaterial(parts[0].trim().toUpperCase(Locale.ROOT));
-        if (material == null || !material.isItem()) {
-            logger.warning("Starter chest: '" + parts[0] + "' is not a valid item — skipping.");
-            return null;
-        }
+        String key = line.trim();
         int amount = 1;
-        if (parts.length > 1) {
+        int lastColon = key.lastIndexOf(':');
+        if (lastColon > 0) {
+            String tail = key.substring(lastColon + 1).trim();
             try {
-                amount = Math.max(1, Integer.parseInt(parts[1].trim()));
-            } catch (NumberFormatException ignored) {
-                logger.warning("Starter chest: bad amount in '" + line + "' — defaulting to 1.");
+                amount = Math.max(1, Integer.parseInt(tail));
+                key = key.substring(0, lastColon).trim();
+            } catch (NumberFormatException notAnAmount) {
+                // "ecominions:stone" with no amount — leave the key whole and take one.
             }
         }
-        return new ItemStack(material, amount);
+
+        ItemStack item = Items.lookup(key).getItem();
+        if (item.getType() == Material.AIR) {
+            logger.warning("Starter chest: '" + key + "' matched no item — skipping. Use a material "
+                    + "(DIAMOND), or a plugin item (ecominions:stone) if that plugin is installed.");
+            return null;
+        }
+        item = item.clone();
+        item.setAmount(amount);
+        return item;
     }
 
     private static Material material(@Nullable ConfigurationSection cfg, String key, Material fallback, Logger logger) {

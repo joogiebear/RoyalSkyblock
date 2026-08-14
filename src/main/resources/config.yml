@@ -165,7 +165,17 @@ island:
     bedrock-anchor: true        # a bedrock block under the centre
     chest:
       enabled: true             # set false to skip the starter chest entirely
-      # Starter chest contents. One per line as MATERIAL:AMOUNT (vanilla material names).
+      # Starter chest contents, one per line as `<item>` or `<item>:<amount>`.
+      #
+      # The item goes through eco's own lookup, so as well as a vanilla material you can seed anything
+      # the suite knows about. The amount is the LAST segment, so a key containing a colon is fine:
+      #
+      #   - "ecominions:stone"      a Stone Minion in every new island's chest
+      #   - "ecominions:stone:2"    two of them
+      #   - "ecoitems:my_pickaxe"   or anything else installed
+      #
+      # Nothing referencing another plugin is shipped enabled: a server without it would log a warning
+      # for every island created. Uncomment what your server actually has.
       items:
         - "ICE:2"
         - "LAVA_BUCKET:1"
