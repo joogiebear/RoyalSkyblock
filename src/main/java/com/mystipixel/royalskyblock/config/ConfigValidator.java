@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.config;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.currency.Cost;
 import com.mystipixel.royalskyblock.gui.GuiManager;
+import com.mystipixel.royalskyblock.island.WorldEditSchematics;
 import com.mystipixel.royalskyblock.upgrade.UpgradeDef;
 import com.mystipixel.royalskyblock.upgrade.UpgradeEffect;
 import com.mystipixel.royalskyblock.upgrade.UpgradeTier;
@@ -145,6 +146,18 @@ public final class ConfigValidator {
         }
 
         checkGeneratorTiers(warnings);
+
+        // A starter schematic that does not resolve is invisible: island creation falls back to the
+        // built-in generator and the result looks intentional. Worth saying at boot rather than
+        // leaving an admin to wonder why their build never appears.
+        String schematic = cfg.getString("island.starter.schematic", "");
+        if (!schematic.isBlank() && plugin.schematics() instanceof WorldEditSchematics we
+                && !we.exists(schematic)) {
+            warnings.add("island.starter.schematic is '" + schematic + "' but no '" + schematic
+                    + ".schem' or '" + schematic + ".schematic' exists in the schematics folder — every"
+                    + " island is being built by the built-in generator instead. Fix the name, or save"
+                    + " one with /is admin schematic save " + schematic + ".");
+        }
 
         boolean papi = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
         Set<String> reported = new HashSet<>();

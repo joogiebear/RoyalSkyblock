@@ -63,6 +63,11 @@ slots:
   - content: minions
     row: 3
     column: 9
+  # Sanctuary is pure libreforge effects rather than an island mechanic, so it sits
+  # below the mechanical tracks rather than beside them.
+  - content: sanctuary
+    row: 4
+    column: 5
 
   # ── footer ──
   - item: arrow name:"&7« Back"
