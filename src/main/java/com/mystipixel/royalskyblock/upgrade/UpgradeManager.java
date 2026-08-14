@@ -218,7 +218,8 @@ public final class UpgradeManager {
                         break;
                     }
                     tiers.add(new UpgradeTier(n, t.getDouble("value"),
-                            parseCost(t, "cost", plugin.getLogger()), parseCost(t, "skip-cost", plugin.getLogger()), parseTime(t.getString("time", "0"))));
+                            parseCost(t, "cost", plugin.getLogger()), parseCost(t, "skip-cost", plugin.getLogger()),
+                            parseTime(t.getString("time", "0")), List.copyOf(t.getStringList("unlock-commands"))));
                     n++;
                 }
             }
@@ -251,7 +252,57 @@ public final class UpgradeManager {
         // The new tier may carry a libreforge effect chain, and libreforge caches a player's holders —
         // without this the buff would not appear until they next crossed a world boundary.
         refreshHoldersOnIsland(island);
+        runUnlockCommands(island, def, tier);
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+    }
+
+    /**
+     * Run a tier's {@code unlock-commands}.
+     *
+     * <p>The hook for an upgrade whose effect belongs to another plugin. Nothing in this plugin can
+     * raise an EcoMinions placement limit — it is a per-player permission — so the minion-slot track
+     * had a price, a menu icon and a tier number that changed nothing at all. This is how a track like
+     * that reaches out and makes its own effect real.
+     *
+     * <p>Deliberately in {@link #setTier} rather than at purchase, so every path that applies a tier
+     * runs them: buying, a timer finishing, and an admin setting one directly. An admin who sets tier
+     * 3 should not leave the player on the tier-1 permission. The cost is that reaching a tier twice
+     * runs its commands twice, which is why the shipped ones are all idempotent.
+     */
+    /**
+     * The owner's real player name, or "" if it cannot be resolved.
+     *
+     * <p>Unlike the perk equivalent this never falls back to the profile's name: that name is a label
+     * the player chose ("Apple"), and substituting it into `lp user %owner% ...` would silently target
+     * an account that does not exist. Better to skip and say so.
+     */
+    private String ownerName(Profile profile) {
+        String name = Bukkit.getOfflinePlayer(profile.owner()).getName();
+        return name == null ? "" : name;
+    }
+
+    private void runUnlockCommands(Island island, UpgradeDef def, int tier) {
+        UpgradeTier reached = def.tier(tier);
+        if (reached == null || reached.unlockCommands().isEmpty()) {
+            return;
+        }
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        String owner = profile == null ? "" : ownerName(profile);
+        if (owner.isEmpty()) {
+            plugin.getLogger().warning("Upgrade '" + def.key() + "' reached tier " + tier + " but its "
+                    + "unlock-commands were skipped: the island's owner could not be resolved.");
+            return;
+        }
+        for (String command : reached.unlockCommands()) {
+            String parsed = command.replace("%owner%", owner)
+                    .replace("%tier%", String.valueOf(tier))
+                    .replace("%value%", String.valueOf((int) def.valueAt(tier)));
+            try {
+                Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
+            } catch (Throwable t) {
+                plugin.getLogger().warning("Upgrade unlock command failed ('" + parsed + "'): " + t.getMessage());
+            }
+        }
     }
 
     /** Re-provide libreforge holders for everyone currently standing on the island. */

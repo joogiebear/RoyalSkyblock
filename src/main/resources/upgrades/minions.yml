@@ -19,6 +19,25 @@
 #                 Applies to anyone standing on the island. Only the CURRENT tier's
 #                 chain is active, so write each tier as the full effect you want.
 #    conditions : OPTIONAL libreforge conditions.
+#
+#  HOW THIS TRACK TAKES EFFECT — read before changing the tiers.
+#
+#  Minion placement limits belong to EcoMinions, not to this plugin, and they are
+#  per-PLAYER permissions rather than anything an island can hold. So `value:` here
+#  is a label: nothing in RoyalSkyblock reads it. The tier is made real by the
+#  `unlock-commands` on each tier, which grant the matching EcoMinions permission.
+#
+#  That means this track REQUIRES EcoMinions with `limits.per-player.enabled: true`
+#  and `permission-overrides: true` (its defaults), plus a permissions plugin that
+#  understands `lp` — LuckPerms. Without those the tiers charge and grant nothing,
+#  which is exactly the state this track was in before.
+#
+#  Grants go to the island OWNER (%owner%), because the permission is per-player and
+#  the owner is who paid. Co-op members keep their own default limit; add a line per
+#  member here if you would rather share it.
+#
+#  EcoMinions' default limit is 5, so tier N grants 5 + N.
+#  Commands must be idempotent — reaching a tier twice runs them twice.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 display-name: "&e&lMinion Slots"
@@ -33,26 +52,36 @@ tiers:
     cost: 5000 coins
     skip-cost: 8000 coins
     time: 6h
+    unlock-commands:
+      - "lp user %owner% permission set ecominions.limit.6 true"
   2:
     value: 2
     cost: 15000 coins
     skip-cost: 24000 coins
     time: 12h
+    unlock-commands:
+      - "lp user %owner% permission set ecominions.limit.7 true"
   3:
     value: 3
     cost: 40000 coins
     skip-cost: 64000 coins
     time: 1d
+    unlock-commands:
+      - "lp user %owner% permission set ecominions.limit.8 true"
   4:
     value: 4
     cost: 100000 coins
     skip-cost: 160000 coins
     time: 2d
+    unlock-commands:
+      - "lp user %owner% permission set ecominions.limit.9 true"
   5:
     value: 5
     cost: 250000 coins
     skip-cost: 400000 coins
     time: 3d
+    unlock-commands:
+      - "lp user %owner% permission set ecominions.limit.10 true"
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Sanctuary — an upgrade track made entirely of libreforge effects.
 #

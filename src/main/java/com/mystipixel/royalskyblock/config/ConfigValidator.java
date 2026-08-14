@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock.config;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.currency.Cost;
+import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.upgrade.UpgradeDef;
 import com.mystipixel.royalskyblock.upgrade.UpgradeEffect;
 import com.mystipixel.royalskyblock.upgrade.UpgradeTier;
@@ -117,20 +118,29 @@ public final class ConfigValidator {
         // An upgrade track with nowhere to go in the menu is invisible: fillUpgrades pins each track to
         // its `content: <key>` slot and falls back to the mask's 0-slots, so a track with neither is
         // silently skipped. Configuring one and never seeing it is a confusing way to find that out.
-        var upgradesMenu = plugin.gui() == null ? null : plugin.gui().template("island/upgrades");
-        if (upgradesMenu != null) {
+        //
+        // Menus are keyed by BASENAME, so this must ask for GuiManager.UPGRADES and not the path the
+        // file lives at. It asked for "island/upgrades" for as long as the check existed, got null
+        // every time, and skipped — which is how a server ended up with six tracks, five pinned slots,
+        // a mask with no free ones, and a config check that said no issues found.
+        var upgradesMenu = plugin.gui() == null ? null : plugin.gui().template(GuiManager.UPGRADES);
+        if (upgradesMenu == null) {
+            warnings.add("the upgrades menu template did not load, so its slots could not be checked "
+                    + "— gui/island/upgrades.yml may be missing or unreadable.");
+        } else {
             int autoSlots = upgradesMenu.contentSlots().size();
             var pinned = upgradesMenu.namedContentSlots();
-            int unpinned = 0;
+            List<String> unpinned = new ArrayList<>();
             for (var def : plugin.upgrades().all()) {
-                if (!pinned.containsKey(def.key().toLowerCase(java.util.Locale.ROOT))) {
-                    unpinned++;
+                if (!pinned.containsKey(def.key().toLowerCase(Locale.ROOT))) {
+                    unpinned.add(def.key());
                 }
             }
-            if (unpinned > autoSlots) {
+            if (unpinned.size() > autoSlots) {
                 warnings.add("gui/island/upgrades.yml has room for " + autoSlots + " unpinned upgrade(s) but "
-                        + unpinned + " track(s) have no 'content: <key>' slot — the extras won't appear in the"
-                        + " menu. Add a slot with 'content: <upgrade key>', or free some mask 0-slots.");
+                        + unpinned.size() + " track(s) have no 'content: <key>' slot (" + String.join(", ", unpinned)
+                        + ") — those won't appear in the menu at all. Add a slot with 'content: <key>',"
+                        + " or free some mask 0-slots.");
             }
         }
 
