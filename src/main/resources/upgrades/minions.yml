@@ -33,8 +33,18 @@
 #  which is exactly the state this track was in before.
 #
 #  Grants go to the island OWNER (%owner%), because the permission is per-player and
-#  the owner is who paid. Co-op members keep their own default limit; add a line per
-#  member here if you would rather share it.
+#  the owner is who paid, and are SCOPED to the island's world with `world=%world%`.
+#
+#  That scope is not decoration. The permission belongs to the account, and a player's
+#  profiles are the same account — so an unscoped grant would hand slots bought on one
+#  profile to every other profile they own, which no other upgrade does. Confining it
+#  to the island's own world makes it per-profile, because each profile has its own.
+#
+#  Known limit: EcoMinions counts minions you own ANYWHERE, so minions on another
+#  profile's island still count toward the total. The cap becomes per-profile; the
+#  count stays account-wide, and no configuration can change that from this side.
+#
+#  Co-op members keep their own default limit; add a line per member to share it.
 #
 #  EcoMinions' default limit is 5, so tier N grants 5 + N.
 #  Commands must be idempotent — reaching a tier twice runs them twice.
@@ -53,35 +63,35 @@ tiers:
     skip-cost: 8000 coins
     time: 6h
     unlock-commands:
-      - "lp user %owner% permission set ecominions.limit.6 true"
+      - "lp user %owner% permission set ecominions.limit.6 true world=%world%"
   2:
     value: 2
     cost: 15000 coins
     skip-cost: 24000 coins
     time: 12h
     unlock-commands:
-      - "lp user %owner% permission set ecominions.limit.7 true"
+      - "lp user %owner% permission set ecominions.limit.7 true world=%world%"
   3:
     value: 3
     cost: 40000 coins
     skip-cost: 64000 coins
     time: 1d
     unlock-commands:
-      - "lp user %owner% permission set ecominions.limit.8 true"
+      - "lp user %owner% permission set ecominions.limit.8 true world=%world%"
   4:
     value: 4
     cost: 100000 coins
     skip-cost: 160000 coins
     time: 2d
     unlock-commands:
-      - "lp user %owner% permission set ecominions.limit.9 true"
+      - "lp user %owner% permission set ecominions.limit.9 true world=%world%"
   5:
     value: 5
     cost: 250000 coins
     skip-cost: 400000 coins
     time: 3d
     unlock-commands:
-      - "lp user %owner% permission set ecominions.limit.10 true"
+      - "lp user %owner% permission set ecominions.limit.10 true world=%world%"
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Sanctuary — an upgrade track made entirely of libreforge effects.
 #

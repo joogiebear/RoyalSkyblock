@@ -296,7 +296,13 @@ public final class UpgradeManager {
         for (String command : reached.unlockCommands()) {
             String parsed = command.replace("%owner%", owner)
                     .replace("%tier%", String.valueOf(tier))
-                    .replace("%value%", String.valueOf((int) def.valueAt(tier)));
+                    .replace("%value%", String.valueOf((int) def.valueAt(tier)))
+                    // The island's world, so a grant can be scoped to it. Without this an upgrade that
+                    // reaches into a per-player system leaks across profiles: minion slots bought on one
+                    // profile applied on every other, because the permission belongs to the account and
+                    // profiles are the same account. A world context confines it to the island that paid.
+                    .replace("%world%", island.worldName())
+                    .replace("%island%", island.id().toString());
             try {
                 Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
             } catch (Throwable t) {

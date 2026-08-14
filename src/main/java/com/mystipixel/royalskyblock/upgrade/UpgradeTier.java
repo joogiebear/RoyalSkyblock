@@ -11,7 +11,9 @@ import java.util.List;
  *
  * @param unlockCommands console commands run when the island reaches this tier — the hook for an
  *                       upgrade whose effect lives in another plugin, which is how the minion-slot
- *                       track raises an EcoMinions permission limit. Run on every path that applies
+ *                       track raises an EcoMinions permission limit. Placeholders: %owner%, %tier%,
+ *                       %value%, %world% and %island%. Scope anything per-player to %world%, or it
+ *                       leaks across the owner's other profiles. Run on every path that applies
  *                       the tier, including an admin setting it, so the outside world cannot end up
  *                       disagreeing with the tier the island actually has. Write them idempotent:
  *                       reaching a tier twice runs them twice.
