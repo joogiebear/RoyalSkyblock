@@ -47,9 +47,9 @@ public final class PerkService {
 
     public PerkService(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
-        if (!new File(plugin.getDataFolder(), "perks.yml").exists()) {
-            plugin.saveResource("perks.yml", false);
-        }
+        // No perks.yml is written any more: the switches moved to config.yml's perks: section, which
+        // is where every plugin in the suite keeps its settings, and the perks themselves live in
+        // perks/. An existing perks.yml is still read — see reload() and legacyDefinesPerks().
         // Fresh install ships the folder, not a monolith. Written only when there is neither a perks/
         // folder NOR a legacy perks.yml that already defines perks — otherwise the shipped defaults
         // would land beside an admin's own versions of the same ids and, being read first, silently
@@ -110,10 +110,41 @@ public final class PerkService {
         return section != null && !section.getKeys(false).isEmpty();
     }
 
+    /**
+     * Read {@code enabled} and {@code effect-refresh-seconds} from config.yml, or from a legacy
+     * perks.yml that still declares them.
+     *
+     * <p>The switches moved to config.yml to match the rest of the suite, where settings live in
+     * config.yml and content lives in a folder. A server that upgrades still has them in perks.yml
+     * saying {@code enabled: true}, and reading only the new home would switch every perk off with
+     * nothing in the log to explain it — the config equivalent of a silent failure. The old file
+     * therefore still wins where it speaks, and says so once so the move is a choice rather than a
+     * surprise.
+     */
+    private void readSwitches(FileConfiguration legacy) {
+        boolean legacyDeclares = legacy.isSet("enabled") || legacy.isSet("effect-refresh-seconds");
+        if (legacyDeclares) {
+            enabled = legacy.getBoolean("enabled", false);
+            refreshSeconds = Math.max(2, legacy.getInt("effect-refresh-seconds", 6));
+            if (warnedAboutLegacySwitches) {
+                return;
+            }
+            warnedAboutLegacySwitches = true;
+            plugin.getLogger().info("Reading perk settings from perks.yml. They now belong in "
+                    + "config.yml under perks: — copy them across and delete perks.yml, which is only "
+                    + "still read so this move cannot turn your perks off silently.");
+            return;
+        }
+        enabled = plugin.conf().getBoolean("perks.enabled", false);
+        refreshSeconds = Math.max(2, plugin.conf().getInt("perks.effect-refresh-seconds", 6));
+    }
+
+    /** Logged once per boot, not once per reload — this is guidance, not a warning to chase. */
+    private boolean warnedAboutLegacySwitches;
+
     public void reload() {
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "perks.yml"));
-        enabled = cfg.getBoolean("enabled", false);
-        refreshSeconds = Math.max(2, cfg.getInt("effect-refresh-seconds", 6));
+        readSwitches(cfg);
         perks.clear();
 
         File dir = new File(plugin.getDataFolder(), "perks");

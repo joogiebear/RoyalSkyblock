@@ -478,7 +478,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         logger.info(" Metadata storage : $storageType")
         logger.info(
             " Perks            : " + if (perkService!!.enabled()) "ON (${perkService!!.perkCount()} perks)"
-            else "off (optional — enable in perks.yml)"
+            else "off (optional — set perks.enabled in config.yml)"
         )
         logger.info(
             " Placeholders     : registered with eco (%royalskyblock_...%)"

@@ -12,8 +12,9 @@
 #    lang.yml         every player-facing string (& colours, %tokens%)
 #    bank.yml         the built-in bank: levels, interest, upgrade costs
 #    levels.yml       island-level block values, scan tuning, level-up rewards
-#    upgrades.yml     island upgrades (size / guest limit / coop slots)
-#    perks.yml        OPTIONAL level-gated perks (off by default)
+#    upgrades/*.yml   island upgrades, one file per track (size / guest limit / ...)
+#    perks/*.yml      OPTIONAL level-gated perks, one file each (off by default;
+#                     the switches are in the perks: section of this file)
 #    gamemodes/*.yml  Solo / Coop / Ironman rulesets
 #    gui/<cat>/*.yml  one file per menu, grouped into folders:
 #                     core / profile / island / coop / bank / level
@@ -463,6 +464,22 @@ teleport:
   # player at a home/visit location. If none is found within this many blocks, fall
   # back to the raw location.
   safe-scan-height: 8
+
+# ── Perks ─────────────────────────────────────────────────────────────────────
+#  The perks themselves live in perks/, one file per perk. These are the switches.
+#
+#  Perks are OPTIONAL and OFF by default. They overlap the purchased upgrades
+#  system, so most servers won't want both.
+#
+#  While OFF: no effects, no menu button, no overhead.
+#  While ON:  each perk is a libreforge effect holder, active while its owner stands
+#             on their own island and the island is high enough level, and its
+#             unlock-commands run ONCE the first time the island reaches that level.
+perks:
+  enabled: false
+  # Seconds between re-applying on-island potion effects (kept a touch shorter than
+  # the effect duration so they never flicker). Lower = snappier, slightly more work.
+  effect-refresh-seconds: 6
 
 # ── Messages / misc ──────────────────────────────────────────────────────────
 settings:

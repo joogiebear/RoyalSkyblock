@@ -1275,7 +1275,7 @@ public final class GuiManager implements Listener {
         }
         if (!plugin.perks().enabled()) {
             inv.setItem(slots.get(0), infoIcon(Material.BARRIER, "&cPerks are disabled",
-                    List.of("&7This server has perks turned off.", "&8(admins: enable in perks.yml)")));
+                    List.of("&7This server has perks turned off.", "&8(admins: set perks.enabled in config.yml)")));
             return;
         }
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
