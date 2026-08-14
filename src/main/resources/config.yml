@@ -35,9 +35,15 @@ storage:
   # and it caches what it has loaded, so another server's writes are not picked up until restart —
   # the shared views (leaderboard, visit browser) can lag behind.
   #
-  # New servers only for now. Migrating an existing islands.db into eco is not implemented, and the
-  # plugin refuses to start on eco while that file is still present rather than come up with no
-  # islands.
+  # Switching an existing server over: set this to eco and restart. An existing islands.db is carried
+  # across on that boot — islands, profiles, rosters, saved inventories, timers and bank ledgers —
+  # then renamed to islands.db.migrated and never read again. Nothing is deleted, every row is read
+  # back and compared before the rename, and if anything at all does not match, the file is left
+  # exactly as it was and the plugin refuses to start rather than run on half the data. Stop the
+  # server first; do not migrate while it is running.
+  #
+  # Going the other way, or between eco's own handlers (yaml -> mysql -> mongodb), is eco's job: set
+  # its data-handler and let perform-data-migration move everything, this plugin's data included.
   type: sqlite
   # SQLite database file name (under the plugin folder).
   sqlite-file: islands.db

@@ -106,6 +106,9 @@ public final class EcoStorage implements Storage {
     private final PersistentDataKey<List<String>> islandIndexKey;
     private final PersistentDataKey<List<String>> pendingIndexKey;
 
+    /** Set once a {@link SqliteMigration} has populated this store; see {@link #migrationMarker()}. */
+    private final PersistentDataKey<String> migratedFromKey;
+
     /** Guards read-modify-write on the shared index lists, which eco has no atomic update for. */
     private final Object indexLock = new Object();
 
@@ -126,6 +129,7 @@ public final class EcoStorage implements Storage {
 
         this.islandIndexKey = stringList("island_index");
         this.pendingIndexKey = stringList("pending_index");
+        this.migratedFromKey = string(SqliteMigration.MARKER_KEY);
     }
 
     // ── key construction ───────────────────────────────────────────────────────
@@ -165,6 +169,27 @@ public final class EcoStorage implements Storage {
         } catch (RuntimeException ignored) {
             return "unknown";
         }
+    }
+
+    // ── migration support ──────────────────────────────────────────────────────
+
+    /**
+     * Whether this store already holds islands.
+     *
+     * <p>Asked before a migration, to tell an empty store waiting for data from a live one that would
+     * be merged into. Cheap: the index is one keyed read.
+     */
+    public boolean hasIslands() {
+        return !readIndex(islandIndexKey).isEmpty();
+    }
+
+    /** The source a previous migration came from, or blank if this store was never migrated into. */
+    public String migrationMarker() {
+        return orEmpty(ServerProfile.load().read(migratedFromKey));
+    }
+
+    public void setMigrationMarker(String source) {
+        ServerProfile.load().write(migratedFromKey, source);
     }
 
     @Override
@@ -563,6 +588,35 @@ public final class EcoStorage implements Storage {
         }
         write(id, bankTxnsKey, ledger);
         return true;
+    }
+
+    /**
+     * Write an account and its existing ledger as they already are.
+     *
+     * <p>For {@link SqliteMigration} only. The normal write path appends a transaction because a
+     * balance never changes without one — but a migration is not a transaction, and going through it
+     * would stamp an invented entry on every account and discard the history it was supposed to carry
+     * across. Entries are newest-first, matching what the reader expects and what the ledger is capped
+     * to.
+     */
+    void importBankAccount(BankAccount account, List<BankTxn> newestFirst) {
+        UUID id = bankUuid(account.id());
+
+        Config row = Configs.empty();
+        row.set("v", SCHEMA);
+        row.set("balance", account.balance());
+        row.set("level", account.level());
+        putLong(row, "last-interest", account.lastInterest());
+        write(id, bankKey, row);
+
+        List<String> ledger = new ArrayList<>();
+        for (BankTxn txn : newestFirst) {
+            if (ledger.size() >= MAX_TXNS) {
+                break;
+            }
+            ledger.add(writeTxn(txn));
+        }
+        write(id, bankTxnsKey, ledger);
     }
 
     /**

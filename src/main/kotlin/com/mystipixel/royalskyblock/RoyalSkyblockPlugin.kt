@@ -9,6 +9,7 @@ import com.mystipixel.royalskyblock.config.ConfigValidator
 import com.mystipixel.royalskyblock.currency.CurrencyService
 import com.mystipixel.royalskyblock.data.EcoStorage
 import com.mystipixel.royalskyblock.data.SqlStorage
+import com.mystipixel.royalskyblock.data.SqliteMigration
 import com.mystipixel.royalskyblock.data.Storage
 import com.mystipixel.royalskyblock.gui.GuiManager
 import com.mystipixel.royalskyblock.hooks.CombatLevelSource
@@ -216,23 +217,59 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
      * second database to configure. SQLite stays the default so no existing server changes backend
      * on an update.
      *
-     * Switching an existing server to `ECO` is refused while a SQLite file is still sitting there:
-     * the migration is not written yet, and starting empty would look exactly like every island
-     * having been deleted. Refusing is loud; silently starting on an empty store is not.
+     * Switching an existing server to `ECO` carries its `islands.db` across on that first boot — see
+     * [migrateSqliteIfPresent], which runs after the store is open.
      */
-    private fun createStorage(): Storage? {
+    private fun createStorage(): Storage {
         val type = conf().getString("storage.type", "SQLITE")!!.uppercase(Locale.ROOT)
-        if (type != "ECO") {
-            return SqlStorage(this)
+        return if (type == "ECO") EcoStorage(this) else SqlStorage(this)
+    }
+
+    /**
+     * Carry an existing `islands.db` into eco, once, on the boot that switches to it.
+     *
+     * Returns false to abort startup. That is the whole point: the alternatives to stopping are
+     * coming up on a half-populated store, or coming up empty — and an empty skyblock server looks
+     * exactly like one whose islands have all been deleted. The source file is left untouched unless
+     * every row was written *and* read back, so aborting always leaves a server that still works on
+     * `storage.type: sqlite`.
+     */
+    private fun migrateSqliteIfPresent(store: EcoStorage): Boolean {
+        val file = File(dataFolder, conf().getString("storage.sqlite-file", "islands.db")!!)
+        if (!file.isFile) {
+            return true
         }
-        val sqliteFile = File(dataFolder, conf().getString("storage.sqlite-file", "islands.db")!!)
-        if (sqliteFile.exists()) {
-            logger.severe("storage.type is ECO but ${sqliteFile.name} still exists.")
-            logger.severe("Migrating SQLite data into eco is not implemented yet, so starting on the")
-            logger.severe("eco store would come up with no islands. Set storage.type back to SQLITE.")
-            return null
+        // A store that already has islands and was never migrated into belongs to something else.
+        // Merging one server's islands into another's is not a thing anyone asked for by dropping a
+        // file in a folder, so it stops instead. A retry after a half-finished run is fine: that
+        // store carries the marker, and every write is keyed by an id that does not change.
+        if (store.hasIslands() && store.migrationMarker().isBlank()) {
+            logger.severe("${file.name} is present, but eco already holds islands that did not come")
+            logger.severe("from a migration. Refusing to merge two sets of islands together. Move")
+            logger.severe("${file.name} aside if it is the stale one.")
+            return false
         }
-        return EcoStorage(this)
+
+        logger.info("storage.type is ECO and ${file.name} is present — migrating it into eco's data layer.")
+        val migration = SqliteMigration(this, file, store)
+        val report = migration.run()
+
+        if (!report.ok()) {
+            logger.severe("Migration FAILED. ${file.name} has been left exactly as it was:")
+            for (problem in report.problems()) {
+                logger.severe("  - $problem")
+            }
+            logger.severe("Nothing was deleted. Set storage.type back to sqlite to keep running on it.")
+            return false
+        }
+
+        logger.info("Migrated ${report.summary()} — every row read back and matched.")
+        store.setMigrationMarker(file.name)
+        if (!migration.retireSource()) {
+            return false
+        }
+        migration.cleanSidecars()
+        return true
     }
 
     override fun handleEnable() {
@@ -240,8 +277,13 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
         val store = createStorage()
         this.storage = store
-        if (store == null || !store.connect()) {
+        if (!store.connect()) {
             logger.severe("Storage failed to initialise — disabling RoyalSkyblock.")
+            server.pluginManager.disablePlugin(this)
+            return
+        }
+        if (store is EcoStorage && !migrateSqliteIfPresent(store)) {
+            logger.severe("Disabling RoyalSkyblock rather than running on incomplete data.")
             server.pluginManager.disablePlugin(this)
             return
         }
