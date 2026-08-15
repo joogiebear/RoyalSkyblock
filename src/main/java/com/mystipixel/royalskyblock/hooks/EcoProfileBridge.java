@@ -24,8 +24,24 @@ public final class EcoProfileBridge {
 
     private final boolean present;
 
+    /**
+     * Set when eco resolves a player's data to their profile itself, which makes copying pointless:
+     * the profile's data is already the data being read. See
+     * {@link com.mystipixel.royalskyblock.hooks.EcoProfileResolver}.
+     */
+    private boolean resolverActive;
+
     public EcoProfileBridge() {
         this.present = Bukkit.getPluginManager().isPluginEnabled("eco");
+    }
+
+    /** Whether eco is resolving profiles itself, so nothing here needs to copy anything. */
+    public boolean isResolverActive() {
+        return resolverActive;
+    }
+
+    public void setResolverActive(final boolean resolverActive) {
+        this.resolverActive = resolverActive;
     }
 
     public boolean isPresent() {
@@ -42,6 +58,9 @@ public final class EcoProfileBridge {
 
     /** Copy the player's live eco data into a profile's shadow (called when leaving that profile). */
     public void save(UUID player, UUID profileId) {
+        if (resolverActive) {
+            return;
+        }
         if (!present || profileId == null) {
             return;
         }
@@ -50,6 +69,9 @@ public final class EcoProfileBridge {
 
     /** Copy a profile's shadow eco data into the player's live data (called when entering it). */
     public void load(UUID player, UUID profileId) {
+        if (resolverActive) {
+            return;
+        }
         if (!present || profileId == null) {
             return;
         }
@@ -62,6 +84,9 @@ public final class EcoProfileBridge {
      * save (first load of a session); {@code null} {@code to} skips the load.
      */
     public void swap(UUID player, UUID from, UUID to) {
+        if (resolverActive) {
+            return;
+        }
         if (!present) {
             return;
         }

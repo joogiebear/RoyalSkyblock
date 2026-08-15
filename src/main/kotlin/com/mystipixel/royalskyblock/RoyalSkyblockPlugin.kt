@@ -16,6 +16,7 @@ import com.mystipixel.royalskyblock.hooks.CombatLevelSource
 import com.mystipixel.royalskyblock.hooks.EcoMobsIslandMobProvider
 import com.mystipixel.royalskyblock.hooks.EcoMobsStrengthBridge
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge
+import com.mystipixel.royalskyblock.hooks.EcoProfileResolver
 import com.mystipixel.royalskyblock.hooks.EcoSkillsCombatSource
 import com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource
 import com.mystipixel.royalskyblock.hooks.IslandMobProvider
@@ -289,6 +290,15 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
 
         this.ecoBridge = EcoProfileBridge()
+        // Prefer letting eco resolve a player's data to their active profile: the copying bridge is
+        // correct but moves every registered key twice per switch. Only available on an eco that
+        // supports it, so this asks rather than assumes, and the bridge stays in charge if it cannot.
+        if (conf().getBoolean("profiles.eco-resolver", true) && ecoBridge!!.isPresent) {
+            if (EcoProfileResolver.install(this)) {
+                ecoBridge!!.isResolverActive = true
+                logger.info("eco resolves profiles directly — progression is per-profile with no copying.")
+            }
+        }
         this.worldService = if (aspAvailable()) AspIslandWorldService(this) else NoOpIslandWorldService()
         this.schematicService = if (worldEditAvailable()) WorldEditSchematics(this) else NoOpSchematics()
         this.islandManager = IslandManager(this, store, worldService)
@@ -744,6 +754,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     fun storage(): Storage = storage!!
 
     fun profiles(): ProfileManager = profileManager!!
+
+    /** The profile manager, or null before it exists — the resolver runs during startup. */
+    fun profilesOrNull(): ProfileManager? = profileManager
 
     fun playerState(): PlayerStateService = stateService!!
 

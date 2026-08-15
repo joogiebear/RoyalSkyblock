@@ -251,6 +251,16 @@ profiles:
   # How many profiles a player may have.
   max-profiles: 3
 
+  # Let eco resolve a player's data to their active profile, rather than copying it on every switch.
+  #
+  # Copying works on any eco, but it moves every key the whole suite has registered — thousands of
+  # them, almost all unset — twice per switch. When eco can be told which UUID a player's data
+  # belongs to, none of that is needed: it reads and writes the profile directly.
+  #
+  # Requires an eco that supports it. On one that does not, this does nothing and copying continues,
+  # so it is safe to leave on.
+  eco-resolver: true
+
 # ── Coop (shared-island profiles) ─────────────────────────────────────────────
 coop:
   # Max members on a Coop profile, including the owner.
