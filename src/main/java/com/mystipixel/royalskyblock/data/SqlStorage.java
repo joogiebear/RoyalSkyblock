@@ -179,13 +179,13 @@ public final class SqlStorage implements Storage {
             for (String q : ddl) {
                 s.executeUpdate(q);
             }
-            s.executeUpdate(indexSql("idx_islands_profile", "islands", "profile_id"));
-            s.executeUpdate(indexSql("idx_profiles_owner", "profiles", "owner"));
-            s.executeUpdate(indexSql("idx_profile_members_uuid", "profile_members", "uuid"));
+            createIndexIfMissing(c, "idx_islands_profile", "islands", "profile_id");
+            createIndexIfMissing(c, "idx_profiles_owner", "profiles", "owner");
+            createIndexIfMissing(c, "idx_profile_members_uuid", "profile_members", "uuid");
             // Serves getBankTransactions' "WHERE account_id = ? ORDER BY created_at DESC" exactly.
             // Without it that query is a full scan plus a filesort, and it gets slower forever as the
             // ledger grows — every bank-history open pays for every transaction ever recorded.
-            s.executeUpdate(indexSql("idx_bank_txns_account_created", "bank_txns", "account_id, created_at"));
+            createIndexIfMissing(c, "idx_bank_txns_account_created", "bank_txns", "account_id, created_at");
         }
         // migrations for tables that predate a column
         addColumnIfMissing("islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
@@ -223,8 +223,24 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    private String indexSql(String name, String table, String column) {
-        return "CREATE INDEX IF NOT EXISTS " + name + " ON " + table + "(" + column + ")";
+    /**
+     * Creates an index unless the table already carries one by that name. MySQL has no
+     * {@code CREATE INDEX IF NOT EXISTS} — SQLite and MariaDB both do, which is why this went
+     * unnoticed — so the existence check belongs here, the same way {@link #addColumnIfMissing}
+     * asks the metadata before altering. It also retrofits a table created before the index existed.
+     */
+    private void createIndexIfMissing(Connection c, String name, String table, String columns)
+            throws SQLException {
+        try (ResultSet rs = c.getMetaData().getIndexInfo(null, null, table, false, true)) {
+            while (rs.next()) {
+                if (name.equalsIgnoreCase(rs.getString("INDEX_NAME"))) {
+                    return;
+                }
+            }
+        }
+        try (Statement s = c.createStatement()) {
+            s.executeUpdate("CREATE INDEX " + name + " ON " + table + " (" + columns + ")");
+        }
     }
 
     // ── islands ────────────────────────────────────────────────────────────────
