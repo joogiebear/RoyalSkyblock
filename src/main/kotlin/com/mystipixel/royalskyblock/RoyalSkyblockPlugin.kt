@@ -17,8 +17,9 @@ import com.mystipixel.royalskyblock.hooks.EcoMobsIslandMobProvider
 import com.mystipixel.royalskyblock.hooks.EcoMobsStrengthBridge
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge
 import com.mystipixel.royalskyblock.hooks.EcoProfileResolver
-import com.mystipixel.royalskyblock.hooks.EcoSkillsCombatSource
-import com.mystipixel.royalskyblock.hooks.EcoSkillsStatSource
+import com.mystipixel.royalskyblock.api.Integrations
+import com.mystipixel.royalskyblock.api.ProgressionProvider
+import com.mystipixel.royalskyblock.hooks.EcoSkillsProgression
 import com.mystipixel.royalskyblock.hooks.IslandMobProvider
 import com.mystipixel.royalskyblock.hooks.IslandMobTargetingBridge
 import com.mystipixel.royalskyblock.hooks.IslandPlaceholders
@@ -106,6 +107,16 @@ import java.util.concurrent.ConcurrentHashMap
  *    time; with ~96 call sites, some per-mob-spawn, that would flood the console.
  */
 class RoyalSkyblockPlugin : LibreforgePlugin() {
+
+    /**
+     * Third-party backends, registered by extensions.
+     *
+     * Initialised here rather than in [handleEnable] on purpose: eco enables extensions **before** the
+     * host's [handleEnable] runs, so a registry created there would still be null when the first
+     * extension tried to register into it. Building it with the plugin is what makes the whole
+     * mechanism work.
+     */
+    private val integrationRegistry = Integrations()
 
     private var generatorService: GeneratorService? = null
     private var storage: Storage? = null
@@ -657,34 +668,79 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
      * Stand up island mob spawning if it's enabled and a usable provider is installed. Soft in every
      * direction: no EcoMobs -> skip; no EcoSkills -> mobs fall back to level 1; disabled -> nothing runs.
      */
+    /**
+     * Register the backends that still ship inside this plugin.
+     *
+     * Only where an extension has not already claimed the id, so an extension replaces a built-in
+     * simply by existing — no config, and nothing to remove here first. These are the last two
+     * third-party integrations compiled into the core; as each moves out to its own extension, its
+     * registration disappears from this method and nothing else changes.
+     */
+    private fun registerBuiltInIntegrations() {
+        val registry = integrationRegistry
+        if (registry.mobProvider(EcoMobsIslandMobProvider.ID) == null
+            && server.pluginManager.isPluginEnabled("EcoMobs")
+        ) {
+            registry.registerMobProvider(EcoMobsIslandMobProvider())
+        }
+        if (registry.progressionProvider(EcoSkillsProgression.ID) == null
+            && server.pluginManager.isPluginEnabled("EcoSkills")
+        ) {
+            registry.registerProgressionProvider(EcoSkillsProgression())
+        }
+    }
+
+    /**
+     * Resolve the progression backend an admin asked for, or the only one installed.
+     *
+     * A blank `island-mobs.progression` means "whichever is present", which is the right default when
+     * a server runs exactly one skills plugin — the common case, and one that should not need naming.
+     */
+    private fun progressionBackend(): ProgressionProvider? {
+        val configured = conf().getString("island-mobs.progression", "")?.trim().orEmpty()
+        if (configured.isEmpty()) {
+            return integrationRegistry.anyProgressionProvider()
+        }
+        val provider = integrationRegistry.progressionProvider(configured)
+        if (provider == null) {
+            logger.warning(
+                "island-mobs.progression is '$configured' but nothing registered that backend. "
+                    + "Registered: ${integrationRegistry.progressionProviderIds()}"
+            )
+        }
+        return provider?.takeIf { it.available() }
+    }
+
     private fun startIslandMobSpawning() {
         if (!conf().getBoolean("island-mobs.enabled", false)) {
             return
         }
-        val providerId = conf().getString("island-mobs.provider", "ecomobs")!!.lowercase(Locale.ROOT)
-        var provider: IslandMobProvider? = null
-        if (providerId == "ecomobs" && server.pluginManager.isPluginEnabled("EcoMobs")) {
-            provider = EcoMobsIslandMobProvider()
-        }
-        // future: mythicmobs, leveledmobs — add here, no other change needed.
+        registerBuiltInIntegrations()
+
+        val providerId = conf().getString("island-mobs.provider", "ecomobs")!!
+        val provider = integrationRegistry.mobProvider(providerId)
         if (provider == null || !provider.available()) {
             logger.warning(
-                "island-mobs is enabled but provider '$providerId' isn't available — island mob spawning is off."
+                "island-mobs is enabled but provider '$providerId' isn't available — island mob "
+                    + "spawning is off. Registered providers: ${integrationRegistry.mobProviderIds()}"
             )
             return
         }
 
         var combat = CombatLevelSource { 1 }
-        val skillId = conf().getString("island-mobs.combat-skill", "combat")
-        if (server.pluginManager.isPluginEnabled("EcoSkills")) {
-            val ecoSkills = EcoSkillsCombatSource(skillId, 1)
-            if (ecoSkills.valid()) {
-                combat = ecoSkills
-            } else {
-                logger.warning("EcoSkills has no '$skillId' skill — island mobs default to level 1.")
-            }
+        val skillId = conf().getString("island-mobs.combat-skill", "combat")!!
+        val progression = progressionBackend()
+        if (progression == null) {
+            logger.info("No skills backend registered — island mobs default to level 1.")
         } else {
-            logger.info("EcoSkills not installed — island mobs default to level 1.")
+            val source = progression.skill(skillId, 1)
+            if (source != null) {
+                combat = source
+            } else {
+                logger.warning(
+                    "${progression.id()} could not read skill '$skillId' — island mobs default to level 1."
+                )
+            }
         }
 
         val service = IslandMobSpawnService(this, provider, combat)
@@ -695,21 +751,29 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // Intimidation targeting bridge. The Talismans intimidation chain only GRANTS the stat
         // (add_stat) — the stat itself has no effects, so this is what actually makes weak island
         // mobs ignore the player.
-        if (conf().getBoolean("island-mobs.intimidation.enabled", true)
-            && server.pluginManager.isPluginEnabled("EcoSkills")
-        ) {
-            val statId = conf().getString("island-mobs.intimidation.stat", "intimidation")
-            val stat = EcoSkillsStatSource(statId, 0)
-            if (stat.valid()) {
+        if (conf().getBoolean("island-mobs.intimidation.enabled", true) && progression != null) {
+            val statId = conf().getString("island-mobs.intimidation.stat", "intimidation")!!
+            val stat = progression.stat(statId, 0)
+            if (stat != null) {
                 this.combatSource = combat
                 this.intimidationSource = stat
                 server.pluginManager.registerEvents(IslandMobTargetingBridge(this, combat, stat), this)
-                logger.info("Intimidation bridge active (stat: $statId).")
+                logger.info("Intimidation bridge active (${progression.id()} stat: $statId).")
             } else {
-                logger.warning("Intimidation bridge off — EcoSkills stat '$statId' unavailable.")
+                logger.warning(
+                    "Intimidation bridge off — ${progression.id()} could not read stat '$statId'."
+                )
             }
         }
     }
+
+    /**
+     * Where extensions register third-party backends (mob plugins, skills plugins).
+     *
+     * Safe to call from an extension's `onEnable` — it exists from construction, unlike every other
+     * accessor on this class. See [Integrations] for the registration contract.
+     */
+    fun integrations(): Integrations = integrationRegistry
 
     fun generators(): GeneratorService = generatorService!!
 

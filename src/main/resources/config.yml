@@ -412,8 +412,14 @@ ecomobs:
 # doubling up. Per-island toggle: the MOB_SPAWNS island setting (on by default).
 island-mobs:
   enabled: false                 # off until your provider mobs are configured
-  provider: ecomobs              # ecomobs (mythicmobs / leveledmobs can be added later)
-  combat-skill: combat           # EcoSkills skill id that sets the tier
+  # Which mob backend spawns them. A backend is registered by an extension, so adding MythicMobs
+  # support means dropping in another extension jar — this value then selects it. Names of everything
+  # registered are printed if the one named here is missing.
+  provider: ecomobs
+  # Which skills backend supplies combat level and the intimidation stat. Blank means "whichever one
+  # is installed", which is right when a server runs exactly one — name it only to disambiguate.
+  progression: ""
+  combat-skill: combat           # skill id, in whichever progression backend is in use
   scan-interval-ticks: 200       # how often a spawn pass runs (200 = every 10s)
   only-night: true               # only spawn during the night
   first-night-grace-ticks: 24000 # no spawns until an island is this old (24000 = 1 MC day)
@@ -433,7 +439,7 @@ island-mobs:
   # its own — this bridge is what acts on it. Only mobs RoyalSkyblock spawned are affected.
   intimidation:
     enabled: true
-    stat: intimidation           # EcoSkills stat id the talismans grant
+    stat: intimidation           # stat id the talismans grant, in the progression backend above
     # Ignore level = min(combat level, stat) — the formula in the talismans' own descriptions.
     # Set false to use the raw stat regardless of the player's Combat level.
     cap-to-combat-level: true

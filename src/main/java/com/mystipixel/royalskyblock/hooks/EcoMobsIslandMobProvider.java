@@ -15,9 +15,12 @@ import org.bukkit.entity.Entity;
  */
 public final class EcoMobsIslandMobProvider implements IslandMobProvider {
 
+    /** Registry key, and the value {@code island-mobs.provider} takes to select this backend. */
+    public static final String ID = "ecomobs";
+
     @Override
     public String id() {
-        return "ecomobs";
+        return ID;
     }
 
     @Override
