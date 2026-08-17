@@ -13,13 +13,10 @@ import com.mystipixel.royalskyblock.data.SqliteMigration
 import com.mystipixel.royalskyblock.data.Storage
 import com.mystipixel.royalskyblock.gui.GuiManager
 import com.mystipixel.royalskyblock.hooks.CombatLevelSource
-import com.mystipixel.royalskyblock.hooks.EcoMobsIslandMobProvider
-import com.mystipixel.royalskyblock.hooks.EcoMobsStrengthBridge
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge
 import com.mystipixel.royalskyblock.hooks.EcoProfileResolver
 import com.mystipixel.royalskyblock.api.Integrations
 import com.mystipixel.royalskyblock.api.ProgressionProvider
-import com.mystipixel.royalskyblock.hooks.EcoSkillsProgression
 import com.mystipixel.royalskyblock.hooks.IslandMobProvider
 import com.mystipixel.royalskyblock.hooks.IslandMobTargetingBridge
 import com.mystipixel.royalskyblock.hooks.IslandPlaceholders
@@ -373,20 +370,6 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         scanner.register(StackingPlantSimulator(this))
         server.pluginManager.registerEvents(scanner, this)
 
-        // EcoMobs strength bridge — soft hook. The bridge resolves EcoMobs' spawn event reflectively
-        // (no publishable artifact exists to compile against; see the class docs) and reports whether
-        // it managed to bind.
-        if (server.pluginManager.isPluginEnabled("EcoMobs")) {
-            if (EcoMobsStrengthBridge.register(this)) {
-                logger.info("EcoMobs detected — island-level mob strength scaling active.")
-            } else {
-                logger.warning(
-                    "EcoMobs is installed but its spawn event could not be resolved — "
-                        + "island mob strength scaling is off."
-                )
-            }
-        }
-
         this.generatorService = GeneratorService(this)
         server.pluginManager.registerEvents(GeneratorListener(this), this)
         server.pluginManager.registerEvents(IslandPortalListener(this), this)
@@ -666,30 +649,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
     /**
      * Stand up island mob spawning if it's enabled and a usable provider is installed. Soft in every
-     * direction: no EcoMobs -> skip; no EcoSkills -> mobs fall back to level 1; disabled -> nothing runs.
+     * direction: no mob backend -> skip; no skills backend -> mobs fall back to level 1; disabled ->
+     * nothing runs. Backends come from extensions; this plugin names no third-party plugin at all.
      */
-    /**
-     * Register the backends that still ship inside this plugin.
-     *
-     * Only where an extension has not already claimed the id, so an extension replaces a built-in
-     * simply by existing — no config, and nothing to remove here first. These are the last two
-     * third-party integrations compiled into the core; as each moves out to its own extension, its
-     * registration disappears from this method and nothing else changes.
-     */
-    private fun registerBuiltInIntegrations() {
-        val registry = integrationRegistry
-        if (registry.mobProvider(EcoMobsIslandMobProvider.ID) == null
-            && server.pluginManager.isPluginEnabled("EcoMobs")
-        ) {
-            registry.registerMobProvider(EcoMobsIslandMobProvider())
-        }
-        if (registry.progressionProvider(EcoSkillsProgression.ID) == null
-            && server.pluginManager.isPluginEnabled("EcoSkills")
-        ) {
-            registry.registerProgressionProvider(EcoSkillsProgression())
-        }
-    }
-
     /**
      * Resolve the progression backend an admin asked for, or the only one installed.
      *
@@ -715,14 +677,13 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         if (!conf().getBoolean("island-mobs.enabled", false)) {
             return
         }
-        registerBuiltInIntegrations()
-
         val providerId = conf().getString("island-mobs.provider", "ecomobs")!!
         val provider = integrationRegistry.mobProvider(providerId)
         if (provider == null || !provider.available()) {
             logger.warning(
                 "island-mobs is enabled but provider '$providerId' isn't available — island mob "
-                    + "spawning is off. Registered providers: ${integrationRegistry.mobProviderIds()}"
+                    + "spawning is off. Registered providers: ${integrationRegistry.mobProviderIds()} "
+                    + "(a backend comes from an extension in plugins/RoyalSkyblock/extensions/)."
             )
             return
         }
@@ -731,7 +692,10 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         val skillId = conf().getString("island-mobs.combat-skill", "combat")!!
         val progression = progressionBackend()
         if (progression == null) {
-            logger.info("No skills backend registered — island mobs default to level 1.")
+            logger.info(
+                "No skills backend registered — island mobs default to level 1. A backend comes from "
+                    + "an extension in plugins/RoyalSkyblock/extensions/."
+            )
         } else {
             val source = progression.skill(skillId, 1)
             if (source != null) {
