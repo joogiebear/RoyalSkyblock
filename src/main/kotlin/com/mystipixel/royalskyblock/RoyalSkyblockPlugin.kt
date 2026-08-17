@@ -30,12 +30,10 @@ import com.mystipixel.royalskyblock.island.NoOpSchematics
 import com.mystipixel.royalskyblock.island.SchematicService
 import com.mystipixel.royalskyblock.island.WorldEditSchematics
 import com.mystipixel.royalskyblock.level.LevelService
-import com.mystipixel.royalskyblock.libreforge.ConditionMinionCount
 import com.mystipixel.royalskyblock.libreforge.EcoPlaceholders
 import com.mystipixel.royalskyblock.libreforge.IslandConditions
 import com.mystipixel.royalskyblock.libreforge.IslandTriggers
 import com.mystipixel.royalskyblock.libreforge.MenuChains
-import com.mystipixel.royalskyblock.libreforge.MinionTriggers
 import com.mystipixel.royalskyblock.libreforge.RoyalHolderListener
 import com.mystipixel.royalskyblock.libreforge.RoyalHolders
 import com.mystipixel.royalskyblock.listener.CommandGateListener
@@ -379,23 +377,6 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         IslandConditions.register()
         IslandTriggers.register()
         MenuChains.register()
-
-        // Publish EcoMinions activity to libreforge. EcoMinions registers no elements of its own, so
-        // without this nothing in any eco config can react to a minion.
-        //
-        // MUST come before RoyalHolders.register, which compiles every perk and upgrade chain: a
-        // config referencing an element that is not registered yet fails to compile and is reported as
-        // an unknown id. That is exactly what happened to the Minion Overseer perk the first time.
-        if (server.pluginManager.isPluginEnabled("EcoMinions")) {
-            if (MinionTriggers.register(this) && ConditionMinionCount.register()) {
-                logger.info("EcoMinions detected — registered minion triggers (minion_pickup, "
-                    + "minion_place, minion_upgrade, minion_fuel) and the minion_count_above condition.")
-            } else {
-                logger.warning(
-                    "EcoMinions is installed but its API could not be read — minion elements are off."
-                )
-            }
-        }
 
         // Perks and island upgrades as libreforge effect holders. Registered after the services they
         // read (perks, upgrades, islands, profiles) exist, and after every element their chains may use.

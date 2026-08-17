@@ -41,15 +41,16 @@ effects:
 #   - "eco give %owner% 5000"
 unlock-commands: []
 
-# ── Requires EcoMinions ───────────────────────────────────────────────────────
-# Commented out because minion_pickup and minion_count_above only exist when
-# EcoMinions is installed — on a server without it, libreforge would report both as
-# unknown ids. Uncomment if you run EcoMinions.
+# ── Requires the EcoMinions extension ─────────────────────────────────────────
+# Commented out because minion_pickup and minion_count_above do not exist here.
+# EcoMinions fires Bukkit events but registers no libreforge elements, so nothing in
+# any eco config can see minion activity until something publishes it — and that
+# something is the EcoMinions extension, not this plugin. Install EcoMinions AND its
+# extension, then uncomment.
 #
-# RoyalSkyblock registers those two elements itself: EcoMinions fires Bukkit events
-# but no libreforge elements, so nothing in any eco config could see minion activity
-# until this plugin published it. They are ordinary libreforge elements, so they also
-# work in EcoItems, EcoQuests, Talismans and anywhere else conditions and triggers do.
+# Without the extension libreforge reports both as unknown ids, which is deliberate:
+# a config referencing an element nothing registered should fail loudly rather than
+# silently never firing.
 #
 # overseer:
 #   name: "&6&lMinion Overseer"
