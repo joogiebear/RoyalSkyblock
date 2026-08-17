@@ -775,6 +775,21 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
      */
     fun integrations(): Integrations = integrationRegistry
 
+    /**
+     * Whether an extension is allowed to run, per `extensions.disabled` in config.yml.
+     *
+     * Extensions call this from their own `onEnable` and return early if it says no. Deleting the jar
+     * remains the real off switch — this exists to isolate a misbehaving extension without needing
+     * file access, and is worth understanding as the second source of truth it is.
+     *
+     * Safe to call this early: [conf] reads config.yml off disk, and eco has already written that file
+     * by the time any extension enables. A missing or unreadable file reads as "nothing disabled",
+     * because failing open is right here — an extension silently not loading is far harder to diagnose
+     * than one that loaded when you expected it not to.
+     */
+    fun extensionEnabled(name: String): Boolean =
+        conf().getStringList("extensions.disabled").none { it.equals(name, ignoreCase = true) }
+
     fun generators(): GeneratorService = generatorService!!
 
     fun upgrades(): UpgradeManager = upgradeManager!!

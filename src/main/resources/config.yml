@@ -410,6 +410,16 @@ ecomobs:
 # so it's cheap and never keeps an island loaded. It spawns via the provider's API (SpawnReason COMMAND),
 # so turn OFF vanilla hostiles on islands with the spawn_monsters gamerule (island.world-rules) to avoid
 # doubling up. Per-island toggle: the MOB_SPAWNS island setting (on by default).
+# Extensions load from plugins/RoyalSkyblock/extensions/, one jar and one folder each. An extension
+# adds a feature (a farming world) or teaches RoyalSkyblock to use another plugin (a mob backend, a
+# skills backend) — install the other plugin AND its extension for that integration to exist.
+#
+# Deleting the jar is the real off switch. This list turns one off without deleting it, which is for
+# isolating a fault: an extension named here loads and then stops, so the jar being present no longer
+# means it is running. Names are the extension's own, case-insensitive.
+extensions:
+  disabled: []
+
 island-mobs:
   enabled: false                 # off until your provider mobs are configured
   # Which mob backend spawns them. A backend is registered by an extension, so adding MythicMobs
