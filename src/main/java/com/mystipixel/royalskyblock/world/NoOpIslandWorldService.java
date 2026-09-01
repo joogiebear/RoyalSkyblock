@@ -59,6 +59,21 @@ public final class NoOpIslandWorldService implements IslandWorldService {
     }
 
     @Override
+    public byte[] exportWorld(String worldName) throws Exception {
+        throw new IllegalStateException(MESSAGE);
+    }
+
+    @Override
+    public void importWorld(String worldName, byte[] data) throws Exception {
+        throw new IllegalStateException(MESSAGE);
+    }
+
+    @Override
+    public java.util.List<String> listWorldNames() {
+        return java.util.List.of();
+    }
+
+    @Override
     public void shutdown() {
         // nothing to release
     }

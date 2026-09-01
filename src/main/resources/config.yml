@@ -522,3 +522,17 @@ profile:
   #
   # Example: RoyalJoin's menu item in the far-right slot.
   externally-managed-hotbar-slots: []
+
+# ── Island trash ──────────────────────────────────────────────────────────────
+# Deleted islands' worlds are archived to plugins/RoyalSkyblock/trash/ as .slime
+# files before the store forgets them, whatever backend the live store uses.
+# /is delete is two words typed in anger, and the island IS the player's progress.
+#   /is admin trash list                       - what's recoverable
+#   /is admin trash restore <archive> <player> - give the blocks back to their
+#                                                active profile (must have no island)
+# A delete whose archive fails is ABORTED, not carried out unrecoverably.
+# /is admin orphans [purge] also parks unreferenced worlds here, always.
+trash:
+  enabled: true
+  # Days an archive is kept before pruning. 0 = keep forever.
+  retention-days: 30

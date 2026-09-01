@@ -666,6 +666,14 @@ public final class IslandCommand {
             handleSplitContent(sender, args);
             return;
         }
+        if (action.equals("trash")) {
+            handleTrashAdmin(sender, args);
+            return;
+        }
+        if (action.equals("orphans")) {
+            handleOrphansAdmin(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
         sender.sendMessage(Text.color("&8» &e/is admin split-content [confirm] &7— upgrades.yml/perks.yml → one file each"));
         sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7— island mob spawning"));
@@ -674,6 +682,149 @@ public final class IslandCommand {
         sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7— island load/unload + heap benchmark"));
         sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
         sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
+        sender.sendMessage(Text.color("&8» &e/is admin trash <list|restore <archive> <player>> &7— deleted-island archives"));
+        sender.sendMessage(Text.color("&8» &e/is admin orphans [purge] &7— worlds no island row references"));
+    }
+
+    /**
+     * {@code /is admin trash list|restore} — the recovery half of the island trash. Restoring gives
+     * the archived blocks to the player's <em>active profile</em>, which must not already have an
+     * island: two islands per profile is not a state the rest of the plugin can represent.
+     */
+    void handleTrashAdmin(CommandSender sender, String[] args) {
+        com.mystipixel.royalskyblock.world.IslandTrash trash = plugin.islands().trash();
+        String sub = args.length >= 3 ? args[2].toLowerCase(Locale.ROOT) : "list";
+
+        if (sub.equals("list")) {
+            var entries = trash.list();
+            if (entries.isEmpty()) {
+                sender.sendMessage(Text.color("&7The island trash is empty."));
+                return;
+            }
+            sender.sendMessage(Text.color("&8» &e&lIsland trash &7— " + entries.size()
+                    + " archive(s), kept " + trash.retentionDays() + " day(s)"));
+            var fmt = java.time.format.DateTimeFormatter.ofPattern("MMM d HH:mm")
+                    .withZone(java.time.ZoneId.systemDefault());
+            int shown = 0;
+            for (var entry : entries) {
+                if (shown++ >= 15) {
+                    sender.sendMessage(Text.color("  &8… and " + (entries.size() - 15) + " more"));
+                    break;
+                }
+                sender.sendMessage(Text.color("  &8· &f" + entry.fileName() + " &7("
+                        + entry.size() / 1024 + " KB, " + fmt.format(java.time.Instant.ofEpochMilli(entry.modified())) + ")"));
+            }
+            sender.sendMessage(Text.color("&7Restore: &e/is admin trash restore <archive> <player>"));
+            return;
+        }
+
+        if (sub.equals("restore")) {
+            if (args.length < 5) {
+                sender.sendMessage(Text.color("&cUsage: &e/is admin trash restore <archive> <player>"));
+                return;
+            }
+            org.bukkit.OfflinePlayer target = plugin.getServer().getOfflinePlayer(args[4]);
+            if (!target.hasPlayedBefore() && !target.isOnline()) {
+                sender.sendMessage(Text.color("&cNo player named &f" + args[4] + "&c has played here."));
+                return;
+            }
+            UUID profileId = plugin.profiles().getActiveProfileId(target.getUniqueId());
+            if (profileId == null) {
+                sender.sendMessage(Text.color("&cThat player has no active profile to attach the island to."));
+                return;
+            }
+            if (plugin.islands().getIslandByProfile(profileId) != null) {
+                sender.sendMessage(Text.color("&cTheir active profile already has an island — it must be"
+                        + " deleted (into the trash) before an archive can replace it."));
+                return;
+            }
+            byte[] data;
+            try {
+                data = trash.read(args[3]);
+            } catch (Exception e) {
+                sender.sendMessage(Text.color("&cCould not read that archive: &f" + e.getMessage()));
+                return;
+            }
+            plugin.islands().restoreIsland(profileId, data).whenComplete((island, error) -> onMain(() -> {
+                if (error != null) {
+                    sender.sendMessage(Text.color("&cRestore failed: &f" + error.getMessage()));
+                } else {
+                    sender.sendMessage(Text.color("&aRestored &f" + args[3] + "&a as " + args[4]
+                            + "'s island. &7/is home takes them there; upgrades and level start fresh"
+                            + " (they lived in the deleted rows) — the level recalculates on &e/is level recalc&7."));
+                }
+            }));
+            return;
+        }
+        sender.sendMessage(Text.color("&cUsage: &e/is admin trash <list|restore <archive> <player>>"));
+    }
+
+    /**
+     * {@code /is admin orphans [purge]} — worlds in the store that no island row references: crash
+     * debris and failed creates. Purge archives each one into the trash (always, even with the trash
+     * switched off — "purge" must never mean hard-delete) and then removes it. Loaded worlds are
+     * skipped: a world mid-creation has no row yet and is not an orphan.
+     */
+    void handleOrphansAdmin(CommandSender sender, String[] args) {
+        boolean purge = args.length >= 3 && args[2].equalsIgnoreCase("purge");
+        String prefix = plugin.conf().getString("world.world-name-prefix", "island_");
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            java.util.List<String> names;
+            try {
+                names = plugin.worlds().listWorldNames();
+            } catch (Exception e) {
+                onMain(() -> sender.sendMessage(Text.color("&cCould not list the world store: &f" + e.getMessage())));
+                return;
+            }
+            java.util.List<String> orphans = new java.util.ArrayList<>();
+            for (String name : names) {
+                if (!name.startsWith(prefix) || plugin.worlds().isLoaded(name)) {
+                    continue;   // another feature's world (gardens share the store), or mid-creation
+                }
+                UUID islandId;
+                try {
+                    islandId = UUID.fromString(name.substring(prefix.length()));
+                } catch (IllegalArgumentException notOurs) {
+                    continue;
+                }
+                if (plugin.storage().getIsland(islandId) == null) {
+                    orphans.add(name);
+                }
+            }
+            if (orphans.isEmpty()) {
+                onMain(() -> sender.sendMessage(Text.color("&aNo orphaned island worlds — the store matches the database.")));
+                return;
+            }
+            if (!purge) {
+                onMain(() -> {
+                    sender.sendMessage(Text.color("&8» &e" + orphans.size() + " orphaned world(s) &7— no island row references them:"));
+                    for (int i = 0; i < orphans.size() && i < 15; i++) {
+                        sender.sendMessage(Text.color("  &8· &f" + orphans.get(i)));
+                    }
+                    if (orphans.size() > 15) {
+                        sender.sendMessage(Text.color("  &8… and " + (orphans.size() - 15) + " more"));
+                    }
+                    sender.sendMessage(Text.color("&7Move them into the trash: &e/is admin orphans purge"));
+                });
+                return;
+            }
+            int moved = 0;
+            int failed = 0;
+            for (String name : orphans) {
+                try {
+                    plugin.islands().trash().archive(name, true);
+                    plugin.worlds().deleteIsland(name).join();
+                    moved++;
+                } catch (Exception e) {
+                    failed++;
+                    plugin.getLogger().warning("Could not purge orphaned world '" + name + "': " + e.getMessage());
+                }
+            }
+            int finalMoved = moved;
+            int finalFailed = failed;
+            onMain(() -> sender.sendMessage(Text.color("&aPurged &f" + finalMoved + "&a orphaned world(s)"
+                    + " into the trash." + (finalFailed > 0 ? " &c" + finalFailed + " failed — see console." : ""))));
+        });
     }
 
     /**

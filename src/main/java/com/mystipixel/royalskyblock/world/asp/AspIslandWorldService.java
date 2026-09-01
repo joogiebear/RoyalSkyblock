@@ -147,6 +147,21 @@ public final class AspIslandWorldService implements IslandWorldService {
     }
 
     @Override
+    public byte[] exportWorld(String worldName) throws Exception {
+        return loader.readWorld(worldName);
+    }
+
+    @Override
+    public void importWorld(String worldName, byte[] data) throws Exception {
+        loader.saveWorld(worldName, data);
+    }
+
+    @Override
+    public java.util.List<String> listWorldNames() throws Exception {
+        return loader.listWorlds();
+    }
+
+    @Override
     public void shutdown() {
         // ASP handles final world flushing on server stop. Close our loader's own resources (e.g. the
         // MySQL slime pool) if it holds any.

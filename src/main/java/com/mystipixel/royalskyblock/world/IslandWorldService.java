@@ -67,6 +67,25 @@ public interface IslandWorldService {
     /** Whether the named island world is currently loaded on this server. */
     boolean isLoaded(String worldName);
 
+    /**
+     * The raw serialized bytes of a stored world, for archiving (the island trash). Blocking —
+     * call off the main thread.
+     */
+    byte[] exportWorld(String worldName) throws Exception;
+
+    /**
+     * Write raw serialized world bytes into the store under {@code worldName}, for restoring an
+     * archived island. Blocking — call off the main thread.
+     */
+    void importWorld(String worldName, byte[] data) throws Exception;
+
+    /**
+     * Every world name in the store — note the store may hold worlds owned by other features
+     * (extensions use it too), so callers must filter by their own prefix. Blocking — call off
+     * the main thread.
+     */
+    java.util.List<String> listWorldNames() throws Exception;
+
     /** Release any resources (connection pools, registered loaders) on plugin disable. */
     void shutdown();
 }

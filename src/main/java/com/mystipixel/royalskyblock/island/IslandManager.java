@@ -31,6 +31,7 @@ public final class IslandManager {
     private final RoyalSkyblockPlugin plugin;
     private final Storage storage;
     private final IslandWorldService worlds;
+    private final com.mystipixel.royalskyblock.world.IslandTrash trash;
 
     private final Map<UUID, Island> byId = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> profileToIsland = new ConcurrentHashMap<>();
@@ -41,6 +42,16 @@ public final class IslandManager {
         this.plugin = plugin;
         this.storage = storage;
         this.worlds = worlds;
+        this.trash = new com.mystipixel.royalskyblock.world.IslandTrash(plugin);
+        // Retention pruning, shortly after startup and daily after — the trash must not become the
+        // unbounded island graveyard it exists to prevent worlds becoming.
+        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, trash::pruneOld,
+                20L * 120L, 20L * 60L * 60L * 24L);
+    }
+
+    /** The island trash can — where deleted worlds go instead of oblivion. */
+    public com.mystipixel.royalskyblock.world.IslandTrash trash() {
+        return trash;
     }
 
     // ── lookups ─────────────────────────────────────────────────────────────────
@@ -256,21 +267,81 @@ public final class IslandManager {
 
     // ── delete ────────────────────────────────────────────────────────────────────
 
-    /** Evacuate anyone on the island, then remove its world and metadata row. */
+    /**
+     * Evacuate anyone on the island, archive its world to the trash, then remove it from the store
+     * and its metadata row.
+     *
+     * <p>The world is saved before archiving so the trash holds its final state, and an archive
+     * failure aborts the whole delete — an island that could not be archived stays an island,
+     * because the alternative is exactly the unrecoverable loss the trash exists to prevent. The
+     * caches are cleared only once everything committed, so an aborted delete leaves a working
+     * island rather than a ghost.
+     */
     public CompletableFuture<Void> deleteIsland(UUID islandId) {
         Island island = getIsland(islandId);
         if (island == null) {
             return CompletableFuture.completedFuture(null);
         }
         String worldName = island.worldName();
-        byId.remove(islandId);
-        profileToIsland.remove(island.profileId());
 
         return onMain(() -> {
             evacuate(worldName, plugin.messages().raw("delete.evicted"));
-            return null;
-        }).thenCompose(ignored -> worlds.deleteIsland(worldName))
-                .thenCompose(ignored -> runAsyncFuture(() -> storage.deleteIsland(islandId)));
+            return (Void) null;
+        }).thenCompose(ignored -> worlds.unloadIsland(worldName, true))   // final save → fresh archive
+                .thenCompose(ignored -> runAsyncFuture(() -> {
+                    try {
+                        trash.archive(worldName, false);
+                    } catch (Exception e) {
+                        throw new RuntimeException("Could not archive the island before deleting it — "
+                                + "the delete was aborted and the island is untouched: " + e.getMessage(), e);
+                    }
+                }))
+                .thenCompose(ignored -> worlds.deleteIsland(worldName))
+                .thenCompose(ignored -> runAsyncFuture(() -> storage.deleteIsland(islandId)))
+                .thenRun(() -> {
+                    byId.remove(islandId);
+                    profileToIsland.remove(island.profileId());
+                });
+    }
+
+    /**
+     * The restore half of the trash: write archived world bytes into the store under a fresh island
+     * id and give the profile a row pointing at it. Home and radius come from config exactly like a
+     * new island's — the upgrades and level history lived in rows that died with the old island, but
+     * the blocks are the part that cannot be re-earned by clicking.
+     */
+    public CompletableFuture<Island> restoreIsland(UUID profileId, byte[] worldData) {
+        UUID islandId = UUID.randomUUID();
+        String prefix = plugin.conf().getString("world.world-name-prefix", "island_");
+        String worldName = prefix + islandId;
+
+        ConfigurationSection paste = section("island.paste");
+        ConfigurationSection homeOff = section("island.home-offset");
+        int px = paste != null ? paste.getInt("x", 0) : 0;
+        int py = paste != null ? paste.getInt("y", 100) : 100;
+        int pz = paste != null ? paste.getInt("z", 0) : 0;
+        double hx = px + (homeOff != null ? homeOff.getInt("x", 0) : 0) + 0.5;
+        double hy = py + (homeOff != null ? homeOff.getInt("y", 1) : 1);
+        double hz = pz + (homeOff != null ? homeOff.getInt("z", 0) : 0) + 0.5;
+        float yaw = homeOff != null ? (float) homeOff.getDouble("yaw", 0) : 0f;
+        float pitch = homeOff != null ? (float) homeOff.getDouble("pitch", 0) : 0f;
+        int startingRadius = plugin.conf().getInt("island.starting-radius", 50);
+        long now = Instant.now().toEpochMilli();
+
+        return runAsyncFuture(() -> {
+            try {
+                worlds.importWorld(worldName, worldData);
+            } catch (Exception e) {
+                throw new RuntimeException("Could not import the archived world: " + e.getMessage(), e);
+            }
+        }).thenApply(ignored -> {
+            Island island = new Island(islandId, profileId, worldName, now);
+            island.setRadius(startingRadius);
+            island.setHome(hx, hy, hz, yaw, pitch);
+            cache(island);
+            runAsync(() -> storage.saveIsland(island));
+            return island;
+        });
     }
 
     /** Move everyone in the named world to the configured spawn/hub. Main thread only. */
