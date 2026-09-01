@@ -43,7 +43,7 @@ dependencies {
     compileOnly("org.jetbrains:annotations:26.0.2")
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
 
-    compileOnly("io.papermc.paper:paper-api:26.2.build.40-alpha")
+    compileOnly("io.papermc.paper:paper-api:26.2.build.121-stable")
 
     // isTransitive = false on the two API jars below. Maven's `provided` scope quietly ignored their
     // dependency trees; Gradle resolves them properly and then refuses to guess, because both
@@ -105,7 +105,7 @@ dependencies {
 
     // Paper on the test classpath so config parsing can be tested against a real YamlConfiguration.
     // compileOnly does not reach tests, which is why the parsers had no coverage until now.
-    testImplementation("io.papermc.paper:paper-api:26.2.build.40-alpha")
+    testImplementation("io.papermc.paper:paper-api:26.2.build.121-stable")
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.mockito:mockito-core:5.14.2")
