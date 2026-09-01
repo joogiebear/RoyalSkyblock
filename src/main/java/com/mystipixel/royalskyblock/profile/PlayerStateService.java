@@ -27,6 +27,15 @@ public final class PlayerStateService {
     private final RoyalSkyblockPlugin plugin;
     private final Storage storage;
 
+    /**
+     * Players whose most recent load could not deserialize its saved items. While a player is in this
+     * set, {@link #save} refuses to run: the live inventory is the empty one that replaced the
+     * unreadable blob, and persisting it would overwrite the stored row — turning a transient decode
+     * failure (version drift, a foreign item) into permanent loss. The flag clears on the next
+     * successful load.
+     */
+    private final java.util.Set<UUID> loadFailed = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     public PlayerStateService(RoyalSkyblockPlugin plugin, Storage storage) {
         this.plugin = plugin;
         this.storage = storage;
@@ -35,6 +44,12 @@ public final class PlayerStateService {
     /** Capture the player's current state into {@code profileId}'s saved data + eco shadow. */
     public void save(Player player, UUID profileId) {
         if (profileId == null) {
+            return;
+        }
+        if (loadFailed.contains(player.getUniqueId())) {
+            plugin.getLogger().severe("Refusing to save profile " + profileId + " for " + player.getName()
+                    + ": their last profile load failed to deserialize, so what they are carrying is the"
+                    + " emptied fallback, not their real inventory. The stored row is being kept.");
             return;
         }
         ItemStack[] contents = player.getInventory().getContents();
@@ -90,9 +105,22 @@ public final class PlayerStateService {
         }
 
         int size = player.getInventory().getSize();
-        ItemStack[] restored = data.inventory() == null
-                ? new ItemStack[size]
-                : deserialize(data.inventory(), size);
+        ItemStack[] restored = data.inventory() == null ? new ItemStack[size] : deserialize(data.inventory());
+        ItemStack[] chest = data.enderChest() == null ? null : deserialize(data.enderChest());
+        // An unreadable blob must not end in a wipe. save() already refuses to persist when items fail
+        // to WRITE; this is the read-side twin: hand the player empty containers for the session (the
+        // stored row still holds their gear), flag them so save() keeps the row intact, and say so.
+        if ((data.inventory() != null && restored == null) || (data.enderChest() != null && chest == null)) {
+            loadFailed.add(player.getUniqueId());
+            player.getInventory().clear();
+            player.getEnderChest().clear();
+            player.updateInventory();
+            plugin.getLogger().severe("Could not deserialize saved items of profile " + profileId + " for "
+                    + player.getName() + ". Their inventory is empty for this session and will NOT be saved"
+                    + " over the stored one — the row is intact; check the error above for the cause.");
+            return;
+        }
+        loadFailed.remove(player.getUniqueId());
         // Whatever another plugin put in these slots stays put: they were never saved, so restoring
         // over them would either delete the item or hand back a stale copy alongside a fresh one.
         for (int slot : externallyManagedSlots()) {
@@ -101,10 +129,10 @@ public final class PlayerStateService {
             }
         }
         player.getInventory().setContents(restored);
-        if (data.enderChest() == null) {
+        if (chest == null) {
             player.getEnderChest().clear();
         } else {
-            player.getEnderChest().setContents(deserialize(data.enderChest(), player.getEnderChest().getSize()));
+            player.getEnderChest().setContents(chest);
         }
 
         player.setLevel(Math.max(0, data.expLevel()));
@@ -155,7 +183,8 @@ public final class PlayerStateService {
         }
     }
 
-    private ItemStack[] deserialize(byte[] data, int fallbackSize) {
+    /** The stored items, or null when the blob cannot be read — callers must not treat that as empty. */
+    private ItemStack[] deserialize(byte[] data) {
         try (BukkitObjectInputStream in = new BukkitObjectInputStream(new ByteArrayInputStream(data))) {
             int length = in.readInt();
             ItemStack[] items = new ItemStack[length];
@@ -165,7 +194,7 @@ public final class PlayerStateService {
             return items;
         } catch (Exception e) {
             plugin.getLogger().severe("Could not deserialize items: " + e.getMessage());
-            return new ItemStack[fallbackSize];
+            return null;
         }
     }
 
