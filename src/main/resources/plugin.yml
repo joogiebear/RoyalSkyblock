@@ -1,7 +1,7 @@
 name: RoyalSkyblock
 version: ${version}
 main: com.mystipixel.royalskyblock.RoyalSkyblockPlugin
-api-version: '1.21'
+api-version: '26.2'
 author: Mystipixel
 description: Scalable per-island Skyblock built on Advanced Slime Paper.
 # JDBC drivers + connection pool are downloaded at runtime by Paper's library loader.
