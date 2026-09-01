@@ -34,6 +34,8 @@ public final class IslandManager {
 
     private final Map<UUID, Island> byId = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> profileToIsland = new ConcurrentHashMap<>();
+    /** In-flight creations, so two rapid ensureIsland calls can't both allocate a world. */
+    private final Map<UUID, CompletableFuture<Island>> creating = new ConcurrentHashMap<>();
 
     public IslandManager(RoyalSkyblockPlugin plugin, Storage storage, IslandWorldService worlds) {
         this.plugin = plugin;
@@ -94,13 +96,20 @@ public final class IslandManager {
 
     // ── create ──────────────────────────────────────────────────────────────────
 
-    /** Get the profile's island, creating (world + starter) it if it doesn't exist yet. */
+    /**
+     * Get the profile's island, creating (world + starter) it if it doesn't exist yet.
+     *
+     * <p>Creation is deduplicated per profile: a second call arriving while the first is still building
+     * (a double-clicked switch button, say) joins the in-flight future instead of allocating a second
+     * world that nothing would ever reference again.
+     */
     public CompletableFuture<Island> ensureIsland(UUID profileId) {
         Island existing = getIslandByProfile(profileId);
         if (existing != null) {
             return CompletableFuture.completedFuture(existing);
         }
-        return createIslandForProfile(profileId);
+        return creating.computeIfAbsent(profileId, id ->
+                createIslandForProfile(id).whenComplete((island, error) -> creating.remove(id)));
     }
 
     /** Allocate a fresh slime world + starter island for a profile and persist it. Does not teleport. */
