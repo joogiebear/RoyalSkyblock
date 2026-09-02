@@ -63,19 +63,28 @@ the extensions compile against.)
 
 ### 4. Binary check — the step a green build does not cover
 
-Confirm no class still links a default-argument bridge into libreforge. Expect `0` for both:
+`tools/libreforge-abi-check.sh` takes our built jar and the eco + libreforge jars the server runs,
+and verifies that every method we link into `com.willfp.*` exists there with the identical
+descriptor. It fails exactly where the server would, before the server does. Run it for both jars:
 
 ```bash
-cd S:/Claude/royal-plugins/RoyalSkyblock && for c in $(unzip -l build/libs/RoyalSkyblock.jar | grep -o 'com/mystipixel/royalskyblock/libreforge/[^ ]*\.class' | sed 's#/#.#g; s#\.class$##'); do javap -v -cp build/libs/RoyalSkyblock.jar "$c" 2>/dev/null | grep -c 'com/willfp/libreforge/.*\$default'; done | sort -u
+cd S:/Claude/royal-plugins/RoyalSkyblock && bash tools/libreforge-abi-check.sh build/libs/RoyalSkyblock.jar S:/mcctl/instances/Skyblock/plugins/libreforge/versions/libreforge-2026.35.1.jar S:/mcctl/instances/Skyblock/plugins/eco-2026.35-ecohub.jar
 ```
 
 ```bash
-cd S:/Claude/royal-plugins/royalskyblock-extensions && javap -v -cp ecominions/build/libs/EcoMinions.jar com.mystipixel.royalskyblock.ext.ecominions.ConditionMinionCount | grep -c 'com/willfp/libreforge/.*\$default'
+cd S:/Claude/royal-plugins/RoyalSkyblock && bash tools/libreforge-abi-check.sh ../royalskyblock-extensions/ecominions/build/libs/EcoMinions.jar S:/mcctl/instances/Skyblock/plugins/libreforge/versions/libreforge-2026.35.1.jar S:/mcctl/instances/Skyblock/plugins/eco-2026.35-ecohub.jar
 ```
 
-A non-zero count names a call that would break the next time Auxilor adds a parameter there.
-Fix it the same way `requireStable` does: find an overload of the same function with no
-defaults (`javap -p -cp <libreforge jar> <class>` lists them) and call that instead.
+Substitute the jar names for the versions you just installed. The pass is a final line of
+`... 0 missing` and exit code 0. A `MISSING` line names the exact method and descriptor that
+moved — that is the call to look at.
+
+Two calls are known to have no defaults-free overload and so will always be exposed to this:
+`Chain.trigger` (LevelRewardChains, MenuChains) and `Trigger.dispatch` (RoyalTrigger). If either
+shows up, compare the old and new signatures (see "If it still breaks") and adapt the call.
+
+You can also run this check *before* updating the server — point it at the new jars you have
+downloaded — to know ahead of time whether the update needs a rebuild at all.
 
 ### 5. Deploy and smoke-boot
 
@@ -115,3 +124,12 @@ javap -p -cp <jar> com.willfp.libreforge.<Class> | grep <method>
 
 Whatever changed, the fix is the same shape as `requireStable`: bind to a signature without
 defaults, or adapt to the new one. Then repeat from step 3.
+
+## About the custom eco jar
+
+The server currently runs a custom eco build (`eco-<version>-ecohub.jar`) carrying the profiler
+that was submitted upstream and merged. It is not what broke anything — the break was libreforge,
+which the loader fetches separately — and it needs no special handling here. When the next official
+eco release ships with the profiler included, replace the custom jar with the official one; the eco
+version only has to be at least what the installed Auxilor plugins demand, and eco-only updates
+never require a RoyalSkyblock rebuild.
