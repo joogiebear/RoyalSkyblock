@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.libreforge
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin
 import com.mystipixel.royalskyblock.island.Island
 import com.willfp.eco.core.config.interfaces.Config
+import com.willfp.libreforge.ConfigArgumentsBuilder
 import com.willfp.libreforge.Dispatcher
 import com.willfp.libreforge.NoCompileData
 import com.willfp.libreforge.ProvidedHolder
@@ -94,7 +95,7 @@ object IslandConditions {
         override val categories = setOf("skyblock")
 
         override val arguments = arguments {
-            require("level", "You must specify the island level!")
+            requireStable("level", "You must specify the island level!")
         }
 
         override fun isMet(
@@ -116,7 +117,7 @@ object IslandConditions {
         override val categories = setOf("skyblock")
 
         override val arguments = arguments {
-            require("upgrade", "You must specify the upgrade track!")
+            requireStable("upgrade", "You must specify the upgrade track!")
         }
 
         override fun isMet(
@@ -150,4 +151,18 @@ object IslandConditions {
             return profile.isMember(player.uniqueId)
         }
     }
+}
+
+/**
+ * `require(name, message)` without the binary fragility.
+ *
+ * libreforge's two-argument `require` is a Kotlin default-argument call, so callers link against a
+ * synthetic `require$default` bridge whose signature includes every parameter. Auxilor adds
+ * parameters to it now and then (2026.35.1 did), and each time that happens a jar compiled against
+ * an older libreforge throws NoSuchMethodError in this class's static initialiser and RoyalSkyblock
+ * fails to enable. The four-argument overload has no defaults, so it is a plain method call that
+ * survives those additions. The getter and predicate are exactly libreforge's own defaults.
+ */
+private fun ConfigArgumentsBuilder.requireStable(name: String, message: String) {
+    require<Any?>(name, message, { key: String -> this.get(key) }, { value: Any? -> value != null })
 }
