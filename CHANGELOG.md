@@ -1,3 +1,8 @@
+## 2026.36.1 — 2026-09-06
+
+### 🐛 Fixes
+- declare the expand placeholders as processResources inputs (`7cf7a8f`)
+
 ## 2026.36.0 — 2026-09-06
 
 ### ✨ Features
