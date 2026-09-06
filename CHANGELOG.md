@@ -1,3 +1,72 @@
+## 2026.36.0 — 2026-09-06
+
+### ✨ Features
+- island trash can - deletes archive, restores exist, orphans park (`d177b5c`)
+- extensions.disabled, so an extension can be switched off without deleting it (`2a7acc6`)
+- registry for third-party backends, so integrations can be extensions (`8aa2845`)
+- let eco resolve profiles directly instead of copying keys (`85c680b`)
+- starter chest accepts any eco item, not just vanilla materials (`a13098e`)
+- migrate an existing islands.db into eco on the switch to it (`cdb05e1`)
+- ship overseer enabled, parked only where EcoMinions is absent (`22c66d8`)
+- /is admin split-content — convert monoliths to the folder layout (`b22fe96`)
+- EcoStorage — islands and profiles on eco's data layer (`13d9468`)
+- upgrades and perks as one file per thing (`65b20e3`)
+- register with eco, not just PlaceholderAPI (`8c191db`)
+- level-up rewards can be libreforge effect chains (`f6fc05d`)
+- menu buttons run libreforge effect chains (`9bface0`)
+- publish island events as triggers (`c6b0294`)
+- publish island state as conditions (`48e8556`)
+- per-button click sounds, no hardcoded sound anywhere (`1e142e3`)
+- minion_count_above condition (`74c57c8`)
+- publish EcoMinions activity as libreforge triggers (`05fc7e2`)
+- rebuild perks and add a pure-effects upgrade track (`f15c061`)
+- render the data-driven menus through eco (`6b6bb7a`)
+- render the fully config-driven menus through eco (`b1da941`)
+- EcoMenuFactory — build eco Menus from the existing templates (`c513cf3`)
+- perks and island upgrades as libreforge effect holders (`f57d79e`)
+- make the plugin a first-class eco/libreforge plugin (`cb19c49`)
+- minions slot-upgrade track for the RoyalMinions cap (`75d195c`)
+
+### 🐛 Fixes
+- declare condition arguments without libreforge's default-argument bridge (`d506343`)
+- recompile against eco 2026.35 and libreforge 2026.35.1 (`2111c35`)
+- deduplicate concurrent island creation per profile (`175c5a0`)
+- never save a profile whose items failed to deserialize (`ed060ca`)
+- only clear per-player borders this service applied (`e9370a1`)
+- create indexes without IF NOT EXISTS on MySQL (`6a76888`)
+- scope minion-slot grants to the island's own world (`897fbb5`)
+- a configured starter schematic that doesn't resolve now says so (`86dc7f4`)
+- make the minion-slot track actually grant minion slots (`f3c2822`)
+- compile perk and upgrade chains from the content folders (`19ff223`)
+- warn when a generator upgrade tier has no generators.yml entry (`4b79d2b`)
+- personal bank menu was missing its Back button (`923ebbb`)
+- don't let shipped defaults shadow an existing perks.yml (`0bafd4f`)
+- compile menu chains at load, not on first click (`5c49b71`)
+- give generated buttons a sound again (`1227506`)
+- register minion elements before compiling perk and upgrade chains (`de41606`)
+- add EcoMinions to softdepend so the minion triggers actually register (`7d1f878`)
+- derive the click sound for buttons that open another menu (`d0bdea4`)
+- restore click parity for data-driven slots (`e0ac529`)
+- make the build reproducible off this machine (`8085d43`)
+- read config.yml off disk instead of eco's toBukkit conversion (`7b3b827`)
+- add the lang.yml EcoPlugin requires to load (`289cfa6`)
+
+### ♻️ Refactors
+- remove the minion elements - the core now hooks no third-party plugin (`c9c9974`)
+- remove the built-in EcoMobs and EcoSkills integrations (`4f865f0`)
+- perk switches move to config.yml, perks.yml stops shipping (`8d98562`)
+- /island and /bank on eco's command framework (`6c10011`)
+- rename the renewal perk id to regen (`ed9a117`)
+- extract Storage into an interface (`e046306`)
+- compact cost form, a NONE effect, and one sound debounce (`f70047e`)
+- remove the legacy inventory rendering path (`e8570a8`)
+- fold messages.yml into eco's lang.yml (`2a8d6b9`)
+
+### 📝 Documentation
+- runbook for rebuilding when Auxilor releases (`b4a08cd`)
+- state the Paper 26.2-or-newer requirement (`0b28814`)
+- correct the engine line in every menu header (`3016dc4`)
+
 ## 2026.32.0 — 2026-08-07
 
 ### ✨ Features
