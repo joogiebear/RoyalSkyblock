@@ -144,14 +144,22 @@ kotlin {
 }
 
 tasks.processResources {
+    // Declared as task inputs, not just handed to expand(). Gradle tracks the resource FILES on
+    // its own, but the values substituted into them are invisible to the up-to-date check: bump
+    // the version in gradle.properties without touching a resource and an incremental build
+    // leaves plugin.yml holding the old one, so the jar reports a version it isn't. Only a clean
+    // build corrected it, which is why CI was always right and local builds quietly were not.
+    val placeholders = mapOf(
+        "version" to project.version.toString(),
+        "pluginName" to rootProject.name,
+        "libreforgeVersion" to libreforgeVersion
+    )
+    inputs.properties(placeholders)
+
     // Only plugin.yml and eco.yml carry ${...} placeholders. Expanding every resource would break
     // the GUI/config ymls, whose $ and % sequences are data, not templates.
     filesMatching(listOf("plugin.yml", "eco.yml")) {
-        expand(
-            "version" to project.version,
-            "pluginName" to rootProject.name,
-            "libreforgeVersion" to libreforgeVersion
-        )
+        expand(placeholders)
     }
 }
 
