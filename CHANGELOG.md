@@ -1,3 +1,8 @@
+## 2026.37.0 — 2026-09-13
+
+### 🐛 Fixes
+- release at 10:00 Central or later, not exactly 10:00 (`01df30b`)
+
 ## 2026.36.1 — 2026-09-06
 
 ### 🐛 Fixes
