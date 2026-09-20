@@ -1,5 +1,6 @@
 package com.mystipixel.royalskyblock.listener;
 
+import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -9,7 +10,6 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.AsyncPlayerPreLoginEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.event.player.PlayerLoginEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 
@@ -37,12 +37,15 @@ public final class ProfileListener implements Listener {
         }
     }
 
-    /** Another plugin denied the login after we preloaded — drop the data so it can't go stale. */
+    /**
+     * The connection closed — if that happened before the join (login denied by another plugin, client
+     * dropped during configuration) the preload was never consumed, so drop it. After a normal join
+     * this is a no-op. Deliberately not PlayerLoginEvent: listening to it makes Paper disable the
+     * re-configuration API server-wide.
+     */
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onLogin(PlayerLoginEvent event) {
-        if (event.getResult() != PlayerLoginEvent.Result.ALLOWED) {
-            plugin.profiles().discardPreload(event.getPlayer().getUniqueId());
-        }
+    public void onConnectionClose(PlayerConnectionCloseEvent event) {
+        plugin.profiles().discardPreload(event.getPlayerUniqueId());
     }
 
     @EventHandler(priority = EventPriority.NORMAL)
