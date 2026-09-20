@@ -1,3 +1,8 @@
+## 2026.38.0 — 2026-09-20
+
+### 🐛 Fixes
+- stop listening to PlayerLoginEvent (`2fc335b`)
+
 ## 2026.37.0 — 2026-09-13
 
 ### 🐛 Fixes
