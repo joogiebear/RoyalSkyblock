@@ -1,3 +1,8 @@
+## 2026.39.0 — 2026-09-23
+
+### 🔧 Other
+- paper-api 26.2.build.121-stable -> 26.2.build.123-stable (`ccd1d6f`)
+
 ## 2026.38.0 — 2026-09-20
 
 ### 🐛 Fixes
