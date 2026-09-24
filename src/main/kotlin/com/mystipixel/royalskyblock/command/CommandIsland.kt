@@ -27,10 +27,12 @@ import java.util.Locale
  *
  * ## Permissions
  *
- * A subcommand declares a permission **only where the handler already enforced one**. `plugin.yml`
- * also declares `royalskyblock.home`, `.upgrade` and `.bank`, which nothing has ever checked; gating
- * them here would be a new restriction dressed up as a refactor, so they stay unenforced and stay
- * that way deliberately rather than by omission.
+ * A subcommand declares a specific permission **only where the handler already enforced one**.
+ * Everything else, and `/island` itself, needs `royalskyblock.use` (default true in `plugin.yml`).
+ *
+ * Never pass `""` here. eco calls `hasPermission` on the string as given, with no special case for
+ * empty, and Bukkit treats a permission it has never heard of as op-only — so `""` quietly made every
+ * command op-only. Ops never noticed; every other player got "no permission" for all of `/is`.
  *
  * ## `profile` and `admin`
  *
@@ -40,7 +42,7 @@ import java.util.Locale
  * anyone actually notices, and it is here. That is a deliberate stop, not an unfinished edge.
  */
 class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
-    PluginCommand(plugin, "island", "", false) {
+    PluginCommand(plugin, "island", "royalskyblock.use", false) {
 
     private val handlers = IslandCommand(plugin)
 
@@ -131,7 +133,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
      */
     private fun leaf(
         name: String,
-        permission: String = "",
+        permission: String = "royalskyblock.use",
         playersOnly: Boolean = true,
         complete: (CommandSender, List<String>) -> List<String> = { _, _ -> emptyList() },
         run: (CommandSender, Array<String>) -> Unit

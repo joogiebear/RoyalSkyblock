@@ -21,7 +21,8 @@ import java.util.List;
 public final class BankCommand extends PluginCommand {
 
     public BankCommand(RoyalSkyblockPlugin plugin) {
-        super(plugin, "bank", "", true);
+        // Not "": eco checks the string as given, and Bukkit treats an unknown permission as op-only.
+        super(plugin, "bank", "royalskyblock.bank", true);
     }
 
     @Override
