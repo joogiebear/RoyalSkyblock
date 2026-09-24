@@ -826,11 +826,7 @@ public final class GuiManager implements Listener {
             return; // no economy / no levels — header explains, no buttons
         }
 
-        boolean canWithdraw = true;
-        if (coop && plugin.conf().getBoolean("coop.bank.withdraw-requires-manager", false)) {
-            IslandRole role = profile.roleOf(player.getUniqueId());
-            canWithdraw = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
-        }
+        boolean canWithdraw = mayWithdraw(profile, player, coop);
 
         List<Integer> amounts = plugin.conf().getIntegerList("coop.bank.amounts");
         if (amounts.isEmpty()) {
@@ -880,6 +876,9 @@ public final class GuiManager implements Listener {
             inv.setItem(37, infoIcon(Material.EXPERIENCE_BOTTLE, "&a&lClaim Interest",
                     List.of("&7Interest is ready.", "", "&eClick to claim!")));
             holder.putAction(37, (viewer, right) -> {
+                if (!bankAccess(viewer, accountId, false)) {
+                    return;
+                }
                 String error = bank.claimInterest(accountId);
                 if (error != null) {
                     viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
@@ -897,6 +896,9 @@ public final class GuiManager implements Listener {
         inv.setItem(39, bankUpgradeIcon(bank, acct));
         if (bank.levels().getNextLevel(acct.level()).isPresent()) {
             holder.putAction(39, (viewer, right) -> {
+                if (!bankAccess(viewer, accountId, false)) {
+                    return;
+                }
                 String error = bank.upgrade(viewer, accountId);
                 if (error != null) {
                     viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
@@ -1004,7 +1006,41 @@ public final class GuiManager implements Listener {
         return infoIcon(material, verb, lore);
     }
 
+    /** Coop banks can require owner/co-owner to withdraw; personal banks always allow it. */
+    private boolean mayWithdraw(Profile profile, Player player, boolean coop) {
+        if (!coop || !plugin.conf().getBoolean("coop.bank.withdraw-requires-manager", false)) {
+            return true;
+        }
+        IslandRole role = profile.roleOf(player.getUniqueId());
+        return role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
+    }
+
+    /**
+     * Re-checks, at click time, that {@code viewer} may still act on {@code accountId}. The account id
+     * and withdraw right are captured when the menu is drawn, but a menu can stay open across a kick,
+     * a leave, a demotion or a profile switch, and BankService itself does no membership check. Without
+     * this a kicked member could keep the coop bank open and click Withdraw All. On refusal the menu
+     * is closed so the stale buttons go away.
+     */
+    private boolean bankAccess(Player viewer, String accountId, boolean withdraw) {
+        Profile profile = plugin.profiles().getActiveProfile(viewer);
+        boolean coop = accountId.startsWith("c:");
+        boolean allowed = profile != null
+                && profile.isMember(viewer.getUniqueId())
+                && accountId.equals(coop ? BankService.coopId(profile.id())
+                        : BankService.personalId(profile.id(), viewer.getUniqueId()))
+                && (!withdraw || mayWithdraw(profile, viewer, coop));
+        if (!allowed) {
+            viewer.closeInventory();
+            plugin.messages().send(viewer, "bank.no-access");
+        }
+        return allowed;
+    }
+
     private void runBank(Player viewer, String accountId, String menu, long amount, boolean deposit) {
+        if (!bankAccess(viewer, accountId, !deposit)) {
+            return;
+        }
         BankService bank = plugin.bank();
         String error = deposit ? bank.deposit(viewer, accountId, amount) : bank.withdraw(viewer, accountId, amount);
         if (error != null) {

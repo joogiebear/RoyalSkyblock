@@ -138,6 +138,7 @@ messages:
     interest: "&aInterest claimed into your bank."
     empty-purse: "&cYou have no money to deposit."
     empty: "&cThe coop bank is empty."
+    no-access: "&cYou no longer have access to this bank."
 
   perks:
     disabled: "&cLevel-gated perks are disabled on this server."

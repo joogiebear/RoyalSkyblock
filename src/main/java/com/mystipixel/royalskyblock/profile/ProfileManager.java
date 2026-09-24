@@ -578,6 +578,9 @@ public final class ProfileManager {
         if (online == null || !profileId.equals(getActiveProfileId(player))) {
             return;
         }
+        // Any open menu was drawn for the profile they just lost; close it rather than leave its
+        // buttons live. switchProfile from the GUI closes first, but a kick arrives from outside.
+        online.closeInventory();
         List<Profile> owned = storage.getProfilesByOwner(player);
         if (!owned.isEmpty()) {
             switchProfile(online, owned.get(0).id());
