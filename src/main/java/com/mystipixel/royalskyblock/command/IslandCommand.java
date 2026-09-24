@@ -4,6 +4,7 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.config.ContentSplitter;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
@@ -156,6 +157,13 @@ public final class IslandCommand {
         Island island = active == null ? null : plugin.islands().getIslandByProfile(active);
         if (island == null) {
             plugin.messages().send(player, "home.no-island");
+            return;
+        }
+        // Owner only, the same rule deleteProfile applies. The island is shared by every coop member,
+        // so a plain member being able to send it to the trash would be a grief tool.
+        Profile profile = plugin.profiles().getProfile(active);
+        if (profile == null || profile.roleOf(player.getUniqueId()) != IslandRole.OWNER) {
+            plugin.messages().send(player, "island.no-permission-manage");
             return;
         }
         if (args.length < 2 || !args[1].equalsIgnoreCase("confirm")) {
