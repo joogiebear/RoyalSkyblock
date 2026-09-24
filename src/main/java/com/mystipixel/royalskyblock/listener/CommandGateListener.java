@@ -29,26 +29,37 @@ public final class CommandGateListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        Player player = event.getPlayer();
+        if (refuse(plugin, event.getPlayer(), event.getMessage())) {
+            event.setCancelled(true);
+        }
+    }
+
+    /**
+     * Whether {@code player}'s active gamemode blocks {@code commandLine}; if so, tells them why.
+     * Public because {@link Player#performCommand} never fires {@link PlayerCommandPreprocessEvent},
+     * so anything that runs a command on a player's behalf (menu buttons) must ask here itself.
+     */
+    public static boolean refuse(RoyalSkyblockPlugin plugin, Player player, String commandLine) {
         if (player.hasPermission("royalskyblock.gamemode.bypass")) {
-            return;
+            return false;
         }
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
-            return;
+            return false;
         }
-        String word = commandWord(event.getMessage());
+        String word = commandWord(commandLine);
         if (word.isEmpty() || !plugin.gamemodes().isBlocked(profile.gamemode(), word)) {
-            return;
+            return false;
         }
-        event.setCancelled(true);
         plugin.messages().send(player, "profile.blocked-command",
                 "gamemode", profile.gamemode().name().toLowerCase(Locale.ROOT));
+        return true;
     }
 
     /** Extract the bare command word: {@code "/ah sell 10"} → {@code "ah"}. */
     private static String commandWord(String message) {
-        String msg = message.startsWith("/") ? message.substring(1) : message;
+        String msg = message.strip();
+        msg = msg.startsWith("/") ? msg.substring(1) : msg;
         int space = msg.indexOf(' ');
         String word = space >= 0 ? msg.substring(0, space) : msg;
         return word.toLowerCase(Locale.ROOT);

@@ -12,6 +12,7 @@ import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
 import com.mystipixel.royalskyblock.hooks.EcoHook;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
+import com.mystipixel.royalskyblock.listener.CommandGateListener;
 import com.mystipixel.royalskyblock.island.IslandSetting;
 import com.mystipixel.royalskyblock.level.LevelConfig;
 import com.mystipixel.royalskyblock.perk.Perk;
@@ -1389,7 +1390,11 @@ public final class GuiManager implements Listener {
             case "close" -> runNextTick(player::closeInventory);
             case "player_command" -> runNextTick(() -> {
                 player.closeInventory();
-                player.performCommand(apply(effect.argString("command", ""), placeholders(player)));
+                String command = apply(effect.argString("command", ""), placeholders(player));
+                // performCommand skips PlayerCommandPreprocessEvent, so the gamemode gate must be asked here.
+                if (!CommandGateListener.refuse(plugin, player, command)) {
+                    player.performCommand(command);
+                }
             });
             case "console_command" -> runNextTick(() -> Bukkit.dispatchCommand(
                     Bukkit.getConsoleSender(), apply(effect.argString("command", ""), placeholders(player))));

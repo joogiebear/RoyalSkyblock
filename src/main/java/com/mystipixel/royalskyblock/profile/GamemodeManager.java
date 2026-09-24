@@ -1,5 +1,7 @@
 package com.mystipixel.royalskyblock.profile;
 
+import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -60,9 +62,37 @@ public final class GamemodeManager {
         return ruleset(mode).displayName();
     }
 
-    /** Whether {@code command} (bare word, no slash) is blocked on {@code mode}. */
+    /**
+     * Whether {@code command} (the typed word, no slash) is blocked on {@code mode}.
+     *
+     * <p>Matching the typed word alone was trivially bypassed: {@code /royalauctions:ah} or any alias
+     * the config didn't list got straight through. So the word is also checked without its namespace,
+     * and resolved through the server's command map so that a command is blocked when its real name
+     * <em>or any of its aliases</em> is listed — listing {@code ah} covers every spelling of it.
+     */
     public boolean isBlocked(Gamemode mode, String command) {
-        return ruleset(mode).blockedCommands().contains(command.toLowerCase(Locale.ROOT));
+        Set<String> blocked = ruleset(mode).blockedCommands();
+        if (blocked.isEmpty()) {
+            return false;
+        }
+        String word = command.toLowerCase(Locale.ROOT);
+        int colon = word.indexOf(':');
+        if (blocked.contains(word) || (colon >= 0 && blocked.contains(word.substring(colon + 1)))) {
+            return true;
+        }
+        Command resolved = Bukkit.getCommandMap().getCommand(word);
+        if (resolved == null) {
+            return false;
+        }
+        if (blocked.contains(resolved.getName().toLowerCase(Locale.ROOT))) {
+            return true;
+        }
+        for (String alias : resolved.getAliases()) {
+            if (blocked.contains(alias.toLowerCase(Locale.ROOT))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public List<Gamemode> modes() {
