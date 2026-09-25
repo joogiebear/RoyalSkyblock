@@ -22,7 +22,10 @@ public final class AgeCropSimulator implements BlockSimulator {
     private static final Set<Material> CROPS = Set.of(
             Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
             Material.NETHER_WART, Material.COCOA, Material.SWEET_BERRY_BUSH,
-            Material.TORCHFLOWER_CROP, Material.PITCHER_CROP);
+            Material.TORCHFLOWER_CROP);
+    // No PITCHER_CROP: it is a two-block plant whose halves must age together. Ageing each block on
+    // its own left a lower half past the stage that needs an upper half, which vanilla then breaks on
+    // the next neighbour update, and mismatched halves on the plants that survived.
 
     private final RoyalSkyblockPlugin plugin;
 
