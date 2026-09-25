@@ -102,6 +102,10 @@ dependencies {
     // eco on the test classpath so the menu coordinate conversion can be asserted against eco's own
     // MenuUtils rather than a hand-copied formula — a silent off-by-one there displaces every button.
     testImplementation("com.willfp:eco:$ecoVersion")
+    // eco's Eco interface names BukkitAudiences, so proxying it (CommandPermissionTest) needs the
+    // class present. eco ships it at runtime; tests have to bring their own.
+    testImplementation("net.kyori:adventure-platform-bukkit:4.4.1") { isTransitive = false }
+    testImplementation("net.kyori:adventure-platform-api:4.4.1") { isTransitive = false }
 
     // Paper on the test classpath so config parsing can be tested against a real YamlConfiguration.
     // compileOnly does not reach tests, which is why the parsers had no coverage until now.
