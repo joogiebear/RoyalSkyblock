@@ -6,6 +6,7 @@ import com.mystipixel.royalskyblock.profile.Profile;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
 import org.bukkit.event.EventHandler;
@@ -102,6 +103,33 @@ public final class ProtectionListener implements Listener {
         return profile.roleOf(player.getUniqueId()).canBuild();
     }
 
+    /**
+     * {@link #canBuild} for a specific block: members may only edit inside the island's radius.
+     *
+     * <p>The border players see is per-player, client-side and does no damage, so it never stopped a
+     * member who pearled, boated or modded their way past it from building outside — which skipped
+     * the island-size upgrade entirely. This is the server-side half of that border. It uses the same
+     * square as the level scan: within {@code radius} blocks of the paste point on X and Z, which is
+     * every block at least half inside the border.
+     */
+    private boolean canBuildAt(Player player, Block block) {
+        if (!canBuild(player, block.getWorld())) {
+            return false;
+        }
+        if (player.hasPermission("royalskyblock.bypass")) {
+            return true;
+        }
+        Island island = plugin.islands().getIslandByWorld(block.getWorld());
+        if (island == null) {
+            return true;
+        }
+        ConfigurationSection paste = plugin.conf().getConfigurationSection("island.paste");
+        int cx = paste != null ? paste.getInt("x", 0) : 0;
+        int cz = paste != null ? paste.getInt("z", 0) : 0;
+        int r = Math.max(1, island.radius());
+        return Math.abs(block.getX() - cx) <= r && Math.abs(block.getZ() - cz) <= r;
+    }
+
     private boolean strictMode() {
         return "strict".equalsIgnoreCase(
                 plugin.conf().getString("island.protection.visitor-mode", "read-only"));
@@ -120,7 +148,7 @@ public final class ProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBreak(BlockBreakEvent event) {
-        if (!canBuild(event.getPlayer(), event.getBlock().getWorld())) {
+        if (!canBuildAt(event.getPlayer(), event.getBlock())) {
             event.setCancelled(true);
             deny(event.getPlayer());
         }
@@ -128,7 +156,7 @@ public final class ProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onPlace(BlockPlaceEvent event) {
-        if (!canBuild(event.getPlayer(), event.getBlock().getWorld())) {
+        if (!canBuildAt(event.getPlayer(), event.getBlock())) {
             event.setCancelled(true);
             deny(event.getPlayer());
         }
@@ -175,7 +203,7 @@ public final class ProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBucketEmpty(PlayerBucketEmptyEvent event) {
-        if (!canBuild(event.getPlayer(), event.getBlock().getWorld())) {
+        if (!canBuildAt(event.getPlayer(), event.getBlock())) {
             event.setCancelled(true);
             deny(event.getPlayer());
         }
@@ -183,7 +211,7 @@ public final class ProtectionListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     public void onBucketFill(PlayerBucketFillEvent event) {
-        if (!canBuild(event.getPlayer(), event.getBlock().getWorld())) {
+        if (!canBuildAt(event.getPlayer(), event.getBlock())) {
             event.setCancelled(true);
             deny(event.getPlayer());
         }

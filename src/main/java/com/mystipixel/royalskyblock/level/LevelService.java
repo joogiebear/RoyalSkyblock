@@ -125,7 +125,7 @@ public final class LevelService {
                 // and the island stayed in `scanning` until a restart, refusing every recalc. The
                 // timeout routes both through the failure path below, which releases it.
                 .orTimeout(SCAN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                .thenApplyAsync(this::tally)                       // heavy sum off the main thread
+                .thenApplyAsync(snaps -> tally(snaps, cx, cz, r))  // heavy sum off the main thread
                 .thenAccept(totals -> runMain(() -> {             // model write + persist back on main
                     double level = config.levelFor(totals.points);
                     island.setLevel(level);
@@ -296,14 +296,27 @@ public final class LevelService {
 
     // ── tallying: pure block-type reads off the main thread ─────────────────────────
 
-    private ScanTotals tally(List<ChunkSnapshot> snapshots) {
+    /**
+     * Sum block values inside the island's square only. The snapshots are whole chunks, and chunk
+     * edges rarely line up with the radius, so without the column check up to 15 blocks beyond the
+     * border on the +X/+Z sides counted towards level — and anything pushed or grown out past it.
+     */
+    private ScanTotals tally(List<ChunkSnapshot> snapshots, int cx, int cz, int r) {
         long points = 0;
         Map<Material, Long> counts = new EnumMap<>(Material.class);
         int minY = config.minY();
         int maxY = config.maxY();
         for (ChunkSnapshot snapshot : snapshots) {
+            int baseX = snapshot.getX() << 4;
+            int baseZ = snapshot.getZ() << 4;
             for (int x = 0; x < 16; x++) {
+                if (Math.abs(baseX + x - cx) > r) {
+                    continue;
+                }
                 for (int z = 0; z < 16; z++) {
+                    if (Math.abs(baseZ + z - cz) > r) {
+                        continue;
+                    }
                     int top = Math.min(maxY, snapshot.getHighestBlockYAt(x, z));
                     for (int y = minY; y <= top; y++) {
                         Material material = snapshot.getBlockType(x, y, z);
