@@ -25,9 +25,11 @@ import org.jetbrains.annotations.NotNull;
  * }
  * }</pre>
  *
- * <p>{@link #getOfflineSeconds()} is already clamped to {@code simulation.max-offline-hours}, so a
- * listener can use it directly without worrying that an island left alone for a year mints a year
- * of output. It is never negative and never zero — the event does not fire for a trivial gap.
+ * <p>{@link #getOfflineSeconds()} is already clamped to {@code simulation.max-offline-hours}, so with
+ * the default a listener can use it directly without worrying that an island left alone for a year
+ * mints a year of output. An admin can set that option to {@code 0} for no cap, and then it is the
+ * full offline time: a listener paying out per second should apply its own ceiling if unbounded
+ * payouts would hurt. It is never negative and never zero — the event does not fire for a trivial gap.
  *
  * <p>The event is not cancellable: the time has already passed. A listener that wants to opt out
  * simply does nothing.
@@ -58,7 +60,8 @@ public final class IslandCatchupEvent extends Event {
     }
 
     /**
-     * Seconds to simulate: real offline time, clamped to {@code simulation.max-offline-hours}.
+     * Seconds to simulate: real offline time, clamped to {@code simulation.max-offline-hours} unless
+     * that is {@code 0} (no cap).
      * Use this one.
      */
     public long getOfflineSeconds() {
