@@ -8,6 +8,7 @@ import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
+import com.mystipixel.royalskyblock.profile.ProfileMember;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
@@ -245,9 +246,8 @@ public final class IslandCommand {
             plugin.messages().send(player, "profile.switch-usage");
             return;
         }
-        Profile target = findProfile(player, args[2]);
+        Profile target = findProfile(player, args[2], "switch");
         if (target == null) {
-            plugin.messages().send(player, "profile.not-found", "name", args[2]);
             return;
         }
         plugin.messages().send(player, "profile.switching", "name", target.name());
@@ -265,9 +265,8 @@ public final class IslandCommand {
             plugin.messages().send(player, "profile.delete-usage");
             return;
         }
-        Profile target = findProfile(player, args[2]);
+        Profile target = findProfile(player, args[2], "delete");
         if (target == null) {
-            plugin.messages().send(player, "profile.not-found", "name", args[2]);
             return;
         }
         String name = target.name();
@@ -278,13 +277,38 @@ public final class IslandCommand {
         }));
     }
 
-    /** Find a player's profile by name (case-insensitive) or 1-based list index. */
-    private Profile findProfile(Player player, String query) {
+    /**
+     * Find one of the player's profiles by name (case-insensitive) or 1-based list index, telling the
+     * player why when there isn't exactly one. Returns null in that case.
+     *
+     * <p>Names are not unique: a coop keeps its owner's name for it, so joining someone's "Apple" while
+     * owning an "Apple" of your own gives you two. Taking the first match meant owned profiles always
+     * won and the coop could not be reached by name at all — and for {@code delete} the first match is
+     * the one that gets destroyed. So an ambiguous name picks nothing and lists the choices by number.
+     */
+    private Profile findProfile(Player player, String query, String action) {
         List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
-        for (Profile p : profiles) {
-            if (p.name().equalsIgnoreCase(query)) {
-                return p;
+        List<Integer> matches = new ArrayList<>();
+        for (int i = 0; i < profiles.size(); i++) {
+            if (profiles.get(i).name().equalsIgnoreCase(query)) {
+                matches.add(i);
             }
+        }
+        if (matches.size() == 1) {
+            return profiles.get(matches.get(0));
+        }
+        if (matches.size() > 1) {
+            plugin.messages().send(player, "profile.ambiguous", "name", query);
+            for (int i : matches) {
+                Profile p = profiles.get(i);
+                ProfileMember owner = p.member(p.owner());
+                String ownerName = p.owner().equals(player.getUniqueId()) ? "yours"
+                        : owner != null ? owner.name() + "'s" : "someone else's";
+                plugin.messages().sendPlain(player, "profile.ambiguous-line",
+                        "action", action, "index", String.valueOf(i + 1), "name", p.name(),
+                        "gamemode", p.gamemode().name().toLowerCase(Locale.ROOT), "owner", ownerName);
+            }
+            return null;
         }
         try {
             int index = Integer.parseInt(query) - 1;
@@ -294,6 +318,7 @@ public final class IslandCommand {
         } catch (NumberFormatException ignored) {
             // not an index
         }
+        plugin.messages().send(player, "profile.not-found", "name", query);
         return null;
     }
 
@@ -434,7 +459,15 @@ public final class IslandCommand {
         }
         var result = plugin.profiles().acceptInvite(player);
         if (result.profile() != null) {
-            plugin.messages().send(player, "coop.accepted", "profile", result.profile().name());
+            // Straight onto the coop. Joining and then having to find it by name was the whole
+            // experience before, and same-named profiles made even that fail.
+            Profile joined = result.profile();
+            plugin.messages().send(player, "coop.accepted-switching", "profile", joined.name());
+            plugin.profiles().switchProfile(player, joined.id()).whenComplete((ok, error) -> onMain(() -> {
+                if (error != null) {
+                    plugin.messages().send(player, "profile.switch-failed", "error", rootMessage(error));
+                }
+            }));
             return;
         }
         switch (result.error() == null ? "none" : result.error()) {
