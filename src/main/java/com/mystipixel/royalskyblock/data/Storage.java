@@ -84,6 +84,20 @@ public interface Storage {
 
     void deleteProfileData(UUID profileId, UUID playerUuid);
 
+    // ── coop payouts ───────────────────────────────────────────────────────────
+
+    /**
+     * Record that {@code player} is owed what they had on {@code fromProfile} — their personal bank
+     * savings there and the items they carried — after leaving or being kicked from that coop. Their
+     * {@code profile_data} row and bank account on it are kept until the payout is delivered.
+     */
+    void addCoopPayout(UUID player, UUID fromProfile);
+
+    /** Coop profiles {@code player} is still owed a payout from. */
+    List<UUID> getCoopPayouts(UUID player);
+
+    void removeCoopPayout(UUID player, UUID fromProfile);
+
     // ── in-progress upgrades ───────────────────────────────────────────────────
 
     List<PendingUpgrade> getAllPending();

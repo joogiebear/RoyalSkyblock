@@ -170,6 +170,29 @@ public final class BankService {
         return null;
     }
 
+    /**
+     * Empty an account into {@code purse}: the payout a member gets from their personal account on a
+     * coop they left. Returns the amount paid (0 if the account was empty), or -1 if the bank can't
+     * pay right now — no economy, or the ledger write failed — in which case nothing moved.
+     */
+    public double payOutAll(Player purse, String id, String note) {
+        BankAccount account = account(id);
+        double amount = round(account.balance());
+        if (amount <= 0) {
+            return 0;
+        }
+        if (!available()) {
+            return -1;
+        }
+        // Ledger first: if the deposit then fails the money is lost to the economy, but it can never be
+        // paid twice, which is the failure that would matter on a retry.
+        if (!persist(account.withBalance(0.0), "PAYOUT", amount, 0.0, note)) {
+            return -1;
+        }
+        vault.deposit(purse, amount);
+        return amount;
+    }
+
     public String withdraw(Player purse, String id, double amount) {
         if (!available()) {
             return "&cThe bank is unavailable (no economy plugin).";

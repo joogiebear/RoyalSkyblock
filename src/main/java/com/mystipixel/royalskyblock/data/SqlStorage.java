@@ -170,6 +170,10 @@ public final class SqlStorage implements Storage {
                 "CREATE TABLE IF NOT EXISTS bank_accounts ("
                         + "account_id " + txt + " PRIMARY KEY, balance " + dbl + " NOT NULL DEFAULT 0, "
                         + "level " + integer + " NOT NULL DEFAULT 1, last_interest " + big + " NOT NULL DEFAULT 0)",
+                // Former coop members still owed their savings and items (see Storage.addCoopPayout).
+                "CREATE TABLE IF NOT EXISTS coop_payouts ("
+                        + "player_uuid " + txt36 + " NOT NULL, profile_id " + txt36 + " NOT NULL, "
+                        + "PRIMARY KEY (player_uuid, profile_id))",
                 "CREATE TABLE IF NOT EXISTS bank_txns ("
                         + "id " + (mysql() ? "BIGINT PRIMARY KEY AUTO_INCREMENT" : "INTEGER PRIMARY KEY AUTOINCREMENT")
                         + ", account_id " + txt + " NOT NULL, type " + txt32 + " NOT NULL, amount " + dbl + " NOT NULL, "
@@ -573,11 +577,17 @@ public final class SqlStorage implements Storage {
             boolean auto = c.getAutoCommit();
             c.setAutoCommit(false);
             try {
-                for (String table : new String[]{"profile_members", "profile_data"}) {
-                    try (PreparedStatement st = c.prepareStatement("DELETE FROM " + table + " WHERE profile_id = ?")) {
-                        st.setString(1, id.toString());
-                        st.executeUpdate();
-                    }
+                try (PreparedStatement st = c.prepareStatement("DELETE FROM profile_members WHERE profile_id = ?")) {
+                    st.setString(1, id.toString());
+                    st.executeUpdate();
+                }
+                // Keep the rows of former members who haven't collected their payout yet: those rows
+                // are the items they carried here, and deleting them is the loss the payout prevents.
+                try (PreparedStatement st = c.prepareStatement("DELETE FROM profile_data WHERE profile_id = ? "
+                        + "AND player_uuid NOT IN (SELECT player_uuid FROM coop_payouts WHERE profile_id = ?)")) {
+                    st.setString(1, id.toString());
+                    st.setString(2, id.toString());
+                    st.executeUpdate();
                 }
                 try (PreparedStatement st = c.prepareStatement("DELETE FROM profiles WHERE id = ?")) {
                     st.setString(1, id.toString());
@@ -807,6 +817,49 @@ public final class SqlStorage implements Storage {
     }
 
     /** Remove a player's saved state for one profile — used when they leave/are kicked from a coop. */
+    public void addCoopPayout(UUID player, UUID fromProfile) {
+        String sql = (mysql() ? "INSERT IGNORE" : "INSERT OR IGNORE")
+                + " INTO coop_payouts (player_uuid, profile_id) VALUES (?, ?)";
+        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+            st.setString(1, player.toString());
+            st.setString(2, fromProfile.toString());
+            st.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not record coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
+        }
+    }
+
+    @Override
+    public List<UUID> getCoopPayouts(UUID player) {
+        List<UUID> out = new ArrayList<>();
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement st = c.prepareStatement("SELECT profile_id FROM coop_payouts WHERE player_uuid = ?")) {
+            st.setString(1, player.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                while (rs.next()) {
+                    out.add(UUID.fromString(rs.getString("profile_id")));
+                }
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not load coop payouts for " + player + ": " + e.getMessage());
+        }
+        return out;
+    }
+
+    @Override
+    public void removeCoopPayout(UUID player, UUID fromProfile) {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement st = c.prepareStatement(
+                     "DELETE FROM coop_payouts WHERE player_uuid = ? AND profile_id = ?")) {
+            st.setString(1, player.toString());
+            st.setString(2, fromProfile.toString());
+            st.executeUpdate();
+        } catch (SQLException e) {
+            plugin.getLogger().severe("Could not clear coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
+        }
+    }
+
+    @Override
     public void deleteProfileData(UUID profileId, UUID playerUuid) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(

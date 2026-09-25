@@ -101,6 +101,7 @@ public final class EcoStorage implements Storage {
     private final PersistentDataKey<String> islandOfKey;        // on the profile's UUID
     private final PersistentDataKey<List<String>> ownedKey;     // on rsb-player:<player>
     private final PersistentDataKey<List<String>> memberOfKey;  // on rsb-player:<player>
+    private final PersistentDataKey<List<String>> payoutKey;    // on rsb-player:<player>
 
     // Full scans. On the server profile (the nil UUID) so every node shares one list.
     private final PersistentDataKey<List<String>> islandIndexKey;
@@ -126,6 +127,7 @@ public final class EcoStorage implements Storage {
         this.islandOfKey = string("island_of");
         this.ownedKey = stringList("owned_profiles");
         this.memberOfKey = stringList("member_profiles");
+        this.payoutKey = stringList("coop_payouts");
 
         this.islandIndexKey = stringList("island_index");
         this.pendingIndexKey = stringList("pending_index");
@@ -481,6 +483,27 @@ public final class EcoStorage implements Storage {
     @Override
     public void deleteProfileData(UUID profileId, UUID playerUuid) {
         write(profileDataUuid(profileId, playerUuid), profileDataKey, Configs.empty());
+    }
+
+    // ── coop payouts ───────────────────────────────────────────────────────────
+
+    @Override
+    public void addCoopPayout(UUID player, UUID fromProfile) {
+        addToIndex(payoutKey, derived("rsb-player", player.toString()), fromProfile.toString());
+    }
+
+    @Override
+    public List<UUID> getCoopPayouts(UUID player) {
+        List<UUID> out = new ArrayList<>();
+        for (String id : orEmpty(read(derived("rsb-player", player.toString()), payoutKey))) {
+            out.add(uuid(id));
+        }
+        return out;
+    }
+
+    @Override
+    public void removeCoopPayout(UUID player, UUID fromProfile) {
+        removeFromIndex(payoutKey, derived("rsb-player", player.toString()), fromProfile.toString());
     }
 
     static UUID profileDataUuid(UUID profileId, UUID playerUuid) {

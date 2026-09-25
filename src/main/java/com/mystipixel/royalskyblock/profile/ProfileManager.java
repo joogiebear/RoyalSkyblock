@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.profile;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.bank.BankService;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
@@ -103,7 +104,7 @@ public final class ProfileManager {
 
     /** On join: ensure the player has a profile, then load its state onto them. Main thread. */
     /** What {@link #preload} gathered off-thread, waiting to be applied when the player joins. */
-    private record Preloaded(List<Profile> profiles, UUID active, ProfileData data) {
+    private record Preloaded(List<Profile> profiles, UUID active, ProfileData data, List<UUID> payouts) {
     }
 
     private final Map<UUID, Preloaded> preloaded = new ConcurrentHashMap<>();
@@ -130,7 +131,7 @@ public final class ProfileManager {
                         ? active : profiles.get(0).id();
                 data = storage.getProfileData(resolved, uuid);
             }
-            preloaded.put(uuid, new Preloaded(profiles, active, data));
+            preloaded.put(uuid, new Preloaded(profiles, active, data, storage.getCoopPayouts(uuid)));
         } catch (Exception e) {
             preloaded.remove(uuid);
             plugin.getLogger().warning("Profile preload failed for " + uuid
@@ -155,8 +156,18 @@ public final class ProfileManager {
                 plugin.getLogger().info("Profile load for " + player.getName() + " served from preload (no queries on join).");
             }
             applyPreloaded(player, ready);
+            if (!ready.payouts().isEmpty()) {
+                deliverCoopPayouts(player);
+            }
             return;
         }
+        loadOnJoin(player);
+        deliverCoopPayouts(player);
+    }
+
+    /** The synchronous join load, used when no preload is waiting. */
+    private void loadOnJoin(Player player) {
+        UUID uuid = player.getUniqueId();
         if (debug()) {
             plugin.getLogger().info("Profile load for " + player.getName()
                     + " falling back to synchronous queries (no preload available).");
@@ -353,6 +364,24 @@ public final class ProfileManager {
                     "&cYou can't delete your only profile."));
             return CompletableFuture.completedFuture(false);
         }
+        // Money in any bank on the profile would become unreachable the moment it is gone, so the delete
+        // waits until it has been withdrawn. Members' personal accounts count: it is their money.
+        List<String> funded = new java.util.ArrayList<>();
+        double coopBalance = plugin.bank().balance(BankService.coopId(targetId));
+        if (coopBalance > 0) {
+            funded.add("the coop bank (" + plugin.bank().money(coopBalance) + ")");
+        }
+        for (ProfileMember member : target.members()) {
+            double personal = plugin.bank().balance(BankService.personalId(targetId, member.uuid()));
+            if (personal > 0) {
+                funded.add(member.name() + "'s personal bank (" + plugin.bank().money(personal) + ")");
+            }
+        }
+        if (!funded.isEmpty()) {
+            player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
+                    "&cEmpty the banks on this profile before deleting it: &f" + String.join("&c, &f", funded)));
+            return CompletableFuture.completedFuture(false);
+        }
 
         profileCache.remove(targetId);
         Island island = plugin.islands().getIslandByProfile(targetId);
@@ -480,8 +509,7 @@ public final class ProfileManager {
         active.removeMember(target.uuid());
         storage.saveProfile(active);
         profileCache.put(active.id(), active);
-        moveOffProfileIfActive(target.uuid(), active.id());
-        storage.deleteProfileData(active.id(), target.uuid()); // don't leave their coop state orphaned
+        owePayout(target.uuid(), active.id());
         return null;
     }
 
@@ -500,8 +528,7 @@ public final class ProfileManager {
         active.removeMember(player.getUniqueId());
         storage.saveProfile(active);
         profileCache.put(active.id(), active);
-        moveOffProfileIfActive(player.getUniqueId(), active.id());
-        storage.deleteProfileData(active.id(), player.getUniqueId()); // clear their state on this coop
+        owePayout(player.getUniqueId(), active.id());
         return null;
     }
 
@@ -587,10 +614,100 @@ public final class ProfileManager {
         // buttons live. switchProfile from the GUI closes first, but a kick arrives from outside.
         online.closeInventory();
         List<Profile> owned = storage.getProfilesByOwner(player);
-        if (!owned.isEmpty()) {
-            switchProfile(online, owned.get(0).id());
-        } else {
-            plugin.islands().sendToSpawn(online);
+        // Someone with no profile of their own used to be sent to spawn while still set to the coop
+        // they had just been removed from. They get a fresh profile to land on instead, which is also
+        // where their coop payout is delivered.
+        UUID landing = owned.isEmpty() ? createDefaultProfile(online).id() : owned.get(0).id();
+        switchProfile(online, landing);
+    }
+
+    // ── coop payouts ──────────────────────────────────────────────────────────────
+
+    /**
+     * A member is off {@code coop}: move them off it if they are on it, then pay out what was theirs
+     * there. Their row and bank account on the coop are kept, not deleted, until that payout lands:
+     * deleting them is how a kick used to destroy the member's savings and the items they carried.
+     */
+    private void owePayout(UUID member, UUID coop) {
+        storage.addCoopPayout(member, coop);
+        moveOffProfileIfActive(member, coop);   // saves what they carry into the coop row first
+        Player online = Bukkit.getPlayer(member);
+        if (online != null) {
+            deliverCoopPayouts(online);
+        }
+        // Offline: delivered on their next join, onto whichever profile they land on.
+    }
+
+    /**
+     * Deliver every payout {@code player} is owed: personal bank savings from each coop they left into
+     * their purse, and the items they carried there into their inventory, then ender chest. Anything
+     * that does not fit — or that cannot be paid right now — stays owed and is retried on next join.
+     * Main thread.
+     */
+    public void deliverCoopPayouts(Player player) {
+        UUID uuid = player.getUniqueId();
+        UUID current = getActiveProfileId(uuid);
+        for (UUID from : storage.getCoopPayouts(uuid)) {
+            Profile coop = getProfile(from);
+            if (coop != null && coop.isMember(uuid)) {
+                storage.removeCoopPayout(uuid, from);   // re-invited: everything is back where it was
+                continue;
+            }
+            if (from.equals(current)) {
+                continue;                               // never pay a profile into itself
+            }
+            String name = coop != null ? coop.name() : "a former coop";
+            boolean settled = true;
+
+            double paid = plugin.bank().payOutAll(player, BankService.personalId(from, uuid),
+                    player.getName() + " left " + name);
+            if (paid < 0) {
+                settled = false;
+            } else if (paid > 0) {
+                plugin.messages().send(player, "coop.payout-coins", "amount", plugin.bank().money(paid), "profile", name);
+            }
+
+            ProfileData row = storage.getProfileData(from, uuid);
+            if (row != null) {
+                List<org.bukkit.inventory.ItemStack> items = state.itemsOf(row);
+                if (items == null) {
+                    settled = false;                    // undecodable: keep the row, never guess
+                    plugin.getLogger().severe("Could not read " + player.getName() + "'s items on " + from
+                            + "; their coop payout is kept and will be retried.");
+                } else if (!items.isEmpty()) {
+                    int given = items.size();
+                    List<org.bukkit.inventory.ItemStack> left = new java.util.ArrayList<>(
+                            player.getInventory().addItem(items.toArray(new org.bukkit.inventory.ItemStack[0])).values());
+                    if (!left.isEmpty()) {
+                        left = new java.util.ArrayList<>(
+                                player.getEnderChest().addItem(left.toArray(new org.bukkit.inventory.ItemStack[0])).values());
+                    }
+                    // Save the profile they are on BEFORE touching the coop row, so a crash between the
+                    // two can at worst hand the items over twice, never lose them.
+                    if (current != null) {
+                        state.save(player, current);
+                    }
+                    if (left.isEmpty()) {
+                        storage.deleteProfileData(from, uuid);
+                        plugin.messages().send(player, "coop.payout-items", "count", String.valueOf(given), "profile", name);
+                    } else {
+                        ProfileData rest = state.leftoverRow(left);
+                        if (rest != null && storage.saveProfileData(from, uuid, rest)) {
+                            plugin.messages().send(player, "coop.payout-partial", "count", String.valueOf(left.size()),
+                                    "profile", name);
+                        } else {
+                            plugin.getLogger().severe("Could not store the rest of " + player.getName()
+                                    + "'s coop payout from " + from + "; the original row is kept.");
+                        }
+                        settled = false;
+                    }
+                } else {
+                    storage.deleteProfileData(from, uuid);
+                }
+            }
+            if (settled) {
+                storage.removeCoopPayout(uuid, from);
+            }
         }
     }
 

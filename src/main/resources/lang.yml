@@ -105,6 +105,9 @@ messages:
     blocked-command: "&cThat command is disabled on your &e%gamemode% &cprofile."
 
   coop:
+    payout-coins: "&aYour personal savings from &e%profile% &a(&e%amount%&a) were paid into your purse."
+    payout-items: "&aThe &e%count% &aitem stack(s) you had on &e%profile% &awere returned to you."
+    payout-partial: "&e%count% &eitem stack(s) from &6%profile% &edidn't fit. Free up space; they're delivered next time you log in."
     invite-sent: "&aInvited &e%player% &ato your coop island."
     invite-received: "&e%player% &7invited you to their coop island."
     invite-accept-button: "&a&l[✔ Accept]"

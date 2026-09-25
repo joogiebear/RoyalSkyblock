@@ -166,6 +166,36 @@ public final class PlayerStateService {
                 .toArray();
     }
 
+    /**
+     * Every item in a saved row — inventory then ender chest, empty slots dropped — for handing over
+     * outside a profile load (a coop payout). Null if the row cannot be decoded, which callers must
+     * treat as "keep the row", never as "nothing there".
+     */
+    public List<ItemStack> itemsOf(ProfileData data) {
+        List<ItemStack> out = new java.util.ArrayList<>();
+        for (byte[] blob : new byte[][]{data.inventory(), data.enderChest()}) {
+            if (blob == null) {
+                continue;
+            }
+            ItemStack[] items = deserialize(blob);
+            if (items == null) {
+                return null;
+            }
+            for (ItemStack item : items) {
+                if (item != null && !item.getType().isAir()) {
+                    out.add(item);
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A row holding only {@code items} — what is left of a payout that did not fit. Null on failure. */
+    public ProfileData leftoverRow(List<ItemStack> items) {
+        byte[] blob = serialize(items.toArray(new ItemStack[0]));
+        return blob == null ? null : new ProfileData(blob, null, 0, 0f, DEFAULT_MAX_HEALTH, 20, 5f);
+    }
+
     // ── serialization ────────────────────────────────────────────────────────────
 
     private byte[] serialize(ItemStack[] items) {
