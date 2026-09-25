@@ -1,3 +1,41 @@
+## 2026.39.2 — 2026-09-24
+
+### 🐛 Fixes
+- catch up server downtime for islands loaded at shutdown (`0d43ea2`)
+- pay interest on the lowest balance since the last claim (`f650518`)
+- give a new owner the island's grants, and respect their profile cap (`a68b552`)
+- stop three per-player and per-world maps growing forever (`8571460`)
+- stop debiting the bank when the purse refuses the money (`94e8815`)
+- check chosen profile names and report failed deletes (`59be059`)
+- refuse path characters in schematic names (`732b39b`)
+- report broken menu chains at /is reload again (`9a577f5`)
+- hide vanished players from completion and complete trash/orphans (`b75b536`)
+- stop ageing pitcher crops offline (`0286ada`)
+- leave creative, spectator and bypass players alone (`52ea683`)
+- keep islands.db until eco has saved the migration (`e1feb5c`)
+- never leave an island without its row, or a row without its world (`317f8fc`)
+- stop an accepted invite bringing a deleted profile back (`7400503`)
+- finish queued metadata saves before shutdown (`736c2c1`)
+- stop split-content losing items and settings (`88bcae8`)
+- stop name lookups blocking the server thread (`6995bf9`)
+- declare ECO storage single-server and warn on shared handlers (`9ae4ec8`)
+- apply every SQLite connection setting (`7618882`)
+- keep coop members on their coop across logins (`dba0de6`)
+- re-check the island and role when a settings toggle is clicked (`d7318ab`)
+- treat deleting a coop as kicking its other members (`9b497ad`)
+- keep coop payouts off Ironman profiles (`8bb0db2`)
+- switch onto a coop on accept and refuse ambiguous names (`b75d5a8`)
+- pay a leaving member their savings and items (`3363108`)
+- stop calling every empty bank the coop bank (`439d998`)
+- discard a login preload when the session quits (`dc7eb71`)
+
+### ⚡ Performance
+- load catch-up chunks asynchronously (`208e911`)
+- stop server-thread queries queueing behind background ones (`a9498b3`)
+
+### 📝 Documentation
+- say max-offline-hours 0 means no clamp on catch-up time (`18120b0`)
+
 ## 2026.39.1 — 2026-09-24
 
 ### 🐛 Fixes
