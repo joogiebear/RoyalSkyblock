@@ -63,7 +63,9 @@ object EcoProfileResolver {
      */
     private fun resolve(plugin: RoyalSkyblockPlugin, player: OfflinePlayer): UUID {
         val profiles = plugin.profilesOrNull() ?: return player.uniqueId
-        val active = profiles.getActiveProfileId(player.uniqueId) ?: return player.uniqueId
+        // Offline players are looked up without caching: see ProfileManager.peekActiveProfileId.
+        val active = (if (player.isOnline) profiles.getActiveProfileId(player.uniqueId)
+            else profiles.peekActiveProfileId(player.uniqueId)) ?: return player.uniqueId
         return EcoProfileBridge.shadowUuid(player.uniqueId, active)
     }
 }

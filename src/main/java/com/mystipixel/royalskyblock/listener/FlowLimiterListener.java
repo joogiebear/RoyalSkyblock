@@ -8,6 +8,7 @@ import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFromToEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
+import org.bukkit.event.world.WorldUnloadEvent;
 
 import java.util.Map;
 import java.util.UUID;
@@ -80,5 +81,17 @@ public final class FlowLimiterListener implements Listener {
             plugin.getLogger().warning("Flow limiter throttling liquid in world '" + world.getName()
                     + "' (over " + max + "/s) — possible lag machine.");
         }
+    }
+
+    /**
+     * Forget a world's counters once it unloads. They are keyed by world id and island worlds come and
+     * go all day, so without this each map grew by an entry for every island load until a restart.
+     */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onWorldUnload(WorldUnloadEvent event) {
+        UUID world = event.getWorld().getUID();
+        counters.remove(world);
+        lastWarn.remove(world);
+        bypassUntil.remove(world);
     }
 }

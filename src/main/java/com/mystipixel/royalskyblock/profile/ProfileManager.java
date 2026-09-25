@@ -104,6 +104,16 @@ public final class ProfileManager {
         return stored;
     }
 
+    /**
+     * The active profile id without remembering it: for players who are not online. The cache is
+     * cleared on quit, and caching a lookup made afterwards (eco saving a player's data just after they
+     * left, a leaderboard reading an offline player) put back an entry nothing would remove again.
+     */
+    public @Nullable UUID peekActiveProfileId(UUID player) {
+        UUID cached = activeProfile.get(player);
+        return cached != null ? cached : storage.getActiveProfile(player);
+    }
+
     public @Nullable Profile getActiveProfile(Player player) {
         return getProfile(getActiveProfileId(player.getUniqueId()));
     }

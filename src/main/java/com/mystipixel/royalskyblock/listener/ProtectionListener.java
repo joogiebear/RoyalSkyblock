@@ -31,6 +31,7 @@ import org.bukkit.event.player.PlayerBucketFillEvent;
 import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.projectiles.ProjectileSource;
 
@@ -155,6 +156,12 @@ public final class ProtectionListener implements Listener {
     private boolean strictMode() {
         return "strict".equalsIgnoreCase(
                 plugin.conf().getString("island.protection.visitor-mode", "read-only"));
+    }
+
+    /** The message cooldown is per session; keeping it for everyone ever seen was a slow leak. */
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onQuit(PlayerQuitEvent event) {
+        lastMessage.remove(event.getPlayer().getUniqueId());
     }
 
     private void deny(Player player) {
