@@ -622,8 +622,10 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         bankLevels?.reload()
         borderService?.reload()
         borderService?.refreshAll() // re-apply borders live (colour/size/toggle changes)
+        // Invalidate BEFORE the menus reload: the reload compiles every chain and reports the broken
+        // ones. Invalidating afterwards threw that away, so bad chains only surfaced on first click.
+        MenuChains.invalidate()
         guiManager?.reload()
-        MenuChains.invalidate() // recompile menu click chains from the edited configs
         mobSpawnService?.reloadSettings() // toggling island-mobs.enabled on/off still needs a restart
         RoyalHolders.reload(this) // recompile perk/upgrade effect chains and re-provide them
         ConfigValidator(this).validate()
