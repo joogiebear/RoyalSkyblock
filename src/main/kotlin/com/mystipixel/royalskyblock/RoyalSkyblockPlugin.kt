@@ -581,7 +581,13 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                     worlds.saveIslandNow(world.name)
                     // Its metadata too, synchronously: level, settings and upgrades changed since the
                     // last background save would otherwise depend on the queue below finishing.
-                    islands.getIslandByWorld(world)?.let { storage?.saveIsland(it) }
+                    // Stamped as unloaded now, like the unload service does, so the downtime is caught
+                    // up when it next loads. Only islands the unload service had put to sleep used to
+                    // get offline progress; anything still loaded at a restart lost the whole outage.
+                    islands.getIslandByWorld(world)?.let { island ->
+                        island.setUnloadedAt(System.currentTimeMillis())
+                        storage?.saveIsland(island)
+                    }
                     savedIslands++
                 } catch (e: Exception) {
                     logger.warning("Failed to save island ${world.name} on shutdown: ${e.message}")
