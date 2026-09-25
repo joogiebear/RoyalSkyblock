@@ -107,6 +107,8 @@ dependencies {
     // compileOnly does not reach tests, which is why the parsers had no coverage until now.
     testImplementation("io.papermc.paper:paper-api:26.2.build.123-stable")
 
+    // The real SQLite driver, so the connection settings are checked against what it actually applies.
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
     // RsbFileLoader implements ASP's SlimeLoader, so its tests need the interface to compile.
     testImplementation("com.infernalsuite.asp:api:4.2.0-SNAPSHOT") { isTransitive = false }
 

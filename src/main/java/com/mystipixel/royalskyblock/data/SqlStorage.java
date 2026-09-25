@@ -93,8 +93,7 @@ public final class SqlStorage implements Storage {
                 hikari.setJdbcUrl("jdbc:sqlite:" + databaseFile.getAbsolutePath());
                 hikari.setDriverClassName("org.sqlite.JDBC");
                 hikari.setMaximumPoolSize(1);
-                hikari.setConnectionInitSql(
-                        "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA busy_timeout=5000; PRAGMA foreign_keys=ON;");
+                hikari.setDataSourceProperties(SqliteSettings.properties());
             }
 
             this.dataSource = new HikariDataSource(hikari);
