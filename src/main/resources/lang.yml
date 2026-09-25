@@ -101,6 +101,7 @@ messages:
     ambiguous: "&eMore than one of your profiles is called &f%name%&e. Pick one by number:"
     ambiguous-line: "&8» &e/is profile %action% %index% &7— %name% (%gamemode%, %owner%)"
     deleted: "&aDeleted profile &e%name%&a."
+    delete-failed: "&cCouldn't delete that profile: &7%error%"
     create-usage: "&cUsage: &e/is profile create <solo|coop|ironman> [name]"
     switch-usage: "&cUsage: &e/is profile switch <name>"
     delete-usage: "&cUsage: &e/is profile delete <name>"

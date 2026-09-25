@@ -289,7 +289,9 @@ public final class IslandCommand {
         }
         String name = target.name();
         plugin.profiles().deleteProfile(player, target.id()).whenComplete((ok, error) -> onMain(() -> {
-            if (Boolean.TRUE.equals(ok)) {
+            if (error != null) {
+                plugin.messages().send(player, "profile.delete-failed", "error", rootMessage(error));
+            } else if (Boolean.TRUE.equals(ok)) {
                 plugin.messages().send(player, "profile.deleted", "name", name);
             }
         }));

@@ -296,6 +296,30 @@ public final class ProfileManager {
         return profile;
     }
 
+    /**
+     * Why a chosen profile name can't be used, or null if it can. Names were never checked: colour
+     * codes rendered in coop members' chat and the coop bank title, any length went, and a second
+     * profile of the same name made the first unreachable by name.
+     */
+    private static @Nullable String nameProblem(String raw, List<Profile> existing) {
+        String name = cleanName(raw);
+        if (name.isEmpty() || name.length() > 16) {
+            return "Profile names must be 1-16 characters.";
+        }
+        if (!name.matches("[A-Za-z0-9 _-]+")) {
+            return "Profile names may only use letters, digits, spaces, _ and -.";
+        }
+        if (existing.stream().anyMatch(p -> p.name().equalsIgnoreCase(name))) {
+            return "You already have a profile called " + name + ".";
+        }
+        return null;
+    }
+
+    /** The name with colour codes removed and surrounding space trimmed. */
+    private static String cleanName(String raw) {
+        return raw.replaceAll("(?i)[&\u00a7][0-9a-fk-orx]", "").trim();
+    }
+
     private String nextFruitName(List<Profile> existing) {
         for (String fruit : FRUIT_NAMES) {
             boolean taken = existing.stream().anyMatch(p -> p.name().equalsIgnoreCase(fruit));
@@ -316,6 +340,13 @@ public final class ProfileManager {
         if (existing.size() >= max) {
             return CompletableFuture.failedFuture(
                     new IllegalStateException("You've reached the profile limit (" + max + ")."));
+        }
+        if (name != null && !name.isBlank()) {
+            String problem = nameProblem(name, existing);
+            if (problem != null) {
+                return CompletableFuture.failedFuture(new IllegalStateException(problem));
+            }
+            name = cleanName(name);
         }
         Profile profile = buildProfile(player, gamemode, name, existing);
         storage.saveProfile(profile);
@@ -387,7 +418,12 @@ public final class ProfileManager {
     public CompletableFuture<Boolean> deleteProfile(Player player, UUID targetId) {
         UUID uuid = player.getUniqueId();
         Profile target = getProfile(targetId);
-        if (target == null || !target.owner().equals(uuid)) {
+        if (target == null) {
+            return CompletableFuture.completedFuture(false);
+        }
+        if (!target.owner().equals(uuid)) {
+            player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
+                    "&cYou can only delete profiles you own — use &e/is leave &cto leave a coop."));
             return CompletableFuture.completedFuture(false);
         }
         if (targetId.equals(getActiveProfileId(uuid))) {
