@@ -225,6 +225,11 @@ public final class ProfileManager {
             state.save(player, active);
         }
         activeProfile.remove(player.getUniqueId());
+        // A second login with this account preloaded before this session's save just above. Applying
+        // that copy on join would hand back items given away since the last save. Today the old
+        // connection's close also discards it (onConnectionClose), but only because Paper happens to
+        // close the old connection before the new join; this makes it deliberate.
+        preloaded.remove(player.getUniqueId());
     }
 
     // ── create ──────────────────────────────────────────────────────────────────
