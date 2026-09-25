@@ -31,10 +31,13 @@ storage:
   # eco keeps islands, profiles, rosters and banks in eco's own data layer, exactly as every other
   # plugin in the suite does — whatever data-handler eco is set to (yaml/mysql/mariadb/mongodb) holds
   # this plugin's data too, the mysql block below is ignored, and there is no second database to
-  # configure or back up. With eco on mysql/mongodb every server on a network shares one set of
-  # islands. Two things to know: eco flushes writes on its own save interval rather than immediately,
-  # and it caches what it has loaded, so another server's writes are not picked up until restart —
-  # the shared views (leaderboard, visit browser) can lag behind.
+  # configure or back up. eco flushes writes on its own save interval rather than immediately.
+  #
+  # eco is for ONE server. eco caches what it has loaded for the server's whole uptime and has no
+  # atomic update, so if several servers run RoyalSkyblock on one shared eco database (mysql/mongodb)
+  # they overwrite each other's island list, pending upgrades and profile lists — islands vanish from
+  # the leaderboard, paid upgrades never finish, profiles drop off their owner's list. For a network,
+  # use mysql below. The plugin warns at startup when eco storage sits on a shared eco handler.
   #
   # Switching an existing server over: set this to eco and restart. An existing islands.db is carried
   # across on that boot — islands, profiles, rosters, saved inventories, timers and bank ledgers —

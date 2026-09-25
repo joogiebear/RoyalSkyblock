@@ -52,7 +52,10 @@ levels, bank, and menus).
 
 ## Storage
 
-- **Island metadata** (`storage.type`): `sqlite` (default, zero-setup) or `mysql` (recommended for a network).
+- **Island metadata** (`storage.type`): `sqlite` (default, zero-setup), `mysql` (**use this for a network**),
+  or `eco` (eco's own data layer, like the rest of the suite — **single server only**: eco caches data per
+  server and has no atomic updates, so servers sharing one eco database overwrite each other's island and
+  profile lists; the plugin warns at startup if it sees eco storage on a shared eco handler).
 - **Island worlds** (`world.slime-data-source`): `file` (single server) or `mysql`/`mongo` (shared across a
   network). RoyalSkyblock ships its own `SlimeLoader`s, so no ASP companion plugin is required.
 

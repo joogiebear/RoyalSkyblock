@@ -72,9 +72,17 @@ import java.util.UUID;
  *
  * <p>What that does <em>not</em> buy is cache coherency. eco pins a loaded profile in memory and only
  * drops it on player login/quit, so a UUID that is not a player stays cached for the node's whole
- * uptime and a write on one node is invisible to another until it restarts. Island blocks are already
- * single-node (ASP allows a slime world on one server at a time), so the island's own data has one
- * writer; what can read stale is the shared view — the leaderboard and the visit browser.
+ * uptime and a write on one node is invisible to another until it restarts.
+ *
+ * <p>Stale reads are the smaller half. The index lists here — {@code island_index},
+ * {@code pending_index}, and each player's {@code owned_profiles}/{@code member_profiles} — are
+ * read-modify-write, and the lock around that only spans one JVM. A node rewriting a list from its
+ * stale copy drops every entry another node added: islands vanish from the leaderboard and the boot
+ * warm-up, pending upgrades are never loaded again, a profile falls off its owner's list. So this
+ * store is <b>single-node</b>: networks use SQL storage, and the plugin warns at boot when this store
+ * sits on a handler several servers can share. Making it network-safe would mean replacing the
+ * indexes with eco's bulk reads ({@code readAllProfileValues}), and even then a player hopping servers
+ * faster than eco's save interval could read their own profile list stale.
  *
  * @see Storage for the shape this implements and why {@link #getAllIslands()} is the hard part
  */

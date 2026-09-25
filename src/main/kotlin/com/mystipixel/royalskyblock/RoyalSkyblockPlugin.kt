@@ -229,7 +229,31 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
      */
     private fun createStorage(): Storage {
         val type = conf().getString("storage.type", "SQLITE")!!.uppercase(Locale.ROOT)
-        return if (type == "ECO") EcoStorage(this) else SqlStorage(this)
+        if (type == "ECO") {
+            warnIfEcoStorageShared()
+            return EcoStorage(this)
+        }
+        return SqlStorage(this)
+    }
+
+    /**
+     * ECO storage is single-server. eco keeps anything that is not an online player in memory for a
+     * server's whole uptime and has no atomic update, so on a network each server rewrites the shared
+     * lists (all islands, pending upgrades, each player's profiles) from its own stale copy and drops
+     * the others' changes: islands vanish from the leaderboard, paid upgrades are never finished, a
+     * profile disappears from its owner's list. There is no way to detect "more than one server", so
+     * warn whenever eco's handler is one that multiple servers can share.
+     */
+    private fun warnIfEcoStorageShared() {
+        val ecoFolder = server.pluginManager.getPlugin("eco")?.dataFolder ?: return
+        val handler = org.bukkit.configuration.file.YamlConfiguration
+            .loadConfiguration(java.io.File(ecoFolder, "config.yml"))
+            .getString("data-handler", "")!!.lowercase(Locale.ROOT)
+        if (handler in setOf("mysql", "mariadb", "mongodb", "mongo")) {
+            logger.warning("storage.type is ECO on eco's shared '$handler' handler. ECO storage is for ONE server:")
+            logger.warning("  if more than one server runs RoyalSkyblock on this database, they overwrite each other's")
+            logger.warning("  island list, pending upgrades and profile lists. For a network, use storage.type: mysql.")
+        }
     }
 
     /**
