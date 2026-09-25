@@ -156,7 +156,13 @@ public final class BankService {
         if (!vault.withdraw(purse, charge)) {
             return "&cDeposit failed.";
         }
-        if (!persist(account.withBalance(principal), "DEPOSIT", charge,
+        BankAccount updated = account.withBalance(principal);
+        if (account.lastInterest() <= 0) {
+            // First money in starts the interest clock. Without it a brand-new account could claim at
+            // once, and a new profile is a new account: create, deposit, claim, withdraw, delete, repeat.
+            updated = updated.withLastInterest(Instant.now().getEpochSecond());
+        }
+        if (!persist(updated, "DEPOSIT", charge,
                 principal, purse.getName() + " deposited")) {
             vault.deposit(purse, charge); // refund
             return "&cDeposit could not be saved; your money was refunded.";
@@ -222,9 +228,14 @@ public final class BankService {
     public long interestSecondsRemaining(String id) {
         long cooldown = levels.config().getLong("settings.interest-cooldown-hours", 24) * 3600L;
         long lastInterest = account(id).lastInterest();
+        if (lastInterest <= 0) {
+            // Clock not started. New accounts start it on their first deposit, so this is only an
+            // account funded before that rule existed: let it claim once, which then starts its clock.
+            return 0;
+        }
         long next = lastInterest + cooldown;
         long now = Instant.now().getEpochSecond();
-        return lastInterest <= 0 || now >= next ? 0 : next - now;
+        return now >= next ? 0 : next - now;
     }
 
     /** Pay accrued interest into the account (capped at the level max). Returns null on success/no-op. */
