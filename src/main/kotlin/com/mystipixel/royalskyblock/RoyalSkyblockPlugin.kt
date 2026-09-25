@@ -270,14 +270,29 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         if (!file.isFile) {
             return true
         }
+        // Migrated on an earlier boot and kept until now. The marker is written after every migrated
+        // row, and on a fresh boot eco can only have loaded it from its storage — so reading it back
+        // here proves eco saved the migration, and the file can go. (Had eco saved nothing, the
+        // marker would be blank and the migration below simply runs again: every write is keyed by
+        // an id that does not change.)
+        if (store.migrationMarker() == file.name) {
+            logger.info("eco has saved everything migrated from ${file.name} — retiring it now.")
+            val confirmed = SqliteMigration(this, file, store)
+            if (!confirmed.retireSource()) {
+                return false
+            }
+            confirmed.cleanSidecars()
+            return true
+        }
         // A store that already has islands and was never migrated into belongs to something else.
         // Merging one server's islands into another's is not a thing anyone asked for by dropping a
         // file in a folder, so it stops instead. A retry after a half-finished run is fine: that
         // store carries the marker, and every write is keyed by an id that does not change.
         if (store.hasIslands() && store.migrationMarker().isBlank()) {
             logger.severe("${file.name} is present, but eco already holds islands that did not come")
-            logger.severe("from a migration. Refusing to merge two sets of islands together. Move")
-            logger.severe("${file.name} aside if it is the stale one.")
+            logger.severe("from a completed migration. Refusing to merge two sets of islands together. If")
+            logger.severe("this server migrated last boot and then crashed, eco saved only part of it: move")
+            logger.severe("eco's partial data aside, or set storage.type back to sqlite. ${file.name} is untouched.")
             return false
         }
 
@@ -296,10 +311,10 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
         logger.info("Migrated ${report.summary()} — every row read back and matched.")
         store.setMigrationMarker(file.name)
-        if (!migration.retireSource()) {
-            return false
-        }
-        migration.cleanSidecars()
+        // Not retired yet. The read-back above sees eco's memory, and eco saves on its own schedule, so
+        // a crash before that save would lose the migration after the file was gone. The next boot
+        // checks every row came back from eco's storage and retires the file then.
+        logger.info("${file.name} is kept until the next restart confirms eco has saved all of it.")
         return true
     }
 
