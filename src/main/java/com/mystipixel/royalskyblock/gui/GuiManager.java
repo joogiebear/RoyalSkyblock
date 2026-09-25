@@ -993,7 +993,7 @@ public final class GuiManager implements Listener {
             lore.add(noItalic("&7Balance: &e" + bank.money(acct.balance())));
             lore.add(noItalic("&7Level: &f" + level.level() + " &8- " + level.name()));
             lore.add(noItalic("&7Max balance: &f" + bank.money(level.maxBalance())));
-            lore.add(noItalic("&7Next interest: &f" + bank.money(bank.calculateInterest(acct.balance(), level))));
+            lore.add(noItalic("&7Next interest: &f" + bank.money(bank.calculateInterest(acct.interestBase(), level))));
             if (!bank.available()) {
                 lore.add(noItalic(""));
                 lore.add(noItalic("&cNo economy plugin — banking disabled."));

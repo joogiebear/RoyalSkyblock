@@ -588,7 +588,8 @@ public final class EcoStorage implements Storage {
             return null;
         }
         return new BankAccount(accountId, row.getDouble("balance"), row.getInt("level"),
-                getLong(row, "last-interest"));
+                getLong(row, "last-interest"),
+                row.has("interest-floor") ? row.getDouble("interest-floor") : -1.0);
     }
 
     /**
@@ -610,6 +611,7 @@ public final class EcoStorage implements Storage {
         row.set("balance", account.balance());
         row.set("level", account.level());
         putLong(row, "last-interest", account.lastInterest());
+        row.set("interest-floor", account.interestFloor());
         write(id, bankKey, row);
 
         List<String> ledger = new ArrayList<>();
@@ -640,6 +642,7 @@ public final class EcoStorage implements Storage {
         row.set("balance", account.balance());
         row.set("level", account.level());
         putLong(row, "last-interest", account.lastInterest());
+        row.set("interest-floor", account.interestFloor());
         write(id, bankKey, row);
 
         List<String> ledger = new ArrayList<>();

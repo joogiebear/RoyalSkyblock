@@ -201,6 +201,8 @@ public final class SqlStorage implements Storage {
         addColumnIfMissing("islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         addColumnIfMissing("islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
         addColumnIfMissing("profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        // -1 = not recorded yet, read as the balance (BankAccount.interestBase).
+        addColumnIfMissing("bank_accounts", "interest_floor", dbl + " NOT NULL DEFAULT -1");
         // Per-profile personal bank snapshot (only used when RoyalBank is the backend).
         addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
         addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
@@ -742,12 +744,13 @@ public final class SqlStorage implements Storage {
     // ── native bank ────────────────────────────────────────────────────────────────
 
     public com.mystipixel.royalskyblock.bank.@Nullable BankAccount getBankAccount(String accountId) {
-        String sql = "SELECT balance, level, last_interest FROM bank_accounts WHERE account_id = ?";
+        String sql = "SELECT balance, level, last_interest, interest_floor FROM bank_accounts WHERE account_id = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, accountId);
             try (ResultSet rs = st.executeQuery()) {
                 return rs.next() ? new com.mystipixel.royalskyblock.bank.BankAccount(
-                        accountId, rs.getDouble("balance"), rs.getInt("level"), rs.getLong("last_interest")) : null;
+                        accountId, rs.getDouble("balance"), rs.getInt("level"), rs.getLong("last_interest"),
+                        rs.getDouble("interest_floor")) : null;
             }
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not load bank account " + accountId + ": " + e.getMessage());
@@ -759,10 +762,12 @@ public final class SqlStorage implements Storage {
     public boolean saveBankAccountWithTxn(com.mystipixel.royalskyblock.bank.BankAccount account,
                                           String type, double amount, double balanceAfter, String note) {
         String upsert = mysql()
-                ? "INSERT INTO bank_accounts (account_id, balance, level, last_interest) VALUES (?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE balance=VALUES(balance), level=VALUES(level), last_interest=VALUES(last_interest)"
-                : "INSERT INTO bank_accounts (account_id, balance, level, last_interest) VALUES (?,?,?,?) "
-                + "ON CONFLICT(account_id) DO UPDATE SET balance=excluded.balance, level=excluded.level, last_interest=excluded.last_interest";
+                ? "INSERT INTO bank_accounts (account_id, balance, level, last_interest, interest_floor) VALUES (?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE balance=VALUES(balance), level=VALUES(level), last_interest=VALUES(last_interest), "
+                + "interest_floor=VALUES(interest_floor)"
+                : "INSERT INTO bank_accounts (account_id, balance, level, last_interest, interest_floor) VALUES (?,?,?,?,?) "
+                + "ON CONFLICT(account_id) DO UPDATE SET balance=excluded.balance, level=excluded.level, "
+                + "last_interest=excluded.last_interest, interest_floor=excluded.interest_floor";
         String txn = "INSERT INTO bank_txns (account_id, type, amount, balance_after, created_at, note) VALUES (?,?,?,?,?,?)";
         try (Connection c = dataSource.getConnection()) {
             boolean auto = c.getAutoCommit();
@@ -773,6 +778,7 @@ public final class SqlStorage implements Storage {
                     st.setDouble(2, account.balance());
                     st.setInt(3, account.level());
                     st.setLong(4, account.lastInterest());
+                    st.setDouble(5, account.interestFloor());
                     st.executeUpdate();
                 }
                 try (PreparedStatement st = c.prepareStatement(txn)) {

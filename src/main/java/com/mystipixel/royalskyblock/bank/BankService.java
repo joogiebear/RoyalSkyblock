@@ -160,7 +160,8 @@ public final class BankService {
         if (account.lastInterest() <= 0) {
             // First money in starts the interest clock. Without it a brand-new account could claim at
             // once, and a new profile is a new account: create, deposit, claim, withdraw, delete, repeat.
-            updated = updated.withLastInterest(Instant.now().getEpochSecond());
+            // The floor starts at this first deposit, so a normal first period still earns.
+            updated = updated.withLastInterest(Instant.now().getEpochSecond()).withInterestFloor(principal);
         }
         if (!persist(updated, "DEPOSIT", charge,
                 principal, purse.getName() + " deposited")) {
@@ -279,7 +280,8 @@ public final class BankService {
         }
         BankAccount account = account(id);
         BankLevel level = levels.effectiveLevel(account.level());
-        double interest = round(calculateInterest(account.balance(), level));
+        // On the lowest balance held since the last claim, not the balance now (see BankAccount).
+        double interest = round(calculateInterest(account.interestBase(), level));
         if (interest <= 0) {
             return "&eNo interest was earned (empty bank).";
         }
@@ -289,7 +291,7 @@ public final class BankService {
         if (paid <= 0) {
             return "&eYour bank is full, so no interest could be paid.";
         }
-        BankAccount updated = account.withBalance(newBalance).withLastInterest(now);
+        BankAccount updated = account.withBalance(newBalance).withLastInterest(now).withInterestFloor(newBalance);
         if (!persist(updated, "INTEREST", paid, newBalance, "Interest")) {
             return "&cInterest could not be saved; please try again.";
         }

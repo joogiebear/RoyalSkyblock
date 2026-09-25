@@ -396,12 +396,13 @@ public final class SqliteMigration {
         int txns = 0;
 
         List<BankAccount> loaded = new ArrayList<>();
+        boolean hasFloor = columnsOf(c, "bank_accounts").contains("interest_floor");
         try (Statement s = c.createStatement();
-             ResultSet rs = s.executeQuery(
-                     "SELECT account_id, balance, level, last_interest FROM bank_accounts")) {
+             ResultSet rs = s.executeQuery("SELECT * FROM bank_accounts")) {
             while (rs.next()) {
                 loaded.add(new BankAccount(rs.getString("account_id"), rs.getDouble("balance"),
-                        rs.getInt("level"), rs.getLong("last_interest")));
+                        rs.getInt("level"), rs.getLong("last_interest"),
+                        hasFloor ? rs.getDouble("interest_floor") : -1.0));
             }
         }
 
@@ -441,7 +442,8 @@ public final class SqliteMigration {
             return;
         }
         if (got.balance() != expected.balance() || got.level() != expected.level()
-                || got.lastInterest() != expected.lastInterest()) {
+                || got.lastInterest() != expected.lastInterest()
+                || got.interestFloor() != expected.interestFloor()) {
             problems.add("bank account " + expected.id() + " read back different from the source");
             return;
         }
