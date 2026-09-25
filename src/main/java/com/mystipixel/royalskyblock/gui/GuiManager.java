@@ -397,12 +397,42 @@ public final class GuiManager implements Listener {
             inv.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit));
             if (canEdit) {
                 holder.putAction(slot, (viewer, right) -> {
-                    island.setSetting(setting, !island.isEnabled(setting));
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+                    Island current = managedIsland(viewer, island);
+                    if (current == null) {
+                        return;
+                    }
+                    current.setSetting(setting, !current.isEnabled(setting));
+                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(current));
                     open(viewer, SETTINGS);
                 });
             }
         }
+    }
+
+    /**
+     * The island {@code viewer} manages right now, re-resolved at click time, or null (menu closed,
+     * viewer told) if they no longer do.
+     *
+     * <p>Settings and upgrade menus are drawn with the island and the viewer's rights of that moment,
+     * and stay open while those change: the island deleted by its owner, the viewer kicked, demoted or
+     * switched to another profile. The settings toggle then saved the captured island, and because the
+     * save is an upsert, clicking it after a delete wrote the deleted island's row back. {@code drawn},
+     * when given, must also still be the island the menu was built for.
+     */
+    private @Nullable Island managedIsland(Player viewer, @Nullable Island drawn) {
+        UUID activeId = plugin.profiles().getActiveProfileId(viewer.getUniqueId());
+        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        Profile profile = island == null ? null : plugin.profiles().getProfile(island.profileId());
+        IslandRole role = profile == null ? IslandRole.VISITOR : profile.roleOf(viewer.getUniqueId());
+        boolean allowed = island != null
+                && (drawn == null || drawn.id().equals(island.id()))
+                && (role == IslandRole.OWNER || role == IslandRole.CO_OWNER);
+        if (!allowed) {
+            viewer.closeInventory();
+            plugin.messages().send(viewer, "island.menu-stale");
+            return null;
+        }
+        return island;
     }
 
     /**
@@ -480,8 +510,7 @@ public final class GuiManager implements Listener {
     }
 
     private void handleUpgradeClick(Player viewer, com.mystipixel.royalskyblock.upgrade.UpgradeDef def, boolean skip) {
-        UUID activeId = plugin.profiles().getActiveProfileId(viewer.getUniqueId());
-        Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
+        Island island = managedIsland(viewer, null);
         if (island == null) {
             return;
         }
