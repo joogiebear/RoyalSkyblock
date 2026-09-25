@@ -4,23 +4,31 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.profile.Profile;
 import org.bukkit.Material;
+import org.bukkit.Tag;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.entity.Enemy;
 import org.bukkit.entity.Player;
 import org.bukkit.entity.Projectile;
+import org.bukkit.event.Event;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.block.SignChangeEvent;
+import org.bukkit.event.block.TNTPrimeEvent;
 import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.entity.EntityPlaceEvent;
 import org.bukkit.event.hanging.HangingBreakByEntityEvent;
+import org.bukkit.event.hanging.HangingPlaceEvent;
 import org.bukkit.event.player.PlayerArmorStandManipulateEvent;
 import org.bukkit.event.player.PlayerBucketEmptyEvent;
 import org.bukkit.event.player.PlayerBucketFillEvent;
+import org.bukkit.event.player.PlayerFishEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.InventoryHolder;
@@ -75,6 +83,20 @@ public final class ProtectionListener implements Listener {
             Material.RESPAWN_ANCHOR,        // consumes glowstone / sets spawn
             Material.CAKE,
             Material.FLOWER_POT
+    );
+
+    /**
+     * Blocks a right-click <em>changes</em> without taking anything: a visitor re-timing a repeater or
+     * flipping a comparator can silently break a farm, and a sign edit is vandalism. Signs are matched
+     * by tag rather than listed here.
+     */
+    private static final Set<Material> CHANGEABLE = Set.of(
+            Material.REPEATER,
+            Material.COMPARATOR,
+            Material.NOTE_BLOCK,            // right-click re-tunes it
+            Material.DAYLIGHT_DETECTOR,     // right-click inverts it
+            Material.REDSTONE_WIRE,         // right-click toggles dot/cross shape
+            Material.DRAGON_EGG             // any click teleports it, possibly off the island
     );
 
     private final RoyalSkyblockPlugin plugin;
@@ -186,14 +208,28 @@ public final class ProtectionListener implements Listener {
             }
             return;                                     // pressure plates are harmless; leave them
         }
+        if (event.getAction() == Action.LEFT_CLICK_BLOCK && block.getType() == Material.DRAGON_EGG) {
+            event.setCancelled(true);                   // punching the egg teleports it too
+            deny(event.getPlayer());
+            return;
+        }
         if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
             return;
         }
-        if (strictMode() || holdsItems(block) || TAKEABLE.contains(block.getType())) {
+        if (strictMode() || holdsItems(block) || TAKEABLE.contains(block.getType())
+                || CHANGEABLE.contains(block.getType()) || Tag.ALL_SIGNS.isTagged(block.getType())) {
             event.setCancelled(true);
             deny(event.getPlayer());
+            return;
         }
-        // read-only: doors, gates, buttons, levers, beds and workbenches stay usable
+        // read-only: doors, gates, buttons, levers, beds and workbenches stay usable — but never with
+        // the item in hand. Using an item on a block is how a visitor lights TNT or fire (flint and
+        // steel, fire charge), bone-meals, tills, strips logs, waxes copper, dyes a sign or drops a
+        // spawn egg, and none of that is a block place. Denying only the item keeps the door opening
+        // when they happen to be holding something.
+        if (event.getItem() != null) {
+            event.setUseItemInHand(Event.Result.DENY);
+        }
     }
 
     /** True if the block stores items — chests, barrels, furnaces, hoppers, lecterns, campfires. */
@@ -217,7 +253,56 @@ public final class ProtectionListener implements Listener {
         }
     }
 
+    /** Backstop for sign edits that reach the editor by any route the interact check missed. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onSignChange(SignChangeEvent event) {
+        if (!canBuild(event.getPlayer(), event.getBlock().getWorld())) {
+            event.setCancelled(true);
+            deny(event.getPlayer());
+        }
+    }
+
+    /** TNT lit by a visitor's flaming arrow — the one ignition that is not an interact. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onTntPrime(TNTPrimeEvent event) {
+        Player primer = resolvePlayer(event.getPrimingEntity());
+        if (primer != null && !canBuild(primer, event.getBlock().getWorld())) {
+            event.setCancelled(true);
+        }
+    }
+
     // ------------------------------------------------------------------ entities
+
+    /** Placing boats, minecarts, armour stands and end crystals: clutter at best, lag at worst. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onEntityPlace(EntityPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player != null && !canBuild(player, event.getEntity().getWorld())) {
+            event.setCancelled(true);
+            deny(player);
+        }
+    }
+
+    /** Hanging item frames and paintings. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onHangingPlace(HangingPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player != null && !canBuild(player, event.getEntity().getWorld())) {
+            event.setCancelled(true);
+            deny(player);
+        }
+    }
+
+    /** Reeling in someone's animal with a fishing rod, e.g. off the edge into the void. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    public void onFish(PlayerFishEvent event) {
+        if (event.getState() == PlayerFishEvent.State.CAUGHT_ENTITY && event.getCaught() != null
+                && !(event.getCaught() instanceof Player)
+                && !canBuild(event.getPlayer(), event.getCaught().getWorld())) {
+            event.setCancelled(true);
+            deny(event.getPlayer());
+        }
+    }
 
     /**
      * Right-clicking an entity: rotating an item frame, trading with a villager, leashing an animal,
@@ -254,6 +339,9 @@ public final class ProtectionListener implements Listener {
         Player attacker = resolvePlayer(event.getDamager());
         if (attacker == null) {
             return;
+        }
+        if (event.getEntity() instanceof Enemy) {
+            return; // hostile mobs attack visitors too; refusing the swing back left them defenceless
         }
         if (!canBuild(attacker, event.getEntity().getWorld())) {
             event.setCancelled(true);
