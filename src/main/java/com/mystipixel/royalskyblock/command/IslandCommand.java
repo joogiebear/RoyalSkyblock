@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock.command;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.config.ContentSplitter;
+import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
@@ -785,19 +786,27 @@ public final class IslandCommand {
                 return;
             }
             java.util.List<String> orphans = new java.util.ArrayList<>();
-            for (String name : names) {
-                if (!name.startsWith(prefix) || plugin.worlds().isLoaded(name)) {
-                    continue;   // another feature's world (gardens share the store), or mid-creation
+            try {
+                for (String name : names) {
+                    if (!name.startsWith(prefix) || plugin.worlds().isLoaded(name)) {
+                        continue;   // another feature's world (gardens share the store), or mid-creation
+                    }
+                    UUID islandId;
+                    try {
+                        islandId = UUID.fromString(name.substring(prefix.length()));
+                    } catch (IllegalArgumentException notOurs) {
+                        continue;
+                    }
+                    if (plugin.storage().getIsland(islandId) == null) {
+                        orphans.add(name);
+                    }
                 }
-                UUID islandId;
-                try {
-                    islandId = UUID.fromString(name.substring(prefix.length()));
-                } catch (IllegalArgumentException notOurs) {
-                    continue;
-                }
-                if (plugin.storage().getIsland(islandId) == null) {
-                    orphans.add(name);
-                }
+            } catch (StorageException e) {
+                // One unanswered lookup makes the whole list untrustworthy; a partial purge on it
+                // would archive live islands. Stop before anything moves.
+                onMain(() -> sender.sendMessage(Text.color("&cThe database didn't answer, so nothing was "
+                        + "scanned or moved: &f" + e.getMessage())));
+                return;
             }
             if (orphans.isEmpty()) {
                 onMain(() -> sender.sendMessage(Text.color("&aNo orphaned island worlds — the store matches the database.")));

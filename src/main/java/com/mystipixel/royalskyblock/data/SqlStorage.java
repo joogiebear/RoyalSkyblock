@@ -271,8 +271,8 @@ public final class SqlStorage implements Storage {
                 return rs.next() ? readIsland(rs) : null;
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load island (" + where + "): " + e.getMessage());
-            return null;
+            // Not null: null means "no such island", and callers delete things on that answer.
+            throw new StorageException("Could not load island (" + where + "): " + e.getMessage(), e);
         }
     }
 

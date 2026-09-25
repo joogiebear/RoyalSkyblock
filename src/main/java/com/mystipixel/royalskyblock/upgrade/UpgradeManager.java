@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock.upgrade;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.currency.Cost;
+import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
@@ -130,7 +131,15 @@ public final class UpgradeManager {
                 continue;
             }
             UpgradeDef def = get(pu.upgradeKey());
-            Island island = plugin.islands().getIsland(pu.islandId());
+            Island island;
+            try {
+                island = plugin.islands().getIsland(pu.islandId());
+            } catch (StorageException e) {
+                // The store can't answer right now. Keep the upgrade (the player has paid for it) and
+                // try again next tick; dropping it here is what a null used to do.
+                plugin.getLogger().warning("Deferring finished upgrades: " + e.getMessage());
+                return;
+            }
             if (def == null || island == null) {
                 pending.remove(pkey(pu.islandId(), pu.upgradeKey()));
                 plugin.storage().deletePending(pu.islandId(), pu.upgradeKey());

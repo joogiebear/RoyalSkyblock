@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.island;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.api.IslandCatchupEvent;
 import com.mystipixel.royalskyblock.data.Storage;
+import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -115,7 +116,13 @@ public final class IslandManager {
      * world that nothing would ever reference again.
      */
     public CompletableFuture<Island> ensureIsland(UUID profileId) {
-        Island existing = getIslandByProfile(profileId);
+        Island existing;
+        try {
+            existing = getIslandByProfile(profileId);
+        } catch (StorageException e) {
+            // Unknown is not absent: creating here would give the profile a second island.
+            return CompletableFuture.failedFuture(e);
+        }
         if (existing != null) {
             return CompletableFuture.completedFuture(existing);
         }

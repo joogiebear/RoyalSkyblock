@@ -37,8 +37,15 @@ public interface Storage {
 
     // ── islands ────────────────────────────────────────────────────────────────
 
+    /**
+     * The island, or {@code null} if there is no such island.
+     *
+     * @throws StorageException if the store could not answer. Never {@code null} for that: callers
+     *         treat {@code null} as "gone" and delete things accordingly.
+     */
     @Nullable Island getIsland(UUID id);
 
+    /** As {@link #getIsland}: {@code null} only when the profile has no island. */
     @Nullable Island getIslandByProfile(UUID profileId);
 
     /**
