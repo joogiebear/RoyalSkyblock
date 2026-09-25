@@ -384,6 +384,26 @@ public final class ProfileManager {
             return CompletableFuture.completedFuture(false);
         }
 
+        // Everyone but the owner leaves first, exactly as if kicked. Deleting a coop used to leave online
+        // members on a profile that no longer existed (their next save wrote into a deleted row) and
+        // destroyed every member's carried items with the profile's rows. As a kick, each is moved off
+        // or recorded as owed, and gets those items back on the profile they land on. Their bank
+        // savings are already safe: the check above refuses the delete while any of it is left.
+        List<ProfileMember> others = target.members().stream()
+                .filter(member -> !member.uuid().equals(uuid))
+                .toList();
+        if (!others.isEmpty()) {
+            others.forEach(member -> target.removeMember(member.uuid()));
+            storage.saveProfile(target);
+            for (ProfileMember member : others) {
+                Player online = Bukkit.getPlayer(member.uuid());
+                if (online != null) {
+                    plugin.messages().send(online, "coop.profile-deleted", "profile", target.name());
+                }
+                owePayout(member.uuid(), targetId);
+            }
+        }
+
         profileCache.remove(targetId);
         Island island = plugin.islands().getIslandByProfile(targetId);
         CompletableFuture<Void> worldDelete = island != null
