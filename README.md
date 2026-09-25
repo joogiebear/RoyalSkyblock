@@ -20,6 +20,19 @@ islands without a bloated single world.
 | **PlaceholderAPI** | Optional. Used by command-based currencies (e.g. gems) and placeholders. |
 | **WorldEdit / FastAsyncWorldEdit** | Optional. Enables `.schem` starter islands; without it, a built-in generator makes the starter island (grass platform + a cozy oak hut, pond, crop farm, and tree). |
 
+### Tested eco versions
+
+| RoyalSkyblock | Built against | Tested on |
+|---|---|---|
+| 2026.39.2 | eco 2026.35, libreforge 2026.35.1 | eco 2026.38 (with the 2026.38 Auxilor suite) |
+
+Newer eco releases usually work, but these are the ones confirmed. Before moving a server to a newer
+eco, boot a test copy, open `/is` and its menus, and check the log for RoyalSkyblock errors.
+
+For developers: eco and libreforge types are kept to a fixed set of adapter files (the plugin class,
+commands, `gui/Eco*`/`GuiManager`, `hooks/`, `libreforge/`, `data/EcoStorage`). `EcoBoundaryTest` fails
+the build if eco is imported anywhere else, so an eco API change only ever touches those files.
+
 ## Quick start
 
 1. Drop the jar on an **ASP** server that has **Vault + an economy**. Start once to generate the configs.
