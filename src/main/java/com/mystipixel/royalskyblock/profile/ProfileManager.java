@@ -104,7 +104,25 @@ public final class ProfileManager {
 
     /** On join: ensure the player has a profile, then load its state onto them. Main thread. */
     /** What {@link #preload} gathered off-thread, waiting to be applied when the player joins. */
-    private record Preloaded(List<Profile> profiles, UUID active, ProfileData data, List<UUID> payouts) {
+    private record Preloaded(List<Profile> profiles, UUID active, @Nullable Profile coop, ProfileData data,
+                             List<UUID> payouts) {
+    }
+
+    /**
+     * The saved active profile, if it is a coop the player is a member of rather than one they own.
+     *
+     * <p>Login used to check the saved active profile against owned profiles only, so a coop never
+     * counted as valid and every coop member was put back on their own profile each time they joined
+     * (or handed a brand-new one, if they owned none). A member who was kicked while offline is no
+     * longer a member, so they still fall through to their own profile, where their payout lands.
+     */
+    private static @Nullable Profile joinedCoop(UUID player, @Nullable UUID active, List<Profile> owned,
+                                                java.util.function.Function<UUID, Profile> lookup) {
+        if (active == null || owned.stream().anyMatch(p -> p.id().equals(active))) {
+            return null;
+        }
+        Profile profile = lookup.apply(active);
+        return profile != null && profile.isMember(player) ? profile : null;
     }
 
     private final Map<UUID, Preloaded> preloaded = new ConcurrentHashMap<>();
@@ -125,13 +143,16 @@ public final class ProfileManager {
         try {
             List<Profile> profiles = storage.getProfilesByOwner(uuid);
             UUID active = storage.getActiveProfile(uuid);
+            Profile coop = joinedCoop(uuid, active, profiles, storage::getProfile);
             ProfileData data = null;
-            if (!profiles.isEmpty()) {
+            if (coop != null) {
+                data = storage.getProfileData(coop.id(), uuid);
+            } else if (!profiles.isEmpty()) {
                 UUID resolved = active != null && profiles.stream().anyMatch(p -> p.id().equals(active))
                         ? active : profiles.get(0).id();
                 data = storage.getProfileData(resolved, uuid);
             }
-            preloaded.put(uuid, new Preloaded(profiles, active, data, storage.getCoopPayouts(uuid)));
+            preloaded.put(uuid, new Preloaded(profiles, active, coop, data, storage.getCoopPayouts(uuid)));
         } catch (Exception e) {
             preloaded.remove(uuid);
             plugin.getLogger().warning("Profile preload failed for " + uuid
@@ -174,8 +195,9 @@ public final class ProfileManager {
         }
         List<Profile> profiles = storage.getProfilesByOwner(uuid);
         UUID active = storage.getActiveProfile(uuid);
+        Profile coop = joinedCoop(uuid, active, profiles, this::getProfile);
 
-        if (profiles.isEmpty()) {
+        if (profiles.isEmpty() && coop == null) {
             Profile created = createDefaultProfile(player);
             active = created.id();
             storage.setActiveProfile(uuid, active);
@@ -186,7 +208,8 @@ public final class ProfileManager {
         }
 
         UUID currentActive = active;
-        boolean activeValid = currentActive != null && profiles.stream().anyMatch(p -> p.id().equals(currentActive));
+        boolean activeValid = coop != null
+                || currentActive != null && profiles.stream().anyMatch(p -> p.id().equals(currentActive));
         if (!activeValid) {
             active = profiles.get(0).id();
             storage.setActiveProfile(uuid, active);
@@ -206,8 +229,11 @@ public final class ProfileManager {
         for (Profile p : profiles) {
             profileCache.put(p.id(), p);
         }
+        if (ready.coop() != null) {
+            profileCache.put(ready.coop().id(), ready.coop());
+        }
 
-        if (profiles.isEmpty()) {
+        if (profiles.isEmpty() && ready.coop() == null) {
             Profile created = createDefaultProfile(player);
             storage.setActiveProfile(uuid, created.id());
             activeProfile.put(uuid, created.id());
@@ -217,7 +243,8 @@ public final class ProfileManager {
 
         UUID saved = ready.active();
         UUID active = saved;
-        boolean activeValid = saved != null && profiles.stream().anyMatch(p -> p.id().equals(saved));
+        boolean activeValid = ready.coop() != null
+                || saved != null && profiles.stream().anyMatch(p -> p.id().equals(saved));
         if (!activeValid) {
             active = profiles.get(0).id();
             storage.setActiveProfile(uuid, active);
