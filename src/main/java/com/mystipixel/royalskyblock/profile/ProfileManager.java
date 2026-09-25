@@ -36,6 +36,14 @@ public final class ProfileManager {
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
     private final Map<UUID, Invite> pendingInvites = new ConcurrentHashMap<>(); // invited player -> invite
 
+    /**
+     * Profiles part-way through deletion. The delete drops the cache entry, then removes the island and
+     * the row in the background; anything reading the profile in that window reloaded it from the row
+     * that still existed, and an invite accepted then saved it straight back — the deleted profile
+     * returned. Accepts are refused while a profile is in here.
+     */
+    private final java.util.Set<UUID> deleting = ConcurrentHashMap.newKeySet();
+
     /** A pending coop invite: which profile, who sent it, and when it expires. */
     private record Invite(UUID profileId, String inviterName, long expiresAt) {
         boolean expired() {
@@ -431,6 +439,8 @@ public final class ProfileManager {
             }
         }
 
+        deleting.add(targetId);
+        pendingInvites.values().removeIf(invite -> invite.profileId().equals(targetId));
         profileCache.remove(targetId);
         Island island = plugin.islands().getIslandByProfile(targetId);
         CompletableFuture<Void> worldDelete = island != null
@@ -438,7 +448,11 @@ public final class ProfileManager {
                 : CompletableFuture.completedFuture(null);
         return worldDelete
                 .thenRun(() -> storage.deleteProfile(targetId))
-                .thenApply(ignored -> true);
+                .thenApply(ignored -> true)
+                .whenComplete((ok, error) -> {
+                    profileCache.remove(targetId);   // anything that re-read it meanwhile
+                    deleting.remove(targetId);
+                });
     }
 
     // ── coop invites ──────────────────────────────────────────────────────────────
@@ -486,6 +500,9 @@ public final class ProfileManager {
         }
         if (invite.expired()) {
             return new AcceptResult(null, "expired");
+        }
+        if (deleting.contains(invite.profileId())) {
+            return new AcceptResult(null, "none");       // being deleted: joining would bring it back
         }
         Profile profile = getProfile(invite.profileId());
         if (profile == null) {
