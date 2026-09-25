@@ -162,11 +162,22 @@ public final class IslandManager {
                     plugin.worldRules().applyGameRules(world);
                     return island;
                 }))
-                .thenApply(island -> {
-                    cache(island);
-                    worlds.saveIsland(worldName);
-                    runAsync(() -> storage.saveIsland(island));
-                    return island;
+                .thenCompose(island -> {
+                    worlds.saveIsland(worldName);        // the starter build, now that it is pasted
+                    // The row is awaited, not fire-and-forget: an island that exists only in the cache
+                    // is gone after a restart, and the profile would then be given a second one while
+                    // this world sat unreferenced. On failure the fresh world is removed and the create
+                    // fails, so trying again starts clean.
+                    return runAsyncFuture(() -> {
+                        if (!storage.saveIsland(island)) {
+                            throw new IllegalStateException("the new island could not be saved to the database");
+                        }
+                    }).thenApply(ignored -> {
+                        cache(island);
+                        return island;
+                    }).exceptionallyCompose(error -> worlds.deleteIsland(worldName)
+                            .handle((ignored, cleanupError) -> null)
+                            .thenCompose(ignored -> CompletableFuture.<Island>failedFuture(error)));
                 });
     }
 
@@ -299,12 +310,27 @@ public final class IslandManager {
                                 + "the delete was aborted and the island is untouched: " + e.getMessage(), e);
                     }
                 }))
-                .thenCompose(ignored -> worlds.deleteIsland(worldName))
-                .thenCompose(ignored -> runAsyncFuture(() -> storage.deleteIsland(islandId)))
+                // Row before world. The other way round, a failed row delete left a row pointing at a
+                // deleted world: the owner's home failed forever and they could not create a new
+                // island, because the profile still had one. Now a row failure aborts with the island
+                // intact, and a world failure afterwards only leaves an archived, unreferenced world
+                // file, which /is admin orphans finds.
+                .thenCompose(ignored -> runAsyncFuture(() -> {
+                    if (!storage.deleteIsland(islandId)) {
+                        throw new IllegalStateException("its database row could not be removed — the delete was"
+                                + " aborted and the island is untouched");
+                    }
+                }))
                 .thenRun(() -> {
                     byId.remove(islandId);
                     profileToIsland.remove(island.profileId());
-                });
+                })
+                .thenCompose(ignored -> worlds.deleteIsland(worldName).exceptionally(error -> {
+                    plugin.getLogger().warning("Island " + islandId + " is deleted, but its world " + worldName
+                            + " could not be removed (" + error.getMessage() + "). It is archived in the trash;"
+                            + " /is admin orphans purge will clear it.");
+                    return null;
+                }));
     }
 
     /**
