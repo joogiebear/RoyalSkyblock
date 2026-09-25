@@ -23,7 +23,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The one place that walks an island and hands its blocks to {@link BlockSimulator}s.
@@ -41,6 +43,10 @@ import java.util.concurrent.ThreadLocalRandom;
  * moment old, and a player may already have harvested.
  */
 public final class IslandScanner implements Listener {
+
+    /** How long a catch-up waits for the island's chunks before dropping the offline time. */
+    private static final long CHUNK_LOAD_TIMEOUT_SECONDS = 120;
+
 
     private final RoyalSkyblockPlugin plugin;
     private final Map<Material, List<BlockSimulator>> byMaterial = new EnumMap<>(Material.class);
@@ -96,15 +102,45 @@ public final class IslandScanner implements Listener {
         int centreZ = plugin.conf().getInt("island.paste.z", 0);
         int radius = Math.max(16, island.radius());
 
-        Map<Long, ChunkSnapshot> snapshots = new HashMap<>();
+        // Loaded asynchronously, then snapshotted. getChunkAt() here pulled the whole footprint in on
+        // the server thread the moment the world loaded — 121 chunks at radius 80, more after size
+        // upgrades — which is a lag spike every time an island wakes up. gen=false: an ungenerated
+        // chunk is empty void with nothing to simulate, so it is skipped rather than created.
+        List<long[]> coords = new ArrayList<>();
+        List<CompletableFuture<Chunk>> loads = new ArrayList<>();
         for (int cx = (centreX - radius) >> 4; cx <= (centreX + radius) >> 4; cx++) {
             for (int cz = (centreZ - radius) >> 4; cz <= (centreZ + radius) >> 4; cz++) {
-                Chunk chunk = world.getChunkAt(cx, cz);
-                // includeMaxblocky MUST be true — the scan uses getHighestBlockYAt, and a snapshot
-                // without the height map throws rather than degrading.
-                snapshots.put(key(cx, cz), chunk.getChunkSnapshot(true, false, false));
+                coords.add(new long[]{cx, cz});
+                loads.add(world.getChunkAtAsync(cx, cz, false));
             }
         }
+        CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new))
+                .orTimeout(CHUNK_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+                // Back on the server thread either way: a timeout completes on a timer thread, and
+                // snapshots must be taken on the server thread.
+                .whenComplete((ignored, error) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (error != null) {
+                        plugin.getLogger().warning("Catch-up: chunks of " + world.getName() + " did not load ("
+                                + error + ") — " + offline + "s of offline progress is being dropped.");
+                        return;
+                    }
+                    Map<Long, ChunkSnapshot> snapshots = new HashMap<>();
+                    for (int i = 0; i < loads.size(); i++) {
+                        Chunk chunk = loads.get(i).join();
+                        if (chunk != null) {
+                            // includeMaxblocky MUST be true — the scan uses getHighestBlockYAt, and a
+                            // snapshot without the height map throws rather than degrading.
+                            snapshots.put(key((int) coords.get(i)[0], (int) coords.get(i)[1]),
+                                    chunk.getChunkSnapshot(true, false, false));
+                        }
+                    }
+                    scanSnapshots(world, offline, radius, loY, hiY, snapshots, debug);
+                }));
+    }
+
+    /** Snapshots in hand: scan them off the server thread, then write the results back on it. */
+    private void scanSnapshots(World world, long offline, int radius, int loY, int hiY,
+                               Map<Long, ChunkSnapshot> snapshots, boolean debug) {
         if (snapshots.isEmpty()) {
             plugin.getLogger().warning("Catch-up: no chunks to scan for " + world.getName()
                     + " — " + offline + "s of offline time is being dropped.");
