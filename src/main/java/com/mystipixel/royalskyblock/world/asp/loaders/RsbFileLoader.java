@@ -5,9 +5,15 @@ import com.infernalsuite.asp.api.loaders.SlimeLoader;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,6 +25,7 @@ import java.util.List;
 public final class RsbFileLoader implements SlimeLoader {
 
     private static final FilenameFilter SLIME_FILTER = (dir, name) -> name.endsWith(".slime");
+    private static final String TEMP_SUFFIX = ".slime.tmp";
 
     private final File worldDir;
 
@@ -29,6 +36,13 @@ public final class RsbFileLoader implements SlimeLoader {
         }
         if (!worldDir.exists() && !worldDir.mkdirs()) {
             throw new IllegalStateException("Could not create slime world directory: " + worldDir);
+        }
+        // Temp files left by a crash mid-save. The real .slime beside each is the last good copy.
+        File[] stale = worldDir.listFiles((dir, name) -> name.endsWith(TEMP_SUFFIX));
+        if (stale != null) {
+            for (File file : stale) {
+                file.delete();
+            }
         }
     }
 
@@ -63,10 +77,31 @@ public final class RsbFileLoader implements SlimeLoader {
         return worlds;
     }
 
+    /**
+     * Write to a temp file beside the real one, flush it to disk, then rename it into place. Writing
+     * straight into the {@code .slime} truncated the only copy first, so a crash mid-write left a
+     * broken island. Each save gets its own temp file, so two saves of one world that overlap each
+     * produce a complete file and the later rename simply wins.
+     */
     @Override
     public void saveWorld(String worldName, byte[] serializedWorld) throws IOException {
-        try (FileOutputStream out = new FileOutputStream(fileFor(worldName))) {
-            out.write(serializedWorld);
+        Path target = fileFor(worldName).toPath();
+        Path temp = Files.createTempFile(worldDir.toPath(), worldName + ".", TEMP_SUFFIX);
+        try {
+            try (FileChannel channel = FileChannel.open(temp, StandardOpenOption.WRITE)) {
+                ByteBuffer buffer = ByteBuffer.wrap(serializedWorld);
+                while (buffer.hasRemaining()) {
+                    channel.write(buffer);
+                }
+                channel.force(true);
+            }
+            try {
+                Files.move(temp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temp);
         }
     }
 

@@ -107,6 +107,9 @@ dependencies {
     // compileOnly does not reach tests, which is why the parsers had no coverage until now.
     testImplementation("io.papermc.paper:paper-api:26.2.build.123-stable")
 
+    // RsbFileLoader implements ASP's SlimeLoader, so its tests need the interface to compile.
+    testImplementation("com.infernalsuite.asp:api:4.2.0-SNAPSHOT") { isTransitive = false }
+
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.mockito:mockito-core:5.14.2")
     // Platform version tracks junit-jupiter 5.11.3 (Maven's surefire supplied this implicitly).
