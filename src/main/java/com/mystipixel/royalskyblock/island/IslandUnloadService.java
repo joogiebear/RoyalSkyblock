@@ -117,8 +117,7 @@ public final class IslandUnloadService {
         // it stopped ticking. An over-estimate of downtime is harmless (it's clamped on the way in);
         // a missing stamp would silently skip the island's catch-up entirely.
         island.setUnloadedAt(now);
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin,
-                () -> plugin.storage().saveIsland(island));
+        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
 
         // The unload future completes on whichever thread finished the save, so the callback hops back
         // to the server thread before touching the island model. The bookkeeping maps are concurrent

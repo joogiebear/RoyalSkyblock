@@ -366,7 +366,7 @@ public final class IslandCommand {
         } else {
             island.setHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
         }
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
         plugin.messages().send(player, guest ? "island.guest-spawn-set" : "island.spawn-set");
     }
 

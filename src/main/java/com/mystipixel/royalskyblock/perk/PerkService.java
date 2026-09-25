@@ -259,7 +259,7 @@ public final class PerkService {
             }
         }
         island.setPerkLevel(level);
-        Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
     }
 
     private String ownerName(Profile profile) {

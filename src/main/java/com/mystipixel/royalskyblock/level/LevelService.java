@@ -132,7 +132,7 @@ public final class LevelService {
                     breakdowns.put(island.id(), totals.counts);
                     lastScan.put(island.id(), nowMillis());
                     grantLevelUps(island, level);                 // pay any newly-crossed level rewards
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+                    plugin.writeAsync(() -> plugin.storage().saveIsland(island));
                     scanning.remove(island.id());
                     result.complete(level);
                 }))
@@ -190,7 +190,7 @@ public final class LevelService {
         island.setRewardLevel(to);
         if (profile != null) {
             profile.setRewardLevel(to);
-            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveProfile(profile));
+            plugin.writeAsync(() -> plugin.storage().saveProfile(profile));
         }
         notifyMembers(profile, island, to);
     }

@@ -402,7 +402,7 @@ public final class GuiManager implements Listener {
                         return;
                     }
                     current.setSetting(setting, !current.isEnabled(setting));
-                    Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(current));
+                    plugin.writeAsync(() -> plugin.storage().saveIsland(current));
                     open(viewer, SETTINGS);
                 });
             }

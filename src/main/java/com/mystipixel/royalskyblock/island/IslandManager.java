@@ -408,8 +408,9 @@ public final class IslandManager {
         return plugin.conf().getConfigurationSection(path);
     }
 
+    /** A metadata write, on the plugin's storage thread (see RoyalSkyblockPlugin.writeAsync). */
     private void runAsync(Runnable runnable) {
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, runnable);
+        plugin.writeAsync(runnable);
     }
 
     private CompletableFuture<Void> runAsyncFuture(Runnable runnable) {

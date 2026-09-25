@@ -303,8 +303,37 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         return true
     }
 
+    /**
+     * Where background metadata writes go: one thread this plugin owns, so they run in the order they
+     * were made and can be finished at shutdown.
+     *
+     * They used to go through Bukkit's async scheduler, which cancels a disabling plugin's queued
+     * tasks: an island's unload stamp, a level or a setting saved just before a restart was silently
+     * dropped, or ran against a pool that had already been closed. [handleDisable] drains this first.
+     */
+    private var storageWriter: java.util.concurrent.ExecutorService? = null
+
+    /** Run [task] (a storage write) on the storage thread; inline if that thread is gone (shutdown). */
+    fun writeAsync(task: Runnable) {
+        val writer = storageWriter
+        if (writer == null || writer.isShutdown) {
+            task.run()
+            return
+        }
+        writer.execute {
+            try {
+                task.run()
+            } catch (e: Exception) {
+                logger.warning("A background save failed: ${e.message}")
+            }
+        }
+    }
+
     override fun handleEnable() {
         this.messageManager = MessageManager(this)
+        this.storageWriter = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "RoyalSkyblock-storage").apply { isDaemon = true }
+        }
 
         val store = createStorage()
         this.storage = store
@@ -535,6 +564,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                     // Synchronous on purpose: Bukkit won't schedule tasks for a disabling plugin, so
                     // the async saveIsland() path throws here and the save is silently lost.
                     worlds.saveIslandNow(world.name)
+                    // Its metadata too, synchronously: level, settings and upgrades changed since the
+                    // last background save would otherwise depend on the queue below finishing.
+                    islands.getIslandByWorld(world)?.let { storage?.saveIsland(it) }
                     savedIslands++
                 } catch (e: Exception) {
                     logger.warning("Failed to save island ${world.name} on shutdown: ${e.message}")
@@ -542,6 +574,15 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             }
         }
         logger.info("Shutdown save: $savedPlayers player(s), $savedIslands island(s).")
+
+        // Let queued background writes finish before the pool they write to is closed.
+        storageWriter?.let { writer ->
+            writer.shutdown()
+            if (!writer.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS)) {
+                logger.warning("Some background saves did not finish within 15s of shutdown and were dropped.")
+            }
+        }
+        storageWriter = null
 
         worldService?.shutdown()
         storage?.close()

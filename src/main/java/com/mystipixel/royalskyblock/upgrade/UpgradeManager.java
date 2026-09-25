@@ -262,7 +262,7 @@ public final class UpgradeManager {
         // without this the buff would not appear until they next crossed a world boundary.
         refreshHoldersOnIsland(island);
         runUnlockCommands(island, def, tier);
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveIsland(island));
+        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
     }
 
     /**
