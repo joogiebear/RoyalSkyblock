@@ -28,6 +28,7 @@ import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -109,6 +110,12 @@ public final class GuiManager implements Listener {
      */
     private final Map<UUID, OpenEcoMenu> openEcoMenus = new ConcurrentHashMap<>();
 
+
+    /**
+     * Rows the visit browser and leaderboard fetched off-thread, per viewer and menu, waiting for the
+     * refresh that paints them. Cleared when the menu closes, so every opening fetches fresh rows.
+     */
+    private final Map<String, List<BrowseRow>> browseRows = new ConcurrentHashMap<>();
 
     /** A player's open eco menu and which menu it is. */
     private record OpenEcoMenu(String menuId, Menu menu) {
@@ -425,6 +432,7 @@ public final class GuiManager implements Listener {
     public void onEcoMenuClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
             openEcoMenus.remove(player.getUniqueId());
+            forgetBrowseRows(player.getUniqueId());
         }
     }
 
@@ -432,6 +440,7 @@ public final class GuiManager implements Listener {
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         openEcoMenus.remove(event.getPlayer().getUniqueId());
+        forgetBrowseRows(event.getPlayer().getUniqueId());
     }
 
     /** A loaded menu template by id, or null if that file isn't registered. */
@@ -614,10 +623,10 @@ public final class GuiManager implements Listener {
         // and hit the DB, and each owner name touches the user cache. Doing that inline stalled the
         // server for the whole scan every time anyone opened the browser, and the cost grew with the
         // number of islands ever created rather than with players online.
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            List<BrowseRow> rows = new ArrayList<>();
+        List<BrowseRow> rows = browseRowsOrFetch(player, VISIT, () -> {
+            List<BrowseRow> found = new ArrayList<>();
             for (Island island : plugin.storage().getAllIslands()) {
-                if (rows.size() >= slots.size()) {
+                if (found.size() >= slots.size()) {
                     break;
                 }
                 if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) || !island.isEnabled(IslandSetting.LISTED)) {
@@ -627,29 +636,59 @@ public final class GuiManager implements Listener {
                 if (prof == null || prof.gamemode() != mode || prof.isMember(viewerId)) {
                     continue; // gamemode must match; don't list your own
                 }
-                rows.add(new BrowseRow(island, prof, ownerName(prof)));
+                found.add(new BrowseRow(island, prof, ownerName(prof)));
             }
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!stillViewing(player, inv)) {
-                    return;
-                }
-                int i = 0;
-                for (BrowseRow row : rows) {
-                    int slot = slots.get(i++);
-                    inv.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName()));
-                    holder.putAction(slot, (v, right) -> {
-                        v.closeInventory();
-                        visitFromBrowser(v, row.island(), row.profile(), row.ownerName());
-                    });
-                }
-                player.updateInventory();
-            });
+            return found;
         });
+        if (rows == null) {
+            return; // still fetching; the refresh when it lands comes back through here
+        }
+        int i = 0;
+        for (BrowseRow row : rows) {
+            int slot = slots.get(i++);
+            inv.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName()));
+            holder.putAction(slot, (v, right) -> {
+                v.closeInventory();
+                visitFromBrowser(v, row.island(), row.profile(), row.ownerName());
+            });
+        }
     }
 
-    /** True if the player still has this exact menu open — an async fill must not paint a stale view. */
-    private boolean stillViewing(Player player, Inventory inv) {
-        return player.isOnline() && inv.equals(player.getOpenInventory().getTopInventory());
+    /**
+     * The rows for an async-filled menu, or null while they are still being fetched.
+     *
+     * <p>The fill runs inside eco's render, against a scratch inventory whose contents are copied into
+     * the menu once the fill returns. Painting that scratch inventory later, when the rows arrived, did
+     * nothing: the copy had already been taken, and the old "still viewing" check compared the player's
+     * open inventory with the scratch one, which never matches. So both menus always opened empty.
+     * Instead the rows are parked here and the open menu is refreshed, which re-runs the render and
+     * finds them ready.
+     */
+    private @Nullable List<BrowseRow> browseRowsOrFetch(Player player, String menuId,
+                                                        java.util.function.Supplier<List<BrowseRow>> gather) {
+        UUID viewer = player.getUniqueId();
+        String key = viewer + ":" + menuId;
+        List<BrowseRow> ready = browseRows.get(key);
+        if (ready != null) {
+            return ready;
+        }
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+            List<BrowseRow> rows = gather.get();
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                OpenEcoMenu open = openEcoMenus.get(viewer);
+                if (!player.isOnline() || open == null || !menuId.equals(open.menuId())) {
+                    return; // they moved on; the next opening fetches again
+                }
+                browseRows.put(key, rows);
+                open.menu().refresh(player);
+            });
+        });
+        return null;
+    }
+
+    private void forgetBrowseRows(UUID viewer) {
+        browseRows.remove(viewer + ":" + VISIT);
+        browseRows.remove(viewer + ":" + TOP);
     }
 
     private void visitFromBrowser(Player viewer, Island island, Profile prof, String ownerName) {
@@ -1238,33 +1277,31 @@ public final class GuiManager implements Listener {
     private void fillTop(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
         List<Integer> slots = template.contentSlots();
 
-        // Same reasoning as fillVisit: read and rank off-thread, paint on the main thread.
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+        // Same reasoning as fillVisit: read and rank off-thread, paint on the refresh.
+        List<BrowseRow> rows = browseRowsOrFetch(player, TOP, () -> {
             List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
             all.sort((a, b) -> Double.compare(b.level(), a.level()));
-            List<BrowseRow> rows = new ArrayList<>();
+            List<BrowseRow> found = new ArrayList<>();
             for (Island island : all) {
-                if (rows.size() >= slots.size()) {
+                if (found.size() >= slots.size()) {
                     break;
                 }
                 Profile prof = plugin.profiles().getProfile(island.profileId());
                 if (prof == null) {
                     continue;
                 }
-                rows.add(new BrowseRow(island, prof, ownerName(prof)));
+                found.add(new BrowseRow(island, prof, ownerName(prof)));
             }
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!stillViewing(player, inv)) {
-                    return;
-                }
-                int rank = 0;
-                for (BrowseRow row : rows) {
-                    int slot = slots.get(rank++);
-                    inv.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName()));
-                }
-                player.updateInventory();
-            });
+            return found;
         });
+        if (rows == null) {
+            return;
+        }
+        int rank = 0;
+        for (BrowseRow row : rows) {
+            int slot = slots.get(rank++);
+            inv.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName()));
+        }
     }
 
     private ItemStack leaderboardIcon(int rank, Island island, Profile prof, String ownerName) {
