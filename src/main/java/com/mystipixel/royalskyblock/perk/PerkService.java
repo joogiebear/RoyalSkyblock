@@ -236,6 +236,26 @@ public final class PerkService {
         }
     }
 
+    /** Re-run the unlock commands of every perk the island has unlocked, for its current owner. */
+    public void replayUnlockCommands(Island island) {
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        String owner = profile == null ? "" : ownerName(profile);
+        for (Perk perk : perks) {
+            if (perk.requiredLevel() > island.perkLevel()) {
+                continue;
+            }
+            for (String command : perk.unlockCommands()) {
+                String parsed = command.replace("%owner%", owner)
+                        .replace("%level%", String.valueOf(perk.requiredLevel()));
+                try {
+                    Bukkit.dispatchCommand(Bukkit.getConsoleSender(), parsed);
+                } catch (Throwable t) {
+                    plugin.getLogger().warning("Perk unlock command failed ('" + parsed + "'): " + t.getMessage());
+                }
+            }
+        }
+    }
+
     /** Run unlock-commands for perks newly crossed since the island's last recorded perk level. */
     private void checkUnlocks(Island island, int level) {
         int from = island.perkLevel();

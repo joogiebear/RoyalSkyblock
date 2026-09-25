@@ -700,6 +700,11 @@ public final class ProfileManager {
         if (target.uuid().equals(actor.getUniqueId())) {
             return "You already own this profile.";
         }
+        // The coop counts towards the new owner's profiles from now on; this let them pass the cap.
+        int max = plugin.conf().getInt("profiles.max-profiles", 3);
+        if (storage.getProfilesByOwner(target.uuid()).size() >= max) {
+            return target.name() + " already owns the maximum number of profiles (" + max + ").";
+        }
         ProfileMember self = active.member(actor.getUniqueId());
         long selfJoined = self != null ? self.joinedAt() : Instant.now().toEpochMilli();
         active.putMember(new ProfileMember(target.uuid(), target.name(), IslandRole.OWNER, target.joinedAt()));
@@ -707,6 +712,12 @@ public final class ProfileManager {
         active.setOwner(target.uuid());
         storage.saveProfile(active);
         profileCache.put(active.id(), active);
+        // Upgrade and perk grants were made to the old owner by name; give the new owner the same.
+        Island island = plugin.islands().getIslandByProfile(active.id());
+        if (island != null) {
+            plugin.upgrades().replayUnlockCommands(island);
+            plugin.perks().replayUnlockCommands(island);
+        }
         return null;
     }
 

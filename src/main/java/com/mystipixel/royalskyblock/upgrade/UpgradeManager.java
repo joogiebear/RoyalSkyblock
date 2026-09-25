@@ -290,6 +290,20 @@ public final class UpgradeManager {
         return name == null ? "" : name;
     }
 
+    /**
+     * Re-run the unlock commands of every tier the island has reached, for its current owner. Called
+     * after an ownership transfer: the grants (minion slots and the like) went to the old owner by name,
+     * so the new one had none of what the island paid for. The shipped grants are "set ... true", so a
+     * replay is harmless; nothing here can revoke the old owner's, which configs would have to define.
+     */
+    public void replayUnlockCommands(Island island) {
+        for (UpgradeDef def : all()) {
+            for (int tier = 1; tier <= island.upgradeTier(def.key()); tier++) {
+                runUnlockCommands(island, def, tier);
+            }
+        }
+    }
+
     private void runUnlockCommands(Island island, UpgradeDef def, int tier) {
         UpgradeTier reached = def.tier(tier);
         if (reached == null || reached.unlockCommands().isEmpty()) {
