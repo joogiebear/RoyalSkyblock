@@ -92,9 +92,12 @@ public final class SqlStorage implements Storage {
                 loadDriver("org.sqlite.JDBC");
                 hikari.setJdbcUrl("jdbc:sqlite:" + databaseFile.getAbsolutePath());
                 hikari.setDriverClassName("org.sqlite.JDBC");
-                hikari.setMaximumPoolSize(1);
+                hikari.setMaximumPoolSize(SqliteSettings.POOL_SIZE);
                 hikari.setDataSourceProperties(SqliteSettings.properties());
             }
+            // A connection that cannot be had within this long fails the call rather than holding the
+            // server thread: Hikari's 30s default could freeze the server behind one stuck query.
+            hikari.setConnectionTimeout(10_000);
 
             this.dataSource = new HikariDataSource(hikari);
             createTables();

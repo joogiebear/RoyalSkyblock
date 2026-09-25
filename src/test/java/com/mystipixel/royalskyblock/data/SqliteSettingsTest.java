@@ -36,6 +36,32 @@ class SqliteSettingsTest {
         }
     }
 
+    @Test
+    @DisplayName("a read is not blocked while another connection holds an open write")
+    void readsRunAlongsideAWrite() throws Exception {
+        String url = "jdbc:sqlite:" + dir.resolve("islands.db");
+        try (Connection writer = DriverManager.getConnection(url, SqliteSettings.properties());
+             Connection reader = DriverManager.getConnection(url, SqliteSettings.properties())) {
+            try (Statement st = writer.createStatement()) {
+                st.executeUpdate("CREATE TABLE t (v INTEGER)");
+                st.executeUpdate("INSERT INTO t VALUES (1)");
+            }
+            writer.setAutoCommit(false);
+            try (Statement st = writer.createStatement()) {
+                st.executeUpdate("INSERT INTO t VALUES (2)");   // write lock held, not committed
+            }
+            long start = System.nanoTime();
+            try (Statement st = reader.createStatement(); ResultSet rs = st.executeQuery("SELECT count(*) FROM t")) {
+                rs.next();
+                assertEquals(1, rs.getInt(1), "the reader sees the last committed state");
+            }
+            long waitedMs = (System.nanoTime() - start) / 1_000_000;
+            assertEquals(true, waitedMs < SqliteSettings.BUSY_TIMEOUT_MS / 2,
+                    "the read waited " + waitedMs + "ms behind the write; WAL should not block it");
+            writer.commit();
+        }
+    }
+
     private static String pragma(Statement st, String name) throws Exception {
         try (ResultSet rs = st.executeQuery("PRAGMA " + name)) {
             rs.next();
