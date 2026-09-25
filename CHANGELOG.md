@@ -1,3 +1,24 @@
+## 2026.39.1 — 2026-09-24
+
+### 🐛 Fixes
+- remember paid level rewards per profile (`672c540`)
+- start the interest clock on the first deposit (`4c22aa3`)
+- close read-only visitor gaps (`b638c1b`)
+- enforce the island radius on the server (`efc02c6`)
+- keep repeating work alive across /is reload (`c0793a3`)
+- fill the visit browser and leaderboard (`6aac1a5`)
+- tell a failed island lookup apart from a missing one (`ea0abe0`)
+- stop treating a failed island save as a success (`aa89231`)
+- write island files atomically (`2213860`)
+- stop /island and /bank being op-only (`0250018`)
+- stop namespaced commands and aliases slipping the gate (`0947907`)
+- re-check access when a bank button is clicked (`10bcda0`)
+- let only the owner delete a coop island (`884ae48`)
+- use the ISO week-year for release versions (`3c4f7b6`)
+
+### 📝 Documentation
+- add MIT license (`0094729`)
+
 ## 2026.39.0 — 2026-09-23
 
 ### 🔧 Other
