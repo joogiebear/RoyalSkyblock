@@ -189,7 +189,11 @@ public final class BankService {
         if (!persist(account.withBalance(0.0), "PAYOUT", amount, 0.0, note)) {
             return -1;
         }
-        vault.deposit(purse, amount);
+        if (!vault.deposit(purse, amount)) {
+            // The purse refused it: put it back so the payout stays owed rather than vanishing.
+            persist(account(id).withBalance(amount), "PAYOUT_REVERTED", amount, amount, note + " (purse refused)");
+            return -1;
+        }
         return amount;
     }
 
@@ -206,7 +210,11 @@ public final class BankService {
         if (account.balance() < amount) {
             return "&cThe bank doesn't have that much money.";
         }
-        vault.deposit(purse, amount);
+        // The deposit's result used to be ignored, so an economy that refused it (a purse at its cap)
+        // still had the bank debited and the money vanished.
+        if (!vault.deposit(purse, amount)) {
+            return "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn.";
+        }
         double newBalance = round(account.balance() - amount);
         if (!persist(account.withBalance(newBalance), "WITHDRAW", amount,
                 newBalance, purse.getName() + " withdrew")) {

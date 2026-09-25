@@ -35,9 +35,8 @@ public final class VaultHook {
         return economy != null && economy.withdrawPlayer(player, amount).transactionSuccess();
     }
 
-    public void deposit(OfflinePlayer player, double amount) {
-        if (economy != null) {
-            economy.depositPlayer(player, amount);
-        }
+    /** Whether the economy accepted it: one with a balance cap, say, refuses past the cap. */
+    public boolean deposit(OfflinePlayer player, double amount) {
+        return economy != null && economy.depositPlayer(player, amount).transactionSuccess();
     }
 }
