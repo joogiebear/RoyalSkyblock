@@ -109,6 +109,10 @@ public final class WorldEditSchematics implements SchematicService {
 
     @Override
     public String saveSelection(Player player, String name) {
+        // The name becomes a file path; "../" in it would write outside the schematics folder.
+        if (!name.matches("[A-Za-z0-9_-]{1,64}")) {
+            return "Schematic names may only use letters, digits, _ and - (up to 64 characters).";
+        }
         try {
             com.sk89q.worldedit.entity.Player actor = com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(player);
             com.sk89q.worldedit.LocalSession session =
