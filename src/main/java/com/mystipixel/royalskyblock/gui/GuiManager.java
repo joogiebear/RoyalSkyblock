@@ -902,7 +902,7 @@ public final class GuiManager implements Listener {
             holder.putAction(34, (viewer, right) -> {
                 long amount = (long) Math.floor(bank.account(accountId).balance());
                 if (amount < 1) {
-                    plugin.messages().send(viewer, "bank.empty");
+                    plugin.messages().send(viewer, "bank.nothing-to-withdraw");
                     open(viewer, menu);
                     return;
                 }
