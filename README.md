@@ -24,6 +24,7 @@ islands without a bloated single world.
 
 | RoyalSkyblock | Built against | Tested on |
 |---|---|---|
+| 2026.39.3 | eco 2026.35, libreforge 2026.35.1 | eco 2026.38 (with the 2026.38 Auxilor suite) |
 | 2026.39.2 | eco 2026.35, libreforge 2026.35.1 | eco 2026.38 (with the 2026.38 Auxilor suite) |
 
 Newer eco releases usually work, but these are the ones confirmed. Before moving a server to a newer
