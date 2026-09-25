@@ -313,6 +313,7 @@ public final class ProfileManager {
         storage.setActiveProfile(uuid, targetId);
         activeProfile.put(uuid, targetId);
         state.load(player, targetId);
+        deliverCoopPayouts(player);   // anything held back while they were on an Ironman profile
 
         // Take them to the target island (creating it if this profile has never had one).
         return plugin.islands().ensureIsland(targetId)
@@ -617,7 +618,19 @@ public final class ProfileManager {
         // Someone with no profile of their own used to be sent to spawn while still set to the coop
         // they had just been removed from. They get a fresh profile to land on instead, which is also
         // where their coop payout is delivered.
-        UUID landing = owned.isEmpty() ? createDefaultProfile(online).id() : owned.get(0).id();
+        //
+        // Not an Ironman profile if it can be helped: this is where their coop payout lands, and an
+        // Ironman save is meant to have had no outside help. Only someone who owns nothing else, and
+        // has no room for another profile, lands on one; their payout then waits (deliverCoopPayouts).
+        UUID landing = owned.stream()
+                .filter(p -> p.gamemode() != Gamemode.IRONMAN)
+                .map(Profile::id)
+                .findFirst()
+                .orElse(null);
+        if (landing == null) {
+            int max = plugin.conf().getInt("profiles.max-profiles", 3);
+            landing = owned.size() < max ? createDefaultProfile(online).id() : owned.get(0).id();
+        }
         switchProfile(online, landing);
     }
 
@@ -647,7 +660,18 @@ public final class ProfileManager {
     public void deliverCoopPayouts(Player player) {
         UUID uuid = player.getUniqueId();
         UUID current = getActiveProfileId(uuid);
-        for (UUID from : storage.getCoopPayouts(uuid)) {
+        List<UUID> owed = storage.getCoopPayouts(uuid);
+        if (owed.isEmpty()) {
+            return;
+        }
+        Profile here = getProfile(current);
+        if (here != null && here.gamemode() == Gamemode.IRONMAN) {
+            // Coop coins and items would be outside help, which Ironman forbids. They stay owed and are
+            // paid the next time the player is on any other profile (switchProfile delivers too).
+            plugin.messages().send(player, "coop.payout-waiting-ironman");
+            return;
+        }
+        for (UUID from : owed) {
             Profile coop = getProfile(from);
             if (coop != null && coop.isMember(uuid)) {
                 storage.removeCoopPayout(uuid, from);   // re-invited: everything is back where it was
