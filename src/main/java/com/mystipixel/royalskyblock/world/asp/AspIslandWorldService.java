@@ -11,6 +11,7 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
 import com.mystipixel.royalskyblock.world.asp.loaders.RsbFileLoader;
 import com.mystipixel.royalskyblock.world.asp.loaders.RsbMysqlLoader;
+import com.mystipixel.royalskyblock.world.asp.loaders.SaveTrackingLoader;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 import org.bukkit.configuration.ConfigurationSection;
@@ -35,7 +36,7 @@ public final class AspIslandWorldService implements IslandWorldService {
     private final Executor async;
 
     private AdvancedSlimePaperAPI asp;
-    private SlimeLoader loader;
+    private SaveTrackingLoader loader;
 
     public AspIslandWorldService(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -52,7 +53,7 @@ public final class AspIslandWorldService implements IslandWorldService {
                         "Advanced Slime Paper API not found. RoyalSkyblock requires the server to run "
                                 + "the ASP fork (aspaper), not vanilla Paper.", t);
             }
-            this.loader = buildLoader();
+            this.loader = new SaveTrackingLoader(buildLoader());
             plugin.getLogger().info("Island world backend ready (ASP, source="
                     + plugin.conf().getString("world.slime-data-source", "file") + ").");
         }, async);
@@ -67,9 +68,13 @@ public final class AspIslandWorldService implements IslandWorldService {
                 // ...load it into the server on the main thread...
                 .thenCompose(slime -> onMain(() -> asp.loadWorld(slime, true)))
                 // ...then persist the fresh world (awaited, so a later delete/unload can't race an
-                // in-flight save) before handing back the Bukkit world.
+                // in-flight save) before handing back the Bukkit world. If that first save fails the
+                // create fails, and the world is unloaded rather than left loaded with no row.
                 .thenCompose(instance -> CompletableFuture
                         .runAsync(() -> save(instance), async)
+                        .exceptionallyCompose(error -> unloadIsland(worldName, false)
+                                .handle((ignored, unloadError) -> null)
+                                .thenCompose(ignored -> CompletableFuture.<Void>failedFuture(error)))
                         .thenApply(ignored -> instance.getBukkitWorld()));
     }
 
@@ -122,7 +127,12 @@ public final class AspIslandWorldService implements IslandWorldService {
         return saved.thenCompose(ignored -> onMain(() -> {
             World world = instance.getBukkitWorld();
             // We handle persistence via ASP above, so never let Bukkit double-save here.
-            Bukkit.unloadWorld(world, false);
+            // Bukkit refuses (false) while anyone is still in the world. Carrying on would let a delete
+            // remove the file under a live world, so fail and let the caller retry or abort.
+            if (!Bukkit.unloadWorld(world, false)) {
+                throw new IllegalStateException("Bukkit refused to unload island world '" + worldName
+                        + "' (players still in it?)");
+            }
             return null;
         }));
     }
@@ -178,11 +188,27 @@ public final class AspIslandWorldService implements IslandWorldService {
 
     // ── internals ────────────────────────────────────────────────────────────
 
+    /**
+     * Throws on failure rather than logging and carrying on. Every caller acts on the result: unload
+     * keeps the island loaded and retries, delete aborts instead of archiving stale bytes, create
+     * fails. Swallowing the error here meant all of them went ahead as if the blocks were on disk.
+     *
+     * <p>ASP's own call is not enough to know: for a loaded world it logs a failed write and returns
+     * normally (see {@link SaveTrackingLoader}). So the outcome is read back from the loader, which is
+     * the only thing that saw it.
+     */
     private void save(SlimeWorld world) {
+        long mark = loader.mark();
         try {
             asp.saveWorld(world);
         } catch (Exception e) {
-            plugin.getLogger().warning("Failed to save island world '" + world.getName() + "': " + e.getMessage());
+            throw new IllegalStateException("Failed to save island world '" + world.getName() + "': "
+                    + e.getMessage(), e);
+        }
+        SaveTrackingLoader.Outcome outcome = loader.outcomeSince(world.getName(), mark);
+        if (outcome != null && outcome.error() != null) {
+            throw new IllegalStateException("Failed to save island world '" + world.getName() + "': "
+                    + outcome.error().getMessage(), outcome.error());
         }
     }
 
