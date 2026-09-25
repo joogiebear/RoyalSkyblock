@@ -25,7 +25,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryCloseEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
@@ -83,12 +82,8 @@ public final class GuiManager implements Listener {
     };
 
     /**
-     * Menus rendered through eco's Menu API rather than the legacy Bukkit-inventory path.
-     *
-     * <p>These are exactly the menus {@link #fillDynamic} does not touch — every slot comes from the
-     * config, so there is nothing for code to inject after the fact. The remaining menus still build
-     * their content imperatively against an {@link Inventory} and a {@link MenuHolder}; they move over
-     * once that content is expressed as eco reactive slots.
+     * Fully config-driven menus: every slot comes from the yml, so {@link #fillDynamic} has nothing to
+     * add and eco renders each slot straight from its template.
      */
     private static final Set<String> ECO_RENDERED = Set.of(
             MAIN, CONFIRM_DELETE, CREATE_PROFILE, MANAGE, BANK_HUB);
@@ -96,17 +91,15 @@ public final class GuiManager implements Listener {
     /**
      * Data-driven menus, also rendered through eco but with their contents computed per viewer.
      *
-     * <p>Their {@code fillX} builders are reused unchanged: each runs against a scratch inventory and
-     * the resulting items and click actions are handed to eco (see {@link #renderDynamic}). That keeps
-     * thirteen non-trivial content builders out of this port entirely.
+     * <p>Each render, their {@code fillX} builder paints a fresh {@link MenuCanvas} that eco's slots
+     * read from (see {@link #renderDynamic}), so a {@link Menu#refresh} redraws from current state.
      */
     private static final Set<String> ECO_DYNAMIC = Set.of(
             PROFILES, SETTINGS, UPGRADES, VISIT, COOP, COOP_INVITE, COOP_MEMBER,
             BANK_PERSONAL, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP, PERKS);
 
     /**
-     * eco menus currently open, so {@link #tickOpenMenus} can refresh one in place. The legacy path
-     * found these through the inventory's {@code MenuHolder}, which eco menus do not have.
+     * eco menus currently open, so {@link #tickOpenMenus} can refresh one in place.
      */
     private final Map<UUID, OpenEcoMenu> openEcoMenus = new ConcurrentHashMap<>();
 
@@ -166,7 +159,7 @@ public final class GuiManager implements Listener {
 
     /**
      * Open a menu, optionally carrying a {@code context} (e.g. the coop member a per-member menu acts
-     * on) that the dynamic fill can read back off the holder.
+     * on) that the dynamic fill can read back off the canvas.
      */
     public void open(Player player, String menuId, String context) {
         MenuTemplate template = byId.get(menuId);
@@ -199,10 +192,8 @@ public final class GuiManager implements Listener {
      * carry placeholders, and rebuilding keeps a {@code /is reload} taking effect immediately instead
      * of leaving stale menus behind.
      *
-     * <p>eco owns the click handling for these, so {@link #onClick} never sees them — it only reacts to
-     * inventories held by a {@link MenuHolder}, which eco menus are not. The click sound and effect
-     * dispatch below therefore have to be done here, mirroring what that listener does for the legacy
-     * path so both feel identical.
+     * <p>eco owns the click handling, so the click sound and effect dispatch are done in the handler
+     * passed here, the same way the dynamic path does them, so both feel identical.
      */
     private void openEcoMenu(Player player, String menuId, MenuTemplate template, String title) {
         Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
@@ -251,90 +242,80 @@ public final class GuiManager implements Listener {
     }
 
     /**
-     * Run a menu's existing content builder against a throwaway inventory and capture what it produced.
+     * Paint one render of a data-driven menu: filler, configured buttons, then the menu's generated
+     * content on top.
      *
-     * <p>This is the bridge that let all thirteen data-driven menus move to eco without their builders
-     * being rewritten: they still think they are filling an {@link Inventory} and registering actions on
-     * a {@link MenuHolder}, and the results are read back out afterwards. The scratch inventory is never
-     * shown to anyone.
-     *
-     * <p>Every index is captured, not just the mask's content slots, because several builders also
-     * overwrite configured slots — pinning an upgrade to a named slot, greying out a button the viewer
-     * cannot use. Reading the whole inventory reproduces that exactly.
+     * <p>Configured slots are painted first because several builders deliberately overwrite them —
+     * pinning an upgrade to a named slot, greying out a button the viewer cannot use.
      */
-    private EcoMenuFactory.Rendered renderDynamic(String menuId, Player player,
-                                                  MenuTemplate template, String context) {
-        MenuHolder holder = new MenuHolder(menuId, context);
-        Inventory scratch = Bukkit.createInventory(holder, template.size());
-        holder.setInventory(scratch);
+    private MenuCanvas renderDynamic(String menuId, Player player, MenuTemplate template, String context) {
+        MenuCanvas canvas = new MenuCanvas(menuId, context, template.size());
 
-        Map<String, String> placeholders = placeholders(player);
-        template.applyFiller(scratch);
-        for (MenuSlot slot : template.slots()) {
-            scratch.setItem(slot.index(), slot.item().build(ecoHook, placeholders, slot.lore()));
-        }
-        fillDynamic(menuId, player, template, scratch, holder);
-
-        ItemStack[] items = new ItemStack[template.size()];
-        Map<Integer, BiConsumer<Player, Boolean>> actions = new LinkedHashMap<>();
-        for (int index = 0; index < template.size(); index++) {
-            items[index] = scratch.getItem(index);
-            BiConsumer<Player, Boolean> action = holder.action(index);
-            if (action != null) {
-                actions.put(index, action);
+        ItemStack filler = template.maskFiller();
+        if (filler != null) {
+            List<Integer> contentSlots = template.contentSlots();
+            for (int index = 0; index < canvas.size(); index++) {
+                if (!contentSlots.contains(index)) {
+                    canvas.setItem(index, filler.clone());
+                }
             }
         }
-        return new EcoMenuFactory.Rendered(items, actions);
+        Map<String, String> placeholders = placeholders(player);
+        for (MenuSlot slot : template.slots()) {
+            canvas.setItem(slot.index(), slot.item().build(ecoHook, placeholders, slot.lore()));
+        }
+        fillDynamic(menuId, player, template, canvas);
+        return canvas;
     }
 
     /** Fill data-driven menus (profile list, settings toggles) into their mask content slots. */
-    private void fillDynamic(String menuId, Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillDynamic(String menuId, Player player, MenuTemplate template, MenuCanvas canvas) {
         if (menuId.equals(SETTINGS)) {
-            fillSettings(player, template, inv, holder);
+            fillSettings(player, template, canvas);
             return;
         }
         if (menuId.equals(UPGRADES)) {
-            fillUpgrades(player, template, inv, holder);
+            fillUpgrades(player, template, canvas);
             return;
         }
         if (menuId.equals(VISIT)) {
-            fillVisit(player, template, inv, holder);
+            fillVisit(player, template, canvas);
             return;
         }
         if (menuId.equals(COOP)) {
-            fillCoop(player, template, inv, holder);
+            fillCoop(player, template, canvas);
             return;
         }
         if (menuId.equals(COOP_INVITE)) {
-            fillCoopInvite(player, template, inv, holder);
+            fillCoopInvite(player, template, canvas);
             return;
         }
         if (menuId.equals(COOP_MEMBER)) {
-            fillCoopMember(player, template, inv, holder);
+            fillCoopMember(player, template, canvas);
             return;
         }
         if (menuId.equals(COOP_BANK)) {
-            fillBank(player, template, inv, holder, true);
+            fillBank(player, template, canvas, true);
             return;
         }
         if (menuId.equals(BANK_PERSONAL)) {
-            fillBank(player, template, inv, holder, false);
+            fillBank(player, template, canvas, false);
             return;
         }
         if (menuId.equals(COOP_BANK_TXNS)) {
-            fillBankTxns(player, template, inv, holder);
+            fillBankTxns(player, template, canvas);
             return;
         }
         if (menuId.equals(LEVEL)) {
-            fillLevel(player, template, inv, holder);
+            fillLevel(player, template, canvas);
             return;
         }
         if (menuId.equals(TOP)) {
-            fillTop(player, template, inv, holder);
+            fillTop(player, template, canvas);
             return;
         }
         if (menuId.equals(PERKS)) {
-            fillPerks(player, template, inv, holder);
+            fillPerks(player, template, canvas);
             return;
         }
         if (!menuId.equals(PROFILES)) {
@@ -346,8 +327,8 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < profiles.size() && i < slots.size(); i++) {
             Profile profile = profiles.get(i);
             int slot = slots.get(i);
-            inv.setItem(slot, profileIcon(profile, active));
-            holder.putAction(slot, (viewer, right) -> {
+            canvas.setItem(slot, profileIcon(profile, active));
+            canvas.putAction(slot, (viewer, right) -> {
                 viewer.closeInventory();
                 plugin.profiles().switchProfile(viewer, profile.id());
             });
@@ -379,7 +360,7 @@ public final class GuiManager implements Listener {
         return item;
     }
 
-    private void fillSettings(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillSettings(Player player, MenuTemplate template, MenuCanvas canvas) {
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
         if (island == null) {
@@ -394,9 +375,9 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < all.length && i < slots.size(); i++) {
             IslandSetting setting = all[i];
             int slot = slots.get(i);
-            inv.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit));
+            canvas.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit));
             if (canEdit) {
-                holder.putAction(slot, (viewer, right) -> {
+                canvas.putAction(slot, (viewer, right) -> {
                     Island current = managedIsland(viewer, island);
                     if (current == null) {
                         return;
@@ -478,7 +459,7 @@ public final class GuiManager implements Listener {
         return byId.get(id);
     }
 
-    private void fillUpgrades(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillUpgrades(Player player, MenuTemplate template, MenuCanvas canvas) {
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
         if (island == null) {
@@ -499,9 +480,9 @@ public final class GuiManager implements Listener {
                 }
                 slot = auto.get(autoIndex++);
             }
-            inv.setItem(slot, upgradeIcon(def, island));
+            canvas.setItem(slot, upgradeIcon(def, island));
             if (canEdit) {
-                holder.putAction(slot, (viewer, right) -> {
+                canvas.putAction(slot, (viewer, right) -> {
                     handleUpgradeClick(viewer, def, right);
                     open(viewer, UPGRADES);
                 });
@@ -639,7 +620,7 @@ public final class GuiManager implements Listener {
     private record BrowseRow(Island island, Profile profile, String ownerName) {
     }
 
-    private void fillVisit(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillVisit(Player player, MenuTemplate template, MenuCanvas canvas) {
         Profile viewer = plugin.profiles().getProfile(plugin.profiles().getActiveProfileId(player.getUniqueId()));
         if (viewer == null) {
             return;
@@ -675,8 +656,8 @@ public final class GuiManager implements Listener {
         int i = 0;
         for (BrowseRow row : rows) {
             int slot = slots.get(i++);
-            inv.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName()));
-            holder.putAction(slot, (v, right) -> {
+            canvas.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName()));
+            canvas.putAction(slot, (v, right) -> {
                 v.closeInventory();
                 visitFromBrowser(v, row.island(), row.profile(), row.ownerName());
             });
@@ -686,12 +667,9 @@ public final class GuiManager implements Listener {
     /**
      * The rows for an async-filled menu, or null while they are still being fetched.
      *
-     * <p>The fill runs inside eco's render, against a scratch inventory whose contents are copied into
-     * the menu once the fill returns. Painting that scratch inventory later, when the rows arrived, did
-     * nothing: the copy had already been taken, and the old "still viewing" check compared the player's
-     * open inventory with the scratch one, which never matches. So both menus always opened empty.
-     * Instead the rows are parked here and the open menu is refreshed, which re-runs the render and
-     * finds them ready.
+     * <p>The fill runs inside eco's render and must return synchronously, so rows that arrive later
+     * cannot be painted into it directly. Instead they are parked here and the open menu is refreshed,
+     * which re-runs the render and finds them ready.
      */
     private @Nullable List<BrowseRow> browseRowsOrFetch(Player player, String menuId,
                                                         java.util.function.Supplier<List<BrowseRow>> gather) {
@@ -776,7 +754,7 @@ public final class GuiManager implements Listener {
     // ── coop management ──────────────────────────────────────────────────────────
 
     /** Fill the coop roster: owner first, then co-owners/members. Owner/co-owner click a member to kick. */
-    private void fillCoop(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillCoop(Player player, MenuTemplate template, MenuCanvas canvas) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
             return;
@@ -785,7 +763,7 @@ public final class GuiManager implements Listener {
         boolean canManage = myRole == IslandRole.OWNER || myRole == IslandRole.CO_OWNER;
 
         int max = coopMax(profile);
-        inv.setItem(4, coopInfoIcon(profile, max)); // header (row 1, col 5)
+        canvas.setItem(4, coopInfoIcon(profile, max)); // header (row 1, col 5)
 
         List<com.mystipixel.royalskyblock.profile.ProfileMember> members = new ArrayList<>(profile.members());
         members.sort((a, b) -> Integer.compare(roleRank(a.role()), roleRank(b.role())));
@@ -798,16 +776,16 @@ public final class GuiManager implements Listener {
             boolean manageable = canManage
                     && member.role() != IslandRole.OWNER
                     && !member.uuid().equals(player.getUniqueId());
-            inv.setItem(slot, memberIcon(member, manageable));
+            canvas.setItem(slot, memberIcon(member, manageable));
             if (manageable) {
-                holder.putAction(slot, (viewer, right) -> open(viewer, COOP_MEMBER, member.name()));
+                canvas.putAction(slot, (viewer, right) -> open(viewer, COOP_MEMBER, member.name()));
             }
         }
     }
 
-    /** Per-member management: promote/demote, transfer ownership, kick. Target name is the holder context. */
-    private void fillCoopMember(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
-        String targetName = holder.context();
+    /** Per-member management: promote/demote, transfer ownership, kick. Target name is the canvas context. */
+    private void fillCoopMember(Player player, MenuTemplate template, MenuCanvas canvas) {
+        String targetName = canvas.context();
         Profile active = plugin.profiles().getActiveProfile(player);
         if (targetName == null || active == null) {
             return;
@@ -821,33 +799,33 @@ public final class GuiManager implements Listener {
         int rows = template.size() / 9;
 
         // header: the member's head (row 1, col 5)
-        inv.setItem(4, memberIcon(target, false));
+        canvas.setItem(4, memberIcon(target, false));
 
         // action row (row 2 on a 3-row menu)
         int actionRow = rows >= 3 ? 9 : 0;
 
         // promote / demote (owner only)
         if (isOwner && target.role() == IslandRole.MEMBER) {
-            inv.setItem(actionRow + 2, infoIcon(Material.LIME_DYE, "&a&lPromote to Co-Owner",
+            canvas.setItem(actionRow + 2, infoIcon(Material.LIME_DYE, "&a&lPromote to Co-Owner",
                     List.of("&7Let " + target.name() + " invite, kick,", "&7and manage the island.",
                             "", "&eClick to promote!")));
-            holder.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
+            canvas.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
                     plugin.profiles().promote(viewer, target.name()), "coop.promoted", target.name(), "coop.you-promoted"));
         } else if (isOwner && target.role() == IslandRole.CO_OWNER) {
-            inv.setItem(actionRow + 2, infoIcon(Material.GRAY_DYE, "&e&lDemote to Member",
+            canvas.setItem(actionRow + 2, infoIcon(Material.GRAY_DYE, "&e&lDemote to Member",
                     List.of("&7Return " + target.name() + " to a", "&7regular member.",
                             "", "&eClick to demote!")));
-            holder.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
+            canvas.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
                     plugin.profiles().demote(viewer, target.name()), "coop.demoted", target.name(), "coop.you-demoted"));
         }
 
         // transfer ownership (owner only) — right-click to confirm
         if (isOwner) {
-            inv.setItem(actionRow + 4, infoIcon(Material.GOLDEN_HELMET, "&6&lTransfer Ownership",
+            canvas.setItem(actionRow + 4, infoIcon(Material.GOLDEN_HELMET, "&6&lTransfer Ownership",
                     List.of("&7Make " + target.name() + " the owner.",
                             "&cYou'll become a co-owner.", "",
                             "&7Left-click: details", "&eRight-click: confirm transfer")));
-            holder.putAction(actionRow + 4, (viewer, right) -> {
+            canvas.putAction(actionRow + 4, (viewer, right) -> {
                 if (!right) {
                     plugin.messages().send(viewer, "coop.transfer-hint", "player", target.name());
                     return;
@@ -858,9 +836,9 @@ public final class GuiManager implements Listener {
         }
 
         // kick
-        inv.setItem(actionRow + 6, infoIcon(Material.BARRIER, "&c&lRemove from Island",
+        canvas.setItem(actionRow + 6, infoIcon(Material.BARRIER, "&c&lRemove from Island",
                 List.of("&7Kick " + target.name() + " from", "&7the coop.", "", "&eClick to remove!")));
-        holder.putAction(actionRow + 6, (viewer, right) -> {
+        canvas.putAction(actionRow + 6, (viewer, right) -> {
             Player online = Bukkit.getPlayerExact(target.name());
             String error = plugin.profiles().kick(viewer, target.name());
             if (error != null) {
@@ -878,7 +856,7 @@ public final class GuiManager implements Listener {
 
     // ── bank (native; personal + coop share this engine) ──────────────────────────
 
-    private void fillBank(Player player, MenuTemplate template, Inventory inv, MenuHolder holder, boolean coop) {
+    private void fillBank(Player player, MenuTemplate template, MenuCanvas canvas, boolean coop) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
             return;
@@ -890,7 +868,7 @@ public final class GuiManager implements Listener {
         BankAccount acct = bank.account(accountId);
         BankLevel level = bank.levels().effectiveLevel(acct.level());
 
-        inv.setItem(4, bankHeaderIcon(bank, acct, level, coop ? "&6&l" + profile.name() + " Coop Bank" : "&6&lPersonal Bank"));
+        canvas.setItem(4, bankHeaderIcon(bank, acct, level, coop ? "&6&l" + profile.name() + " Coop Bank" : "&6&lPersonal Bank"));
         if (!bank.available()) {
             return; // no economy / no levels — header explains, no buttons
         }
@@ -905,18 +883,18 @@ public final class GuiManager implements Listener {
         int[] withdrawCols = {28, 30, 32};
         for (int i = 0; i < depositCols.length && i < amounts.size(); i++) {
             long amount = amounts.get(i);
-            inv.setItem(depositCols[i], infoIcon(Material.LIME_DYE, "&a&lDeposit " + fmtCoins(amount),
+            canvas.setItem(depositCols[i], infoIcon(Material.LIME_DYE, "&a&lDeposit " + fmtCoins(amount),
                     List.of("&7From your purse → bank.", "", "&eClick to deposit!")));
-            holder.putAction(depositCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, true));
+            canvas.putAction(depositCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, true));
             if (canWithdraw) {
-                inv.setItem(withdrawCols[i], infoIcon(Material.GOLD_NUGGET, "&6&lWithdraw " + fmtCoins(amount),
+                canvas.setItem(withdrawCols[i], infoIcon(Material.GOLD_NUGGET, "&6&lWithdraw " + fmtCoins(amount),
                         List.of("&7From bank → your purse.", "", "&eClick to withdraw!")));
-                holder.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, false));
+                canvas.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, false));
             }
         }
-        inv.setItem(25, infoIcon(Material.LIME_WOOL, "&a&lDeposit All",
+        canvas.setItem(25, infoIcon(Material.LIME_WOOL, "&a&lDeposit All",
                 List.of("&7Deposit your whole purse", "&7(up to the level cap).", "", "&eClick to deposit!")));
-        holder.putAction(25, (viewer, right) -> {
+        canvas.putAction(25, (viewer, right) -> {
             long amount = (long) Math.floor(plugin.purseBalance(viewer));
             if (amount < 1) {
                 plugin.messages().send(viewer, "bank.empty-purse");
@@ -926,9 +904,9 @@ public final class GuiManager implements Listener {
             runBank(viewer, accountId, menu, amount, true);
         });
         if (canWithdraw) {
-            inv.setItem(34, infoIcon(Material.GOLD_BLOCK, "&6&lWithdraw All",
+            canvas.setItem(34, infoIcon(Material.GOLD_BLOCK, "&6&lWithdraw All",
                     List.of("&7Withdraw the whole balance", "&7to your purse.", "", "&eClick to withdraw!")));
-            holder.putAction(34, (viewer, right) -> {
+            canvas.putAction(34, (viewer, right) -> {
                 long amount = (long) Math.floor(bank.account(accountId).balance());
                 if (amount < 1) {
                     plugin.messages().send(viewer, "bank.nothing-to-withdraw");
@@ -942,9 +920,9 @@ public final class GuiManager implements Listener {
         // interest (row 5, col 2)
         long remaining = bank.interestSecondsRemaining(accountId);
         if (remaining <= 0) {
-            inv.setItem(37, infoIcon(Material.EXPERIENCE_BOTTLE, "&a&lClaim Interest",
+            canvas.setItem(37, infoIcon(Material.EXPERIENCE_BOTTLE, "&a&lClaim Interest",
                     List.of("&7Interest is ready.", "", "&eClick to claim!")));
-            holder.putAction(37, (viewer, right) -> {
+            canvas.putAction(37, (viewer, right) -> {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
@@ -957,14 +935,14 @@ public final class GuiManager implements Listener {
                 open(viewer, menu);
             });
         } else {
-            inv.setItem(37, infoIcon(Material.CLOCK, "&7Interest",
+            canvas.setItem(37, infoIcon(Material.CLOCK, "&7Interest",
                     List.of("&7Next interest in &f" + formatDuration(remaining) + "&7.")));
         }
 
         // upgrade (row 5, col 4)
-        inv.setItem(39, bankUpgradeIcon(bank, acct));
+        canvas.setItem(39, bankUpgradeIcon(bank, acct));
         if (bank.levels().getNextLevel(acct.level()).isPresent()) {
-            holder.putAction(39, (viewer, right) -> {
+            canvas.putAction(39, (viewer, right) -> {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
@@ -979,9 +957,9 @@ public final class GuiManager implements Listener {
         }
 
         // transactions (row 5, col 6)
-        inv.setItem(41, infoIcon(Material.BOOK, "&e&lTransactions",
+        canvas.setItem(41, infoIcon(Material.BOOK, "&e&lTransactions",
                 List.of("&7Recent bank activity.", "", "&eClick to view!")));
-        holder.putAction(41, (viewer, right) -> open(viewer, COOP_BANK_TXNS, accountId));
+        canvas.putAction(41, (viewer, right) -> open(viewer, COOP_BANK_TXNS, accountId));
     }
 
     private ItemStack bankHeaderIcon(BankService bank, BankAccount acct, BankLevel level, String title) {
@@ -1025,29 +1003,29 @@ public final class GuiManager implements Listener {
         return infoIcon(Material.ANVIL, "&6&lUpgrade Bank", lore);
     }
 
-    private void fillBankTxns(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillBankTxns(Player player, MenuTemplate template, MenuCanvas canvas) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
             return;
         }
-        String accountId = holder.context() != null ? holder.context()
+        String accountId = canvas.context() != null ? canvas.context()
                 : BankService.coopId(profile.id());
         List<Integer> slots = template.contentSlots();
         // dynamic Back (col 4, row 6) — return to the right bank menu for this account
         String menu = accountId.startsWith("p:") ? BANK_PERSONAL : COOP_BANK;
-        inv.setItem(48, infoIcon(Material.ARROW, "&7« Back", List.of("&7Return to the bank.")));
-        holder.putAction(48, (viewer, right) -> open(viewer, menu));
+        canvas.setItem(48, infoIcon(Material.ARROW, "&7« Back", List.of("&7Return to the bank.")));
+        canvas.putAction(48, (viewer, right) -> open(viewer, menu));
         if (slots.isEmpty()) {
             return;
         }
         List<BankTxn> txns = plugin.bank().transactions(accountId, slots.size());
         if (txns.isEmpty()) {
-            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No transactions yet",
+            canvas.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No transactions yet",
                     List.of("&7Deposits, withdrawals, upgrades,", "&7and interest will show here.")));
             return;
         }
         for (int i = 0; i < txns.size() && i < slots.size(); i++) {
-            inv.setItem(slots.get(i), txnIcon(txns.get(i)));
+            canvas.setItem(slots.get(i), txnIcon(txns.get(i)));
         }
     }
 
@@ -1140,7 +1118,7 @@ public final class GuiManager implements Listener {
     }
 
     /** Fill the invite picker: every online player not already on the roster; click to invite. */
-    private void fillCoopInvite(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillCoopInvite(Player player, MenuTemplate template, MenuCanvas canvas) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         List<Integer> slots = template.contentSlots();
         int i = 0;
@@ -1152,8 +1130,8 @@ public final class GuiManager implements Listener {
                 break;
             }
             int slot = slots.get(i++);
-            inv.setItem(slot, inviteCandidateIcon(online));
-            holder.putAction(slot, (viewer, right) -> {
+            canvas.setItem(slot, inviteCandidateIcon(online));
+            canvas.putAction(slot, (viewer, right) -> {
                 Player target = Bukkit.getPlayerExact(online.getName());
                 if (target == null) {
                     plugin.messages().send(viewer, "coop.invite-error", "error", "That player isn't online.");
@@ -1255,12 +1233,12 @@ public final class GuiManager implements Listener {
     // ── island levels ────────────────────────────────────────────────────────────
 
     /** Fill the level menu with the biggest point contributors from the island's last scan. */
-    private void fillLevel(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillLevel(Player player, MenuTemplate template, MenuCanvas canvas) {
         // Perks entry point (row 5, col 5) — only when the optional perks system is enabled.
         if (plugin.perks().enabled()) {
-            inv.setItem(40, infoIcon(Material.NETHER_STAR, "&d&lPerks",
+            canvas.setItem(40, infoIcon(Material.NETHER_STAR, "&d&lPerks",
                     List.of("&7Perks that unlock as your", "&7island levels up.", "", "&eClick to view!")));
-            holder.putAction(40, (viewer, right) -> open(viewer, PERKS));
+            canvas.putAction(40, (viewer, right) -> open(viewer, PERKS));
         }
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
@@ -1274,7 +1252,7 @@ public final class GuiManager implements Listener {
             return;
         }
         if (breakdown.isEmpty()) {
-            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No scan yet",
+            canvas.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No scan yet",
                     List.of("&7Hit Recalculate to tally", "&7your island's blocks.")));
             return;
         }
@@ -1283,7 +1261,7 @@ public final class GuiManager implements Listener {
                 a.getValue() * cfg.value(a.getKey())));
         for (int i = 0; i < entries.size() && i < slots.size(); i++) {
             Map.Entry<Material, Long> e = entries.get(i);
-            inv.setItem(slots.get(i), levelBlockIcon(e.getKey(), e.getValue(), cfg.value(e.getKey())));
+            canvas.setItem(slots.get(i), levelBlockIcon(e.getKey(), e.getValue(), cfg.value(e.getKey())));
         }
     }
 
@@ -1303,7 +1281,7 @@ public final class GuiManager implements Listener {
     }
 
     /** Fill the leaderboard with islands ranked by stored level (never scans live). */
-    private void fillTop(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillTop(Player player, MenuTemplate template, MenuCanvas canvas) {
         List<Integer> slots = template.contentSlots();
 
         // Same reasoning as fillVisit: read and rank off-thread, paint on the refresh.
@@ -1329,7 +1307,7 @@ public final class GuiManager implements Listener {
         int rank = 0;
         for (BrowseRow row : rows) {
             int slot = slots.get(rank++);
-            inv.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName()));
+            canvas.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName()));
         }
     }
 
@@ -1371,13 +1349,13 @@ public final class GuiManager implements Listener {
     }
 
     /** "DIAMOND_BLOCK" -> "Diamond Block". */
-    private void fillPerks(Player player, MenuTemplate template, Inventory inv, MenuHolder holder) {
+    private void fillPerks(Player player, MenuTemplate template, MenuCanvas canvas) {
         List<Integer> slots = template.contentSlots();
         if (slots.isEmpty()) {
             return;
         }
         if (!plugin.perks().enabled()) {
-            inv.setItem(slots.get(0), infoIcon(Material.BARRIER, "&cPerks are disabled",
+            canvas.setItem(slots.get(0), infoIcon(Material.BARRIER, "&cPerks are disabled",
                     List.of("&7This server has perks turned off.", "&8(admins: set perks.enabled in config.yml)")));
             return;
         }
@@ -1386,12 +1364,12 @@ public final class GuiManager implements Listener {
         int level = island == null ? 0 : (int) island.level();
         List<Perk> perks = plugin.perks().perks();
         if (perks.isEmpty()) {
-            inv.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No perks configured",
+            canvas.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No perks configured",
                     List.of("&7Add perks in perks.yml.")));
             return;
         }
         for (int i = 0; i < perks.size() && i < slots.size(); i++) {
-            inv.setItem(slots.get(i), perkIcon(perks.get(i), level));
+            canvas.setItem(slots.get(i), perkIcon(perks.get(i), level));
         }
     }
 
@@ -1447,8 +1425,7 @@ public final class GuiManager implements Listener {
     // ── click handling ───────────────────────────────────────────────────────────
     //
     // There is no InventoryClickEvent listener here any more. Every menu is an eco Menu and eco owns
-    // its clicks, dispatching them to the per-slot handlers built in EcoMenuFactory. The old listener
-    // matched on the inventory's MenuHolder, which no opened inventory has any more.
+    // its clicks, dispatching them to the per-slot handlers built in EcoMenuFactory.
 
     private void execute(Player player, MenuEffect effect) {
         switch (effect.id().toLowerCase(Locale.ROOT)) {

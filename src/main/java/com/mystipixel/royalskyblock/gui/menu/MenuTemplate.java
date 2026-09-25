@@ -3,7 +3,6 @@ package com.mystipixel.royalskyblock.gui.menu;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
-import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.io.File;
@@ -220,22 +219,10 @@ public final class MenuTemplate {
 
     /**
      * The mask's filler item, or null when the menu declares no mask. Exposed for the eco Menu API
-     * port, which places filler as real slots rather than painting an Inventory after the fact.
+     * menus, which place filler as real slots.
      */
     public ItemStack maskFiller() {
         return maskFiller;
-    }
-
-    /** Paint the mask filler across every non-content slot. */
-    public void applyFiller(Inventory inv) {
-        if (maskFiller == null) {
-            return;
-        }
-        for (int i = 0; i < inv.getSize(); i++) {
-            if (!contentSlots.contains(i)) {
-                inv.setItem(i, maskFiller.clone());
-            }
-        }
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────────

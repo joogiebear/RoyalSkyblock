@@ -64,21 +64,6 @@ public final class EcoMenuFactory {
                      MenuSlot configured);
     }
 
-    /**
-     * One render of a data-driven menu: what every slot holds, and what the code-registered slots do
-     * when clicked.
-     *
-     * <p>The legacy engine builds these menus imperatively against an {@link org.bukkit.inventory.Inventory}
-     * and a {@code MenuHolder}. Rather than rewriting thirteen such builders, the caller runs them
-     * against a scratch inventory and hands the result over as one of these — so the existing content
-     * logic is reused verbatim and only the rendering changes.
-     *
-     * @param items   slot index -> item, sized to the menu; nulls are empty slots
-     * @param actions slot index -> what a click does, taking the viewer and whether it was a right-click
-     */
-    public record Rendered(ItemStack[] items, Map<Integer, BiConsumer<Player, Boolean>> actions) {
-    }
-
     /** Per-player menu-state key holding the current render snapshot. */
     private static final String STATE_RENDER = "royalskyblock_render";
 
@@ -169,7 +154,7 @@ public final class EcoMenuFactory {
      */
     public Menu buildDynamic(MenuTemplate template,
                              String title,
-                             Function<Player, Rendered> render,
+                             Function<Player, MenuCanvas> render,
                              SlotClickHandler configuredClick,
                              DynamicClickHandler dynamicClick) {
         MenuBuilder builder = Menu.builder(template.size() / 9)
@@ -192,8 +177,8 @@ public final class EcoMenuFactory {
                              SlotClickHandler configuredClick, DynamicClickHandler dynamicClick) {
         MenuSlot configured = template.slotAt(index);
         return Slot.builder((SlotProvider) (player, menu) -> {
-                    Rendered rendered = menu.getState(player, STATE_RENDER);
-                    return rendered == null ? null : rendered.items()[index];
+                    MenuCanvas canvas = menu.getState(player, STATE_RENDER);
+                    return canvas == null ? null : canvas.item(index);
                 })
                 .onLeftClick((SlotHandler) (event, slot, menu) ->
                         click(event, menu, index, configured, configuredClick, dynamicClick, false))
@@ -208,8 +193,8 @@ public final class EcoMenuFactory {
         if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
-        Rendered rendered = menu.getState(player, STATE_RENDER);
-        BiConsumer<Player, Boolean> action = rendered == null ? null : rendered.actions().get(index);
+        MenuCanvas canvas = menu.getState(player, STATE_RENDER);
+        BiConsumer<Player, Boolean> action = canvas == null ? null : canvas.action(index);
         if (action != null) {
             dynamicClick.onClick(player, action, rightClick, configured);
             return;
