@@ -153,8 +153,11 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
     private fun firstArg(args: List<String>, options: List<String>): List<String> =
         if (args.size <= 1) startingWith(options, args.lastOrNull()) else emptyList()
 
+    /** Online players the sender can see — a vanished player must not show up in tab completion. */
     private fun onlinePlayers(sender: CommandSender, args: List<String>): List<String> =
-        firstArg(args, plugin.server.onlinePlayers.map { it.name })
+        firstArg(args, plugin.server.onlinePlayers
+            .filter { sender !is Player || sender.canSee(it) }
+            .map { it.name })
 
     /** Everyone on your island except you — the only people worth kicking or promoting. */
     private fun otherMembers(sender: CommandSender, args: List<String>): List<String> {
@@ -185,7 +188,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
     private fun completeAdmin(sender: CommandSender, args: List<String>): List<String> {
         if (args.size <= 1) {
             return startingWith(listOf("status", "border", "mobspawn", "testworld", "loadtest",
-                "schematic", "upgrade", "chesttest", "split-content"), args.lastOrNull())
+                "schematic", "upgrade", "chesttest", "split-content", "trash", "orphans"), args.lastOrNull())
         }
         if (args.size != 2) {
             return emptyList()
@@ -195,6 +198,8 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
             "schematic" -> startingWith(listOf("save"), args[1])
             "split-content" -> startingWith(listOf("confirm"), args[1])
             "mobspawn" -> startingWith(listOf("status", "test"), args[1])
+            "trash" -> startingWith(listOf("list", "restore"), args[1])
+            "orphans" -> startingWith(listOf("purge"), args[1])
             "upgrade" -> startingWith(plugin.upgrades().all().map { it.key() }, args[1])
             else -> emptyList()
         }
