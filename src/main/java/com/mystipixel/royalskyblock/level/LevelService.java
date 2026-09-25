@@ -22,6 +22,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -34,6 +35,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * de-dupe guard stop scans from stacking up. The leaderboard reads stored levels and never scans live.
  */
 public final class LevelService {
+
+    /** How long a scan may take to gather its chunks before it is abandoned and the island released. */
+    private static final long SCAN_TIMEOUT_SECONDS = 120;
 
     private final RoyalSkyblockPlugin plugin;
     private final LevelConfig config;
@@ -116,6 +120,11 @@ public final class LevelService {
 
         CompletableFuture<Double> result = new CompletableFuture<>();
         gatherSnapshots(world, minCX, maxCX, minCZ, maxCZ)
+                // The gather is a per-tick task that /is reload cancels, and a chunk load can simply
+                // never finish (the world unloading mid-scan). Either way the future never completed
+                // and the island stayed in `scanning` until a restart, refusing every recalc. The
+                // timeout routes both through the failure path below, which releases it.
+                .orTimeout(SCAN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .thenApplyAsync(this::tally)                       // heavy sum off the main thread
                 .thenAccept(totals -> runMain(() -> {             // model write + persist back on main
                     double level = config.levelFor(totals.points);

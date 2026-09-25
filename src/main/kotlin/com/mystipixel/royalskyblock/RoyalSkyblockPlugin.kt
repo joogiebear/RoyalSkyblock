@@ -425,6 +425,14 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // Drop empty island worlds. Without this an island ticks forever once visited, so the
         // server's cost scales with islands-ever-visited instead of players online.
         server.scheduler.runTaskTimer(this, Runnable { unloadService?.tick() }, 200L, 100L)
+        // Trash retention pruning, shortly after startup and daily after — the trash must not become
+        // the unbounded island graveyard it exists to prevent worlds becoming.
+        server.scheduler.runTaskTimerAsynchronously(
+            this, Runnable { islandManager?.trash()?.pruneOld() }, 20L * 120L, 20L * 60L * 60L * 24L
+        )
+        // Island mob spawning. Null until startIslandMobSpawning has run (it starts itself then);
+        // here it is what brings the timer back after a reload. start() stops any old timer first.
+        mobSpawnService?.start()
 
         // The level leaderboard is refreshed off-thread. No longer gated on PlaceholderAPI: the rank
         // placeholder is served to eco as well, so the cache has to be warm regardless.

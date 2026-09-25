@@ -44,10 +44,6 @@ public final class IslandManager {
         this.storage = storage;
         this.worlds = worlds;
         this.trash = new com.mystipixel.royalskyblock.world.IslandTrash(plugin);
-        // Retention pruning, shortly after startup and daily after — the trash must not become the
-        // unbounded island graveyard it exists to prevent worlds becoming.
-        plugin.getServer().getScheduler().runTaskTimerAsynchronously(plugin, trash::pruneOld,
-                20L * 120L, 20L * 60L * 60L * 24L);
     }
 
     /** The island trash can — where deleted worlds go instead of oblivion. */
