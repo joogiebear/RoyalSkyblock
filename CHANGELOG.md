@@ -1,3 +1,11 @@
+## 2026.39.3 — 2026-09-24
+
+### ♻️ Refactors
+- render dynamic menus into a canvas, not a scratch inventory (`d4a03f7`)
+
+### 📝 Documentation
+- list 2026.39.3 in the tested eco versions (`d37b6d9`)
+
 ## 2026.39.2 — 2026-09-24
 
 ### 🐛 Fixes
