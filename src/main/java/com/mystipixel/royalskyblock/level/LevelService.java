@@ -154,12 +154,14 @@ public final class LevelService {
      * island's reward marker so nothing is ever paid twice. Runs on the main thread (console commands).
      */
     private void grantLevelUps(Island island, double newLevel) {
-        int from = island.rewardLevel();
+        Profile profile = plugin.profiles().getProfile(island.profileId());
+        // The profile's marker survives the island being deleted; the island's alone did not, so a
+        // fresh island paid every reward again.
+        int from = Math.max(island.rewardLevel(), profile == null ? 0 : profile.rewardLevel());
         int to = (int) Math.floor(newLevel);
         if (to <= from) {
             return;
         }
-        Profile profile = plugin.profiles().getProfile(island.profileId());
         String owner = profile == null ? "" : ownerName(profile);
         for (int lvl = from + 1; lvl <= to; lvl++) {
             // Chains run per online member: an effect targets a player, while the commands below are
@@ -186,6 +188,10 @@ public final class LevelService {
             }
         }
         island.setRewardLevel(to);
+        if (profile != null) {
+            profile.setRewardLevel(to);
+            Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> plugin.storage().saveProfile(profile));
+        }
         notifyMembers(profile, island, to);
     }
 

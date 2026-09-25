@@ -210,13 +210,18 @@ public final class SqliteMigration {
             return new int[]{0, 0};
         }
         List<Profile> loaded = new ArrayList<>();
+        boolean hasRewardLevel = columnsOf(c, "profiles").contains("reward_level");
         try (Statement s = c.createStatement();
-             ResultSet rs = s.executeQuery("SELECT id, owner, name, gamemode, created_at FROM profiles")) {
+             ResultSet rs = s.executeQuery("SELECT * FROM profiles")) {
             while (rs.next()) {
-                loaded.add(new Profile(UUID.fromString(rs.getString("id")),
+                Profile profile = new Profile(UUID.fromString(rs.getString("id")),
                         UUID.fromString(rs.getString("owner")), rs.getString("name"),
                         Gamemode.fromString(rs.getString("gamemode"), Gamemode.SOLO),
-                        rs.getLong("created_at")));
+                        rs.getLong("created_at"));
+                if (hasRewardLevel) {
+                    profile.setRewardLevel(rs.getInt("reward_level"));
+                }
+                loaded.add(profile);
             }
         }
 
@@ -264,6 +269,7 @@ public final class SqliteMigration {
                 || !got.name().equals(expected.name())
                 || got.gamemode() != expected.gamemode()
                 || got.createdAt() != expected.createdAt()
+                || got.rewardLevel() != expected.rewardLevel()
                 || got.memberCount() != expected.memberCount()) {
             problems.add("profile " + expected.id() + " read back different from the source");
             return;

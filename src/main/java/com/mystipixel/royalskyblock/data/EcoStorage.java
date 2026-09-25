@@ -323,6 +323,7 @@ public final class EcoStorage implements Storage {
         }
         Profile profile = new Profile(id, uuid(owner), orEmpty(row.getStringOrNull("name")),
                 Gamemode.fromString(row.getStringOrNull("gamemode"), Gamemode.SOLO), getLong(row, "created-at"));
+        profile.setRewardLevel(row.getInt("reward-level"));
         for (String entry : orEmpty(row.getStringsOrNull("members"))) {
             ProfileMember member = readMember(entry);
             if (member == null) {
@@ -377,6 +378,7 @@ public final class EcoStorage implements Storage {
         row.set("name", profile.name());
         row.set("gamemode", profile.gamemode().name());
         putLong(row, "created-at", profile.createdAt());
+        row.set("reward-level", profile.rewardLevel());
 
         List<String> members = new ArrayList<>();
         for (ProfileMember member : profile.members()) {

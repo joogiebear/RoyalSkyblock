@@ -194,6 +194,7 @@ public final class SqlStorage implements Storage {
         addColumnIfMissing("islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         addColumnIfMissing("islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         addColumnIfMissing("islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing("profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         // Per-profile personal bank snapshot (only used when RoyalBank is the backend).
         addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
         addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
@@ -351,7 +352,7 @@ public final class SqlStorage implements Storage {
     // ── profiles ────────────────────────────────────────────────────────────────
 
     public @Nullable Profile getProfile(UUID id) {
-        String sql = "SELECT id, owner, name, gamemode, created_at FROM profiles WHERE id = ?";
+        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE id = ?";
         Profile profile;
         // Load the profile + roster on one connection, then release it BEFORE looking up the island —
         // the island query opens its own connection, and nesting on the single-connection SQLite pool
@@ -386,7 +387,7 @@ public final class SqlStorage implements Storage {
     public List<Profile> getProfilesByOwner(UUID owner) {
         List<Profile> out = new ArrayList<>();
         Map<UUID, Profile> byId = new HashMap<>();
-        String sql = "SELECT id, owner, name, gamemode, created_at FROM profiles WHERE owner = ? ORDER BY created_at";
+        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE owner = ? ORDER BY created_at";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             try (ResultSet rs = st.executeQuery()) {
@@ -487,9 +488,11 @@ public final class SqlStorage implements Storage {
     }
 
     private Profile readProfile(ResultSet rs) throws SQLException {
-        return new Profile(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("owner")),
+        Profile profile = new Profile(UUID.fromString(rs.getString("id")), UUID.fromString(rs.getString("owner")),
                 rs.getString("name"), Gamemode.fromString(rs.getString("gamemode"), Gamemode.SOLO),
                 rs.getLong("created_at"));
+        profile.setRewardLevel(rs.getInt("reward_level"));
+        return profile;
     }
 
     private void loadMembers(Connection c, Profile profile) throws SQLException {
@@ -514,10 +517,12 @@ public final class SqlStorage implements Storage {
     /** Upsert a profile and replace its member roster in one transaction. */
     public boolean saveProfile(Profile profile) {
         String upsert = mysql()
-                ? "INSERT INTO profiles (id, owner, name, gamemode, created_at) VALUES (?,?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE owner=VALUES(owner), name=VALUES(name), gamemode=VALUES(gamemode)"
-                : "INSERT INTO profiles (id, owner, name, gamemode, created_at) VALUES (?,?,?,?,?) "
-                + "ON CONFLICT(id) DO UPDATE SET owner=excluded.owner, name=excluded.name, gamemode=excluded.gamemode";
+                ? "INSERT INTO profiles (id, owner, name, gamemode, created_at, reward_level) VALUES (?,?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE owner=VALUES(owner), name=VALUES(name), gamemode=VALUES(gamemode), "
+                + "reward_level=VALUES(reward_level)"
+                : "INSERT INTO profiles (id, owner, name, gamemode, created_at, reward_level) VALUES (?,?,?,?,?,?) "
+                + "ON CONFLICT(id) DO UPDATE SET owner=excluded.owner, name=excluded.name, gamemode=excluded.gamemode, "
+                + "reward_level=excluded.reward_level";
         try (Connection c = dataSource.getConnection()) {
             boolean auto = c.getAutoCommit();
             c.setAutoCommit(false);
@@ -528,6 +533,7 @@ public final class SqlStorage implements Storage {
                     st.setString(3, profile.name());
                     st.setString(4, profile.gamemode().name());
                     st.setLong(5, profile.createdAt());
+                    st.setInt(6, profile.rewardLevel());
                     st.executeUpdate();
                 }
                 try (PreparedStatement del = c.prepareStatement("DELETE FROM profile_members WHERE profile_id = ?")) {

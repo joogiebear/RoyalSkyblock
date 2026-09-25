@@ -23,6 +23,13 @@ public final class Profile {
     /** The profile's island id, or {@code null} until an island has been created for it. */
     private UUID islandId;
 
+    /**
+     * Highest island level whose rewards this profile has been paid. Kept on the profile, not only the
+     * island, because deleting the island threw the island's marker away: delete, recreate, rebuild
+     * from stored blocks and every reward paid again.
+     */
+    private int rewardLevel;
+
     private final ConcurrentHashMap<UUID, ProfileMember> members = new ConcurrentHashMap<>();
 
     public Profile(UUID id, UUID owner, String name, Gamemode gamemode, long createdAt) {
@@ -64,6 +71,14 @@ public final class Profile {
 
     public long createdAt() {
         return createdAt;
+    }
+
+    public int rewardLevel() {
+        return rewardLevel;
+    }
+
+    public void setRewardLevel(int rewardLevel) {
+        this.rewardLevel = rewardLevel;
     }
 
     public @Nullable UUID islandId() {
