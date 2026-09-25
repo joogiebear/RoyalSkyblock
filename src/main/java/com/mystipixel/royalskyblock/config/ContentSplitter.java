@@ -83,9 +83,11 @@ public final class ContentSplitter {
             }
         }
 
+        int end = container == null ? lines.size() : sectionEnd(lines, start, indent);
+
         List<Integer> keyLines = new ArrayList<>();
         List<String> keyNames = new ArrayList<>();
-        for (int i = start; i < lines.size(); i++) {
+        for (int i = start; i < end; i++) {
             String name = keyAt(lines.get(i), indent);
             if (name != null) {
                 keyLines.add(i);
@@ -108,7 +110,7 @@ public final class ContentSplitter {
                 }
             }
 
-            int bodyEnd = n + 1 < keyLines.size() ? keyLines.get(n + 1) : lines.size();
+            int bodyEnd = n + 1 < keyLines.size() ? keyLines.get(n + 1) : end;
             List<String> body = new ArrayList<>(lines.subList(keyLine + 1, bodyEnd));
             // Trailing blanks and comments introduce the NEXT item, so they are not part of this one.
             while (!body.isEmpty() && isCommentOrBlank(body.get(body.size() - 1))) {
@@ -117,6 +119,48 @@ public final class ContentSplitter {
             blocks.put(keyNames.get(n), new Block(comment, body));
         }
         return blocks;
+    }
+
+    /**
+     * Where a content section starting at {@code start} ends: the first real line indented less than
+     * the items, i.e. the next root-level key. Settings below the section used to count as part of its
+     * last item, which then failed its indentation check — and trimming the section deleted them.
+     */
+    static int sectionEnd(List<String> lines, int start, int itemIndent) {
+        for (int i = start; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (!isCommentOrBlank(line) && leadingSpaces(line) < itemIndent) {
+                // Comments directly above that root key are its own, not the section's.
+                int end = i;
+                while (end > start && isCommentOrBlank(lines.get(end - 1))) {
+                    end--;
+                }
+                return end;
+            }
+        }
+        return lines.size();
+    }
+
+    /** Whether {@code id} can be a file name that loads back as the same id. */
+    public static boolean validId(String id) {
+        if (id.isEmpty()) {
+            return false;
+        }
+        for (int i = 0; i < id.length(); i++) {
+            char c = id.charAt(i);
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' || c == '-')) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static int leadingSpaces(String line) {
+        int n = 0;
+        while (n < line.length() && line.charAt(n) == ' ') {
+            n++;
+        }
+        return n;
     }
 
     /**
@@ -164,24 +208,23 @@ public final class ContentSplitter {
         if (line.length() <= indent || !line.startsWith(" ".repeat(indent))) {
             return null;
         }
-        if (indent > 0 && line.charAt(indent) == ' ') {
+        if (line.charAt(indent) == ' ' || line.charAt(indent) == '	') {
             return null;                                          // deeper than the item level
         }
         String rest = stripTrailing(line).substring(indent);
         if (!rest.endsWith(":")) {
             return null;
         }
-        String name = rest.substring(0, rest.length() - 1);
-        if (name.isEmpty()) {
-            return null;
+        String name = rest.substring(0, rest.length() - 1).strip();
+        // Every key at the item level is an item, whatever it is called. Only accepting valid ids here
+        // made "Mythic:" read as part of the item above it: that item then failed its indentation check
+        // and was skipped, and Mythic was never mentioned. Whether a name can become a file is decided
+        // later, loudly (validId).
+        if (name.length() >= 2 && (name.startsWith("\"") && name.endsWith("\"")
+                || name.startsWith("'") && name.endsWith("'"))) {
+            name = name.substring(1, name.length() - 1);
         }
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (!(Character.isLetterOrDigit(c) && c == Character.toLowerCase(c)) && c != '_' && c != '-') {
-                return null;
-            }
-        }
-        return name;
+        return name.isEmpty() || name.startsWith("#") ? null : name;
     }
 
     private static boolean isCommentOrBlank(String line) {
@@ -245,8 +288,17 @@ public final class ContentSplitter {
             return;
         }
 
+        List<String> invalid = blocks.keySet().stream().filter(id -> !validId(id)).toList();
+        if (!invalid.isEmpty()) {
+            notes.add(monolithName + ": NOT split — these ids can't become file names (lowercase letters,"
+                    + " digits, _ and - only): " + String.join(", ", invalid)
+                    + ". Rename them in " + monolithName + " and run it again. Nothing was changed.");
+            return;
+        }
+
         File folder = new File(plugin.getDataFolder(), folderName);
         String header = headerFor(folderName, headerSample, title);
+        boolean incomplete = false;
 
         for (Map.Entry<String, Block> entry : blocks.entrySet()) {
             String id = entry.getKey();
@@ -258,6 +310,7 @@ public final class ContentSplitter {
             String rendered = renderFile(header.replace("{id}", id), entry.getValue(), keyIndent, bodyIndent);
             if (rendered == null) {
                 skipped.add(folderName + "/" + id + ".yml (unexpected indentation — left alone)");
+                incomplete = true;
                 continue;
             }
             if (apply) {
@@ -269,6 +322,7 @@ public final class ContentSplitter {
                     Files.writeString(target.toPath(), rendered, StandardCharsets.UTF_8);
                 } catch (IOException e) {
                     skipped.add(folderName + "/" + id + ".yml (write failed: " + e.getMessage() + ")");
+                    incomplete = true;
                     continue;
                 }
             }
@@ -276,6 +330,12 @@ public final class ContentSplitter {
         }
 
         if (!apply) {
+            return;
+        }
+        if (incomplete) {
+            // Retiring it now would take the skipped items out of the live config.
+            notes.add(monolithName + ": kept as it is — not every item made it into " + folderName
+                    + "/ (see skipped). Fix those and run it again.");
             return;
         }
         // Retire the monolith only once its content is safely in the folder. perks.yml survives with
@@ -300,7 +360,9 @@ public final class ContentSplitter {
         if (cut < 0) {
             return;
         }
+        int end = sectionEnd(lines, cut + 1, 1);
         List<String> head = new ArrayList<>(lines.subList(0, cut));
+        List<String> tail = new ArrayList<>(lines.subList(end, lines.size()));
         while (!head.isEmpty() && head.get(head.size() - 1).isBlank()) {
             head.remove(head.size() - 1);
         }
@@ -309,6 +371,7 @@ public final class ContentSplitter {
         head.add("# the way every eco plugin ships its content. The file name is the id — copy a file");
         head.add("# there to add one, there is nothing to register. This file keeps only the settings.");
         head.add("");
+        head.addAll(tail);                                    // settings that came after the section
         try {
             Files.copy(file.toPath(), new File(file.getPath() + ".pre-split").toPath(),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING);

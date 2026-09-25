@@ -162,4 +162,39 @@ class ContentSplitterTest {
         assertTrue(rendered.contains("# name   shown in the menu"), "inner spacing must be untouched");
         assertFalse(rendered.contains("  # name"), "the block should be shifted to column 0");
     }
+
+    @Test
+    @DisplayName("an item whose id is not a valid file name is still found, not merged into its neighbour")
+    void badlySpelledIdIsFoundNotSwallowed() {
+        List<String> lines = List.of(
+                "size:",
+                "  tiers: {}",
+                "Mythic:",
+                "  tiers: {}");
+        Map<String, ContentSplitter.Block> blocks = ContentSplitter.sliceBlocks(lines, 0, null);
+
+        assertEquals(List.of("size", "Mythic"), List.copyOf(blocks.keySet()));
+        assertEquals(List.of("  tiers: {}"), blocks.get("size").body(), "size must not absorb Mythic");
+        assertFalse(ContentSplitter.validId("Mythic"), "so the split refuses and names it");
+        assertTrue(ContentSplitter.validId("sea-creature_2"));
+    }
+
+    @Test
+    @DisplayName("settings after the content section are not part of its last item")
+    void settingsAfterTheSectionStayOut() {
+        List<String> lines = List.of(
+                "enabled: true",
+                "perks:",
+                "  speed:",
+                "    tier: 1",
+                "",
+                "# how often perks refresh",
+                "refresh-seconds: 30");
+        Map<String, ContentSplitter.Block> blocks = ContentSplitter.sliceBlocks(lines, 2, "perks");
+
+        assertEquals(List.of("speed"), List.copyOf(blocks.keySet()));
+        assertEquals(List.of("    tier: 1"), blocks.get("speed").body());
+        assertEquals(4, ContentSplitter.sectionEnd(lines, 2, 2),
+                "the section ends before the comment that belongs to refresh-seconds");
+    }
 }
