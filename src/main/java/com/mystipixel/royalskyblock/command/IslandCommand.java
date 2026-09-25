@@ -106,7 +106,12 @@ public final class IslandCommand {
             return;
         }
         String targetName = args[1];
-        UUID targetId = plugin.getServer().getOfflinePlayer(targetName).getUniqueId();
+        org.bukkit.OfflinePlayer known = knownPlayer(targetName);
+        if (known == null) {
+            plugin.messages().send(player, "visit.no-target-island", "player", targetName);
+            return;
+        }
+        UUID targetId = known.getUniqueId();
         if (targetId.equals(player.getUniqueId())) {
             handleHome(player);
             return;
@@ -148,6 +153,19 @@ public final class IslandCommand {
                 plugin.messages().send(player, "visit.visiting", "player", targetName);
             }
         }));
+    }
+
+    /**
+     * A player by name without touching the network: online, or known to this server's user cache.
+     *
+     * <p>{@code getOfflinePlayer(String)} looks a name it has never seen up with Mojang, blocking the
+     * server thread for the round trip. {@code /is visit} passes it whatever a player typed, so anyone
+     * could stall the server with made-up names. A name this server has never seen cannot have an
+     * island here anyway.
+     */
+    private @org.jetbrains.annotations.Nullable org.bukkit.OfflinePlayer knownPlayer(String name) {
+        Player online = plugin.getServer().getPlayerExact(name);
+        return online != null ? online : plugin.getServer().getOfflinePlayerIfCached(name);
     }
 
     void handleDelete(CommandSender sender, String[] args) {
@@ -765,8 +783,8 @@ public final class IslandCommand {
                 sender.sendMessage(Text.color("&cUsage: &e/is admin trash restore <archive> <player>"));
                 return;
             }
-            org.bukkit.OfflinePlayer target = plugin.getServer().getOfflinePlayer(args[4]);
-            if (!target.hasPlayedBefore() && !target.isOnline()) {
+            org.bukkit.OfflinePlayer target = knownPlayer(args[4]);
+            if (target == null || !target.hasPlayedBefore() && !target.isOnline()) {
                 sender.sendMessage(Text.color("&cNo player named &f" + args[4] + "&c has played here."));
                 return;
             }

@@ -121,7 +121,16 @@ public final class ItemSpec {
                 profile.setProperty(new com.destroystokyo.paper.profile.ProfileProperty("textures", texture));
                 skull.setPlayerProfile(profile);
             } else if (head != null && !head.isBlank()) {
-                skull.setOwningPlayer(Bukkit.getOfflinePlayer(apply(head, placeholders)));
+                // Never getOfflinePlayer(String): for a name the server has not seen it asks Mojang,
+                // on the server thread, while the menu is being drawn. An unknown name gets a plain head.
+                String name = apply(head, placeholders);
+                org.bukkit.OfflinePlayer owner = Bukkit.getPlayerExact(name);
+                if (owner == null) {
+                    owner = Bukkit.getOfflinePlayerIfCached(name);
+                }
+                if (owner != null) {
+                    skull.setOwningPlayer(owner);
+                }
             }
         } catch (Throwable ignored) {
             // a malformed texture must never break the menu
