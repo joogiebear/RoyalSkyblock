@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.listener;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.util.Text;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -46,6 +47,12 @@ public final class VoidListener implements Listener {
         }
 
         Player player = event.getPlayer();
+        // Admins exploring below an island — flying in creative, watching in spectator, or holding the
+        // bypass — are not falling. With action: kill they were killed on the spot.
+        GameMode mode = player.getGameMode();
+        if (mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR || player.hasPermission("royalskyblock.bypass")) {
+            return;
+        }
         String action = plugin.conf().getString("island.void.action", "teleport").toLowerCase(Locale.ROOT);
         if (action.equals("none")) {
             return;
