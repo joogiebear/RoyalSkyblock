@@ -31,6 +31,8 @@ messages:
     players-only: "&cOnly players can do that."
     reloaded: "&aConfiguration reloaded."
     unknown-subcommand: "&cUnknown subcommand &e/is %command%&c. Try &e/is help&c."
+    # A command from npc-only-commands (config.yml) typed in chat. %where% is that entry's `where`.
+    npc-only: "&cYou can only do that at the &e%where%&c in the hub."
 
   island:
     # Shown when the island portal has nowhere to send a player (no spawn world configured).

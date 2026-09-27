@@ -188,7 +188,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
     private fun completeAdmin(sender: CommandSender, args: List<String>): List<String> {
         if (args.size <= 1) {
             return startingWith(listOf("status", "border", "mobspawn", "testworld", "loadtest",
-                "schematic", "upgrade", "chesttest", "split-content", "trash", "orphans"), args.lastOrNull())
+                "schematic", "upgrade", "chesttest", "split-content", "trash", "orphans", "npc-open"), args.lastOrNull())
         }
         if (args.size != 2) {
             return emptyList()

@@ -6,6 +6,7 @@ import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
+import com.mystipixel.royalskyblock.listener.CommandGateListener;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
@@ -736,6 +737,10 @@ public final class IslandCommand {
             handleOrphansAdmin(sender, args);
             return;
         }
+        if (action.equals("npc-open")) {
+            handleNpcOpen(sender, args);
+            return;
+        }
         sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
         sender.sendMessage(Text.color("&8» &e/is admin split-content [confirm] &7— upgrades.yml/perks.yml → one file each"));
         sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7— island mob spawning"));
@@ -746,6 +751,32 @@ public final class IslandCommand {
         sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
         sender.sendMessage(Text.color("&8» &e/is admin trash <list|restore <archive> <player>> &7— deleted-island archives"));
         sender.sendMessage(Text.color("&8» &e/is admin orphans [purge] &7— worlds no island row references"));
+        sender.sendMessage(Text.color("&8» &e/is admin npc-open <player> <command> &7— run a command for a player (hub NPCs)"));
+    }
+
+    /**
+     * {@code /is admin npc-open <player> <command...>} — how a hub NPC opens an {@code npc-only-commands}
+     * entry. The NPC runs it from the console; the command is then performed as the player, which never
+     * passes the typed-command gate but still asks the gamemode gate, so an Ironman profile can't reach
+     * the Bazaar by clicking its NPC either.
+     */
+    private void handleNpcOpen(CommandSender sender, String[] args) {
+        if (args.length < 4) {
+            sender.sendMessage(Text.color("&cUsage: &e/is admin npc-open <player> <command>"));
+            return;
+        }
+        Player target = plugin.getServer().getPlayerExact(args[2]);
+        if (target == null) {
+            sender.sendMessage(Text.color("&c" + args[2] + " is not online."));
+            return;
+        }
+        String command = String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length));
+        // Next tick: an NPC click can arrive mid-interaction, and the command may open an inventory.
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (target.isOnline() && !CommandGateListener.refuse(plugin, target, command)) {
+                target.performCommand(command);
+            }
+        });
     }
 
     /**

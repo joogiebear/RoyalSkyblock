@@ -355,6 +355,30 @@ spawn:
     # Chat line shown on rescue (& colour codes; leave blank for silent).
     message: "&7You fell off the hub and were brought back to spawn."
 
+# ── NPC-only commands ─────────────────────────────────────────────────────────
+# Make services visit-only, Hypixel style: a command listed here is refused when a player TYPES
+# it, and they're told where to go instead. Hub NPCs still open it, and so do menu buttons and hotbar
+# items, because commands run by a plugin never pass through the typed-command check.
+#
+# Point each NPC at `/is admin npc-open <player> <command>` (run from the console, e.g. Citizens'
+# `npc command add is admin npc-open <p> bazaar`). That route still applies gamemodes/*.yml, so
+# an Ironman profile can't reach the Bazaar by clicking its NPC.
+#
+# List the command's main name or any alias; the rest of its aliases are covered automatically.
+# `where` fills %where% in lang.yml's general.npc-only message.
+#
+# royalskyblock.npconly.<key> lets a player type that one anyway, e.g. royalskyblock.npconly.bazaar
+# as a perk. Ops have it by default.
+npc-only-commands:
+  enabled: false
+  commands:
+    bazaar:
+      where: "Bazaar"
+    ah:
+      where: "Auction House"
+    bank:
+      where: "Bank"
+
 # ── Offline simulation (catch-up) ─────────────────────────────────────────────
 # Islands unload when empty (see world.unload-grace-seconds), so nothing on them ticks while the
 # owner is away. On the next visit RoyalSkyblock fast-forwards what that time should have produced.

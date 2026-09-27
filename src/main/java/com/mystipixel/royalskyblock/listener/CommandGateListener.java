@@ -2,13 +2,18 @@ package com.mystipixel.royalskyblock.listener;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.profile.Profile;
+import org.bukkit.Bukkit;
+import org.bukkit.command.Command;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerCommandPreprocessEvent;
 
+import java.util.HashSet;
 import java.util.Locale;
+import java.util.Set;
 
 /**
  * Enforces gamemode command rules (e.g. Ironman blocking {@code /ah}, {@code /bazaar}) by cancelling
@@ -29,9 +34,54 @@ public final class CommandGateListener implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = true)
     public void onCommand(PlayerCommandPreprocessEvent event) {
-        if (refuse(plugin, event.getPlayer(), event.getMessage())) {
+        if (refuseTyped(event.getPlayer(), event.getMessage()) || refuse(plugin, event.getPlayer(), event.getMessage())) {
             event.setCancelled(true);
         }
+    }
+
+    /**
+     * Refuses a command listed under {@code npc-only-commands} when the player types it. Only typed
+     * commands reach this listener ({@link Player#performCommand} skips the event), so NPCs, menu buttons
+     * and hotbar items still run them; hub NPCs go through {@code /is admin npc-open}, which keeps the
+     * gamemode gate. {@code royalskyblock.npconly.<command>} lets a player type one anyway, which is the
+     * hook for perks that unlock remote access.
+     */
+    private boolean refuseTyped(Player player, String commandLine) {
+        ConfigurationSection section = plugin.conf().getConfigurationSection("npc-only-commands");
+        if (section == null || !section.getBoolean("enabled", false)) {
+            return false;
+        }
+        ConfigurationSection commands = section.getConfigurationSection("commands");
+        String key = commands == null ? null : npcOnlyKey(commands, commandWord(commandLine));
+        if (key == null || player.hasPermission("royalskyblock.npconly." + key)) {
+            return false;
+        }
+        plugin.messages().send(player, "general.npc-only", "where", commands.getString(key + ".where", key));
+        return true;
+    }
+
+    /**
+     * The configured key {@code word} reaches, or null. Aliases and namespaced labels resolve through the
+     * command map, so listing {@code bazaar} also covers {@code /bz} and {@code /royalbazaar:bazaar}.
+     */
+    private static String npcOnlyKey(ConfigurationSection commands, String word) {
+        if (word.isEmpty()) {
+            return null;
+        }
+        Set<String> names = new HashSet<>();
+        names.add(word);
+        names.add(word.substring(word.indexOf(':') + 1));
+        Command command = Bukkit.getCommandMap().getCommand(word);
+        if (command != null) {
+            names.add(command.getName().toLowerCase(Locale.ROOT));
+            command.getAliases().forEach(alias -> names.add(alias.toLowerCase(Locale.ROOT)));
+        }
+        for (String key : commands.getKeys(false)) {
+            if (names.contains(key.toLowerCase(Locale.ROOT))) {
+                return key;
+            }
+        }
+        return null;
     }
 
     /**
