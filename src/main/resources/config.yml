@@ -345,6 +345,15 @@ spawn:
   z: 0.5
   yaw: 0.0
   pitch: 0.0
+  # Catch players who fall off the hub. A protected hub usually has no damage at all, so without this
+  # someone who walks off the edge falls forever instead of dying to the void.
+  void:
+    enabled: true
+    # Below this Y the player is sent back to spawn. Keep it under the lowest part of the hub build
+    # (the world floor is -64; vanilla void damage starts at -128).
+    below-y: -70
+    # Chat line shown on rescue (& colour codes; leave blank for silent).
+    message: "&7You fell off the hub and were brought back to spawn."
 
 # ── Offline simulation (catch-up) ─────────────────────────────────────────────
 # Islands unload when empty (see world.unload-grace-seconds), so nothing on them ticks while the

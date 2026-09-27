@@ -21,6 +21,8 @@ import java.util.Locale;
  * this does what {@code island.void.action} says — teleport them home (default), kill instantly
  * (still respecting keep_inventory), or nothing.
  *
+ * <p>The spawn world gets the same catch under {@code spawn.void}, always as a teleport back to spawn.
+ *
  * <p>Everything is config-driven; the per-move cost is two config reads plus a cheap Y compare, and
  * the island lookup only runs on the rare tick a player is actually below the line.
  */
@@ -34,23 +36,27 @@ public final class VoidListener implements Listener {
 
     @EventHandler(ignoreCancelled = true)
     public void onMove(PlayerMoveEvent event) {
+        Location to = event.getTo();
+        if (to == null || to.getWorld() == null) {
+            return;
+        }
+        if (to.getWorld().getName().equals(plugin.conf().getString("spawn.world", "world"))) {
+            onSpawnWorldMove(event.getPlayer(), to);
+            return;
+        }
         if (!plugin.conf().getBoolean("island.void.enabled", true)) {
             return;
         }
-        Location to = event.getTo();
-        if (to == null || to.getY() >= plugin.conf().getDouble("island.void.below-y", 0.0)) {
+        if (to.getY() >= plugin.conf().getDouble("island.void.below-y", 0.0)) {
             return;                              // cheap early-out for the 99.9% of moves above the line
         }
         Island island = plugin.islands().getIslandByWorld(to.getWorld());
         if (island == null) {
-            return;                              // only islands — the hub/other worlds are left alone
+            return;                              // only islands and the spawn world — others are left alone
         }
 
         Player player = event.getPlayer();
-        // Admins exploring below an island — flying in creative, watching in spectator, or holding the
-        // bypass — are not falling. With action: kill they were killed on the spot.
-        GameMode mode = player.getGameMode();
-        if (mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR || player.hasPermission("royalskyblock.bypass")) {
+        if (isExempt(player)) {
             return;
         }
         String action = plugin.conf().getString("island.void.action", "teleport").toLowerCase(Locale.ROOT);
@@ -79,5 +85,34 @@ public final class VoidListener implements Listener {
         if (message != null && !message.isBlank()) {
             player.sendMessage(Text.color(message));
         }
+    }
+
+    /**
+     * The hub is usually protected with no damage at all, so a player who walks off its edge never
+     * dies of the void — they fall forever. Catch them below {@code spawn.void.below-y} and put them
+     * back on the spawn point.
+     */
+    private void onSpawnWorldMove(Player player, Location to) {
+        if (!plugin.conf().getBoolean("spawn.void.enabled", true)
+                || to.getY() >= plugin.conf().getDouble("spawn.void.below-y", -70.0)
+                || isExempt(player)) {
+            return;
+        }
+        Location spawn = plugin.islands().resolveSpawnLocation();
+        if (spawn == null || spawn.getWorld() == null) {
+            return;
+        }
+        player.teleport(spawn);
+        String message = plugin.conf().getString("spawn.void.message", "");
+        if (message != null && !message.isBlank()) {
+            player.sendMessage(Text.color(message));
+        }
+    }
+
+    // Admins exploring below the world — flying in creative, watching in spectator, or holding the
+    // bypass — are not falling. With action: kill they would be killed on the spot.
+    private static boolean isExempt(Player player) {
+        GameMode mode = player.getGameMode();
+        return mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR || player.hasPermission("royalskyblock.bypass");
     }
 }
