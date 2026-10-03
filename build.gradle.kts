@@ -79,9 +79,12 @@ dependencies {
 
     // JDBC drivers + connection pool are downloaded at runtime by Paper's library loader
     // (see plugin.yml `libraries`), so they are only needed here for compilation.
-    compileOnly("org.xerial:sqlite-jdbc:3.46.1.3")
-    compileOnly("com.zaxxer:HikariCP:5.1.0")
-    compileOnly("com.mysql:mysql-connector-j:8.4.0")
+    // These three versions MUST stay identical to the `libraries:` block in plugin.yml — that
+    // block is what a player's server actually downloads and runs. Compiling against one version
+    // and shipping another is the failure mode this pairing exists to prevent.
+    compileOnly("org.xerial:sqlite-jdbc:3.53.4.0")
+    compileOnly("com.zaxxer:HikariCP:7.1.0")
+    compileOnly("com.mysql:mysql-connector-j:26.7.0")
 
     compileOnly("me.clip:placeholderapi:2.11.6")
 
@@ -125,7 +128,7 @@ dependencies {
     testImplementation("io.papermc.paper:paper-api:26.2.build.123-stable")
 
     // The real SQLite driver, so the connection settings are checked against what it actually applies.
-    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
     // RsbFileLoader implements ASP's SlimeLoader, so its tests need the interface to compile.
     testImplementation("com.infernalsuite.asp:api:4.1.0") { isTransitive = false }
 
