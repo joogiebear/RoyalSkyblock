@@ -25,7 +25,9 @@ repositories {
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     // Advanced Slime Paper (ASP) — the maintained SlimeWorld lineage, providing the per-island
     // world backend. RoyalSkyblock compiles against its API; the server runs the ASP fork.
-    maven("https://repo.infernalsuite.com/repository/maven-snapshots/")
+    // Deliberately the RELEASES repository, not maven-snapshots: it cannot serve a -SNAPSHOT at
+    // all, so the build cannot quietly drift back onto a moving version.
+    maven("https://repo.infernalsuite.com/repository/maven-releases/")
     // WorldEdit / FAWE API for schematic pasting (soft dependency).
     maven("https://maven.enginehub.org/repo/")
 }
@@ -62,13 +64,27 @@ dependencies {
     // NOTE: the ASP fork exposes the world API but NOT the file/mysql loader classes on the plugin
     // classpath, so RoyalSkyblock ships its own SlimeLoader implementations (world.asp.loaders.*)
     // rather than depending on ASP's loader artifacts.
-    compileOnly("com.infernalsuite.asp:api:4.2.0-SNAPSHOT")
+    //
+    // Pinned to the 4.1.0 RELEASE. This was 4.2.0-SNAPSHOT, which made the build irreproducible:
+    // the snapshot republishes under the same coordinate (build 39 at the time of writing), so the
+    // API this plugin compiles against could change without a commit here. 4.1.0 is the newest
+    // thing ASP has actually released. The only API difference that matters is one addition in the
+    // snapshot, SlimePropertyMap#getOptionalValue, which this plugin does not call.
+    //
+    // 4.1.0 publishes Gradle module metadata declaring org.gradle.jvm.version = 21, against this
+    // project's 25. That direction resolves fine — a Java 25 consumer may use a Java 21 library;
+    // only the reverse is rejected. (The snapshot shipped Java 25 bytecode, so the JVM-version
+    // note further up about ASP forcing the 25 target is now carried by paper-api alone.)
+    compileOnly("com.infernalsuite.asp:api:4.1.0")
 
     // JDBC drivers + connection pool are downloaded at runtime by Paper's library loader
     // (see plugin.yml `libraries`), so they are only needed here for compilation.
-    compileOnly("org.xerial:sqlite-jdbc:3.46.1.3")
-    compileOnly("com.zaxxer:HikariCP:5.1.0")
-    compileOnly("com.mysql:mysql-connector-j:8.4.0")
+    // These three versions MUST stay identical to the `libraries:` block in plugin.yml — that
+    // block is what a player's server actually downloads and runs. Compiling against one version
+    // and shipping another is the failure mode this pairing exists to prevent.
+    compileOnly("org.xerial:sqlite-jdbc:3.53.4.0")
+    compileOnly("com.zaxxer:HikariCP:7.1.0")
+    compileOnly("com.mysql:mysql-connector-j:26.7.0")
 
     compileOnly("me.clip:placeholderapi:2.11.6")
 
@@ -112,9 +128,9 @@ dependencies {
     testImplementation("io.papermc.paper:paper-api:26.2.build.123-stable")
 
     // The real SQLite driver, so the connection settings are checked against what it actually applies.
-    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
+    testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
     // RsbFileLoader implements ASP's SlimeLoader, so its tests need the interface to compile.
-    testImplementation("com.infernalsuite.asp:api:4.2.0-SNAPSHOT") { isTransitive = false }
+    testImplementation("com.infernalsuite.asp:api:4.1.0") { isTransitive = false }
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testImplementation("org.mockito:mockito-core:5.14.2")
