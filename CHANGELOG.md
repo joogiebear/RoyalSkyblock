@@ -1,3 +1,9 @@
+## 2026.40.0 — 2026-10-03
+
+### ✨ Features
+- make listed commands NPC-only, opened via /is admin npc-open (`1c39aa7`)
+- send players who fall off the hub back to spawn (`cb95d0e`)
+
 ## 2026.39.3 — 2026-09-24
 
 ### ♻️ Refactors
