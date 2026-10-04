@@ -76,21 +76,12 @@ jobs:
         if: steps.prep.outputs.release == 'true'
         run: sed -i 's/^version=.*/version=${{ steps.prep.outputs.version }}/' gradle.properties
 
+      # Smoke test: the release must compile and pass its tests. The jar is deliberately NOT published here: the source is free to build
+      # (./gradlew build), and the prebuilt, supported jar is sold on BuiltByBit. bin/ holds only the libreforgeJar output (the jar with
+      # libreforge embedded) and is the one to ship; build/libs holds the plain and -sources jars, which must NOT be released.
       - name: Build
         if: steps.prep.outputs.release == 'true'
         run: ./gradlew build --no-daemon
-
-      # bin/ holds only the libreforgeJar output (the jar with libreforge embedded); build/libs
-      # holds the plain and -sources jars, which must NOT be released.
-      - name: Locate and name jar
-        if: steps.prep.outputs.release == 'true'
-        id: jar
-        run: |
-          set -euo pipefail
-          JAR=$(ls bin/*.jar | head -1)
-          VJAR="${{ steps.prep.outputs.artifact_id }}-${{ steps.prep.outputs.version }}.jar"
-          cp "$JAR" "$VJAR"
-          echo "path=$VJAR" >> "$GITHUB_OUTPUT"
 
       - name: Commit bump + changelog, tag
         if: steps.prep.outputs.release == 'true'
@@ -110,7 +101,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ steps.prep.outputs.version }}" \
-            "${{ steps.jar.outputs.path }}" \
             --title "${{ steps.prep.outputs.version }}" \
             --notes-file RELEASE_NOTES.md
 
