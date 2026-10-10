@@ -29,69 +29,27 @@ import java.util.Locale;
 import java.util.UUID;
 
 /**
- * {@link Storage} on eco's own data layer, so RoyalSkyblock stops configuring a database.
+ * {@link Storage} on eco's data layer ({@code storage.type: ECO}): islands, profiles, rosters and
+ * banks go wherever eco's {@code data-handler} keeps everything else. Each row is one
+ * {@link PersistentDataKeyType#CONFIG} value on a UUID (eco accepts any UUID, not just a player's);
+ * rows without their own UUID get a name-based one from {@link #derived}.
  *
- * <p>Every other plugin in the suite persists through eco: one {@code data-handler} in eco's config
- * (yaml / MySQL / MariaDB / MongoDB) serves all of them, and none of them ship a {@code storage}
- * section. Selecting {@code storage.type: ECO} puts this plugin in the same position — islands,
- * profiles, rosters and banks land wherever eco already keeps EcoSkills levels and EcoBits balances,
- * and changing backend becomes eco's job rather than ours. eco's own {@code perform-data-migration}
- * then moves this data with everything else.
+ * <p>Player-scoped keys live on {@code rsb-player:<uuid>}, never the player's own UUID:
+ * {@link com.mystipixel.royalskyblock.hooks.EcoProfileBridge} swaps every non-local key on the player's
+ * profile when they switch profiles. Keys are built in the constructor, not statically, so a server on
+ * SQL storage never registers them. Writes are buffered by eco, so a hard crash loses the last save
+ * interval.
  *
- * <h2>How a table becomes a key</h2>
- *
- * eco stores values as typed {@link PersistentDataKey}s against a UUID — {@link PlayerProfile#load}
- * accepts <em>any</em> UUID, not just a real player's, so a UUID works as a primary key and each row
- * becomes one {@link PersistentDataKeyType#CONFIG} value. Islands and profiles already have UUIDs;
- * everything else gets a deterministic name-based one from {@link #derived}.
- *
- * <h2>Three things that are easy to get wrong</h2>
- *
- * <p><b>Player-scoped rows must not sit on the player's own UUID.</b> It is the obvious choice and it
- * silently corrupts profile switching: {@link com.mystipixel.royalskyblock.hooks.EcoProfileBridge}
- * copies <em>every</em> non-local key off the player's live profile into a per-profile shadow on each
- * switch, so {@code active_profile} — written during that very switch — would be swapped along with
- * their skill levels. Player-scoped keys therefore live on {@code rsb-player:<uuid>}, a UUID the
- * bridge never visits. The bridge also skips this plugin's namespace now, but the separation is what
- * actually makes it safe.
- *
- * <p><b>Keys are constructed here, not statically.</b> A {@link PersistentDataKey} registers itself
- * with eco in its constructor and is then visited by every full-key iteration in the suite. Building
- * them in the constructor means a server on SQL storage never registers them at all.
- *
- * <p><b>Durability is eco's, not SQLite's.</b> Writes land in eco's write buffer and reach the
- * handler on its save interval rather than at once, so a hard crash loses whatever the buffer held —
- * the same exposure every eco plugin has for levels and balances. A clean shutdown is safe by
- * construction: eco disables after its dependents, so its final save runs after our last write.
- *
- * <h2>Multi-node</h2>
- *
- * <p>Non-local keys go to eco's shared handler and local ones to a per-node file — eco uses exactly
- * this split for its own network-wide {@code server_id} against a per-node {@code local_server_id}.
- * Every key here is non-local, so on MySQL/MongoDB all nodes read and write one set of islands.
- *
- * <p>What that does <em>not</em> buy is cache coherency. eco pins a loaded profile in memory and only
- * drops it on player login/quit, so a UUID that is not a player stays cached for the node's whole
- * uptime and a write on one node is invisible to another until it restarts.
- *
- * <p>Stale reads are the smaller half. The index lists here — {@code island_index},
- * {@code pending_index}, and each player's {@code owned_profiles}/{@code member_profiles} — are
- * read-modify-write, and the lock around that only spans one JVM. A node rewriting a list from its
- * stale copy drops every entry another node added: islands vanish from the leaderboard and the boot
- * warm-up, pending upgrades are never loaded again, a profile falls off its owner's list. So this
- * store is <b>single-node</b>: networks use SQL storage, and the plugin warns at boot when this store
- * sits on a handler several servers can share. Making it network-safe would mean replacing the
- * indexes with eco's bulk reads ({@code readAllProfileValues}), and even then a player hopping servers
- * faster than eco's save interval could read their own profile list stale.
- *
- * @see Storage for the shape this implements and why {@link #getAllIslands()} is the hard part
+ * <p>Single-node only: eco caches non-player profiles for the whole uptime, and the index lists are
+ * read-modify-write under a JVM-local lock, so two nodes would drop each other's entries. Networks use
+ * SQL storage; the plugin warns at boot when this store sits on a shared handler.
  */
 public final class EcoStorage implements Storage {
 
-    /** Bumped only if a stored layout changes incompatibly; also marks a row as present at all. */
+    // bumped only if a stored layout changes incompatibly; also marks a row as present at all
     private static final int SCHEMA = 1;
 
-    /** Ledger entries kept per account. The UI asks for the newest few; the rest are dropped. */
+    // ledger entries kept per account; older ones are dropped
     private static final int MAX_TXNS = 100;
 
     private final RoyalSkyblockPlugin plugin;
@@ -104,21 +62,20 @@ public final class EcoStorage implements Storage {
     private final PersistentDataKey<Config> bankKey;
     private final PersistentDataKey<List<String>> bankTxnsKey;
 
-    // Lookups that SQL answered with an index. Each lives on the UUID it is looked up by.
+    // lookups SQL answered with an index; each lives on the UUID it is looked up by
     private final PersistentDataKey<String> activeProfileKey;   // on rsb-player:<player>
     private final PersistentDataKey<String> islandOfKey;        // on the profile's UUID
     private final PersistentDataKey<List<String>> ownedKey;     // on rsb-player:<player>
     private final PersistentDataKey<List<String>> memberOfKey;  // on rsb-player:<player>
     private final PersistentDataKey<List<String>> payoutKey;    // on rsb-player:<player>
 
-    // Full scans. On the server profile (the nil UUID) so every node shares one list.
+    // full scans, on the server profile (nil UUID) so every node shares one list
     private final PersistentDataKey<List<String>> islandIndexKey;
     private final PersistentDataKey<List<String>> pendingIndexKey;
 
-    /** Set once a {@link SqliteMigration} has populated this store; see {@link #migrationMarker()}. */
     private final PersistentDataKey<String> migratedFromKey;
 
-    /** Guards read-modify-write on the shared index lists, which eco has no atomic update for. */
+    // guards read-modify-write on the shared index lists; eco has no atomic update
     private final Object indexLock = new Object();
 
     public EcoStorage(RoyalSkyblockPlugin plugin) {
@@ -142,8 +99,6 @@ public final class EcoStorage implements Storage {
         this.migratedFromKey = string(SqliteMigration.MARKER_KEY);
     }
 
-    // ── key construction ───────────────────────────────────────────────────────
-
     private PersistentDataKey<Config> config(String name) {
         return new PersistentDataKey<>(new NamespacedKey(plugin, name), PersistentDataKeyType.CONFIG,
                 Configs.empty());
@@ -158,19 +113,16 @@ public final class EcoStorage implements Storage {
                 List.of());
     }
 
-    // ── lifecycle ──────────────────────────────────────────────────────────────
-
     @Override
     public boolean connect() {
         if (!Bukkit.getPluginManager().isPluginEnabled("eco")) {
-            plugin.getLogger().severe("storage.type is ECO but eco is not enabled — cannot continue.");
+            plugin.getLogger().severe("storage.type is ECO but eco is not enabled: cannot continue.");
             return false;
         }
         plugin.getLogger().info("RoyalSkyblock connected to ECO storage (eco data-handler: " + handlerName() + ").");
         return true;
     }
 
-    /** eco's configured handler, for the boot log. Best-effort: it is a nicety, not a dependency. */
     private String handlerName() {
         try {
             org.bukkit.plugin.Plugin eco = Bukkit.getPluginManager().getPlugin("eco");
@@ -181,14 +133,7 @@ public final class EcoStorage implements Storage {
         }
     }
 
-    // ── migration support ──────────────────────────────────────────────────────
-
-    /**
-     * Whether this store already holds islands.
-     *
-     * <p>Asked before a migration, to tell an empty store waiting for data from a live one that would
-     * be merged into. Cheap: the index is one keyed read.
-     */
+    /** Whether this store already holds islands, so a migration won't merge into a live store. */
     public boolean hasIslands() {
         return !readIndex(islandIndexKey).isEmpty();
     }
@@ -205,11 +150,8 @@ public final class EcoStorage implements Storage {
     @Override
     public void close() {
         // Nothing to release: eco owns the connection and flushes on its own disable, which runs after
-        // ours because it is a hard dependency. Forcing a save here is not possible through the API
-        // and would not add anything if it were.
+        // ours because it is a hard dependency.
     }
-
-    // ── islands ────────────────────────────────────────────────────────────────
 
     @Override
     public @Nullable Island getIsland(UUID id) {
@@ -220,7 +162,7 @@ public final class EcoStorage implements Storage {
         String worldName = row.getStringOrNull("world-name");
         String profileId = row.getStringOrNull("profile-id");
         if (worldName == null || profileId == null) {
-            plugin.getLogger().severe("Island " + id + " is stored without a world or profile — skipping it.");
+            plugin.getLogger().severe("Island " + id + " is stored without a world or profile: skipping it.");
             return null;
         }
         Island island = new Island(id, uuid(profileId), worldName, getLong(row, "created-at"));
@@ -244,13 +186,9 @@ public final class EcoStorage implements Storage {
     }
 
     /**
-     * Every island, resolved one keyed read at a time from the shared index.
-     *
-     * <p>The index is the price of a store with no query layer, and it can drift — a crash between
-     * writing an island and writing the index leaves an island nothing lists. It repairs itself
-     * because {@link #saveIsland} re-asserts membership on every save and islands are saved whenever
-     * their level is recalculated, so a dropped entry comes back within a cycle rather than needing an
-     * admin. Ids that no longer resolve are pruned here, which is the only write on this read path.
+     * Every island, resolved one keyed read at a time from the shared index. The index can drift after a
+     * crash; {@link #saveIsland} re-adds membership on every save, and ids that no longer resolve are
+     * pruned here.
      */
     @Override
     public List<Island> getAllIslands() {
@@ -318,8 +256,6 @@ public final class EcoStorage implements Storage {
         return true;
     }
 
-    // ── profiles ───────────────────────────────────────────────────────────────
-
     @Override
     public @Nullable Profile getProfile(UUID id) {
         Config row = read(id, profileKey);
@@ -328,7 +264,7 @@ public final class EcoStorage implements Storage {
         }
         String owner = row.getStringOrNull("owner");
         if (owner == null) {
-            plugin.getLogger().severe("Profile " + id + " is stored without an owner — skipping it.");
+            plugin.getLogger().severe("Profile " + id + " is stored without an owner: skipping it.");
             return null;
         }
         Profile profile = new Profile(id, uuid(owner), orEmpty(row.getStringOrNull("name")),
@@ -372,11 +308,8 @@ public final class EcoStorage implements Storage {
     }
 
     /**
-     * Save a profile and reconcile the three lookups that point at it.
-     *
-     * <p>The roster is replaced wholesale, exactly as the SQL version deletes and re-inserts it, so
-     * anyone dropped from it also has to lose their {@code member_profiles} entry. That needs the
-     * roster as it was, which is why the previous row is read before the new one overwrites it.
+     * Save a profile and reconcile the lookups that point at it. The roster is replaced wholesale, so the
+     * previous row is read first to drop removed members' {@code member_profiles} entries.
      */
     @Override
     public boolean saveProfile(Profile profile) {
@@ -425,9 +358,9 @@ public final class EcoStorage implements Storage {
         return true;
     }
 
-    /** Parse one roster entry, or {@code null} if it is malformed. Callers report; this only parses. */
+    // parse one roster entry, or null if malformed; callers report
     static @Nullable ProfileMember readMember(String entry) {
-        // uuid;name;role;joinedAt — a name is [A-Za-z0-9_] so it can never contain the separator.
+        // uuid;name;role;joinedAt (a name is [A-Za-z0-9_] so it never contains the separator)
         String[] parts = entry.split(";", -1);
         if (parts.length != 4) {
             return null;
@@ -445,8 +378,6 @@ public final class EcoStorage implements Storage {
         return member.uuid() + ";" + orEmpty(member.name()) + ";" + member.role().name() + ";" + member.joinedAt();
     }
 
-    // ── active profile ─────────────────────────────────────────────────────────
-
     @Override
     public @Nullable UUID getActiveProfile(UUID player) {
         String id = read(derived("rsb-player", player.toString()), activeProfileKey);
@@ -458,8 +389,6 @@ public final class EcoStorage implements Storage {
         write(derived("rsb-player", player.toString()), activeProfileKey,
                 profileId == null ? "" : profileId.toString());
     }
-
-    // ── per-profile player state ───────────────────────────────────────────────
 
     @Override
     public @Nullable ProfileData getProfileData(UUID profileId, UUID playerUuid) {
@@ -493,8 +422,6 @@ public final class EcoStorage implements Storage {
         write(profileDataUuid(profileId, playerUuid), profileDataKey, Configs.empty());
     }
 
-    // ── coop payouts ───────────────────────────────────────────────────────────
-
     @Override
     public void addCoopPayout(UUID player, UUID fromProfile) {
         addToIndex(payoutKey, derived("rsb-player", player.toString()), fromProfile.toString());
@@ -518,8 +445,6 @@ public final class EcoStorage implements Storage {
         return derived("rsb-data", profileId + ":" + playerUuid);
     }
 
-    // ── pending upgrades ───────────────────────────────────────────────────────
-
     @Override
     public List<PendingUpgrade> getAllPending() {
         List<PendingUpgrade> out = new ArrayList<>();
@@ -533,7 +458,7 @@ public final class EcoStorage implements Storage {
     private List<PendingUpgrade> readPending(UUID islandId) {
         List<PendingUpgrade> out = new ArrayList<>();
         for (String entry : orEmpty(read(islandId, pendingKey).getStringsOrNull("entries"))) {
-            // upgradeKey;targetTier;completeAt — upgrade keys are config ids, so no separator in them.
+            // upgradeKey;targetTier;completeAt (upgrade keys are config ids, so no separator in them)
             String[] parts = entry.split(";", -1);
             if (parts.length != 3) {
                 plugin.getLogger().warning("Ignoring malformed pending upgrade on " + islandId + ": " + entry);
@@ -570,16 +495,14 @@ public final class EcoStorage implements Storage {
         }
         row.set("entries", entries);
         write(islandId, pendingKey, row);
-        // The index carries only islands that have something cooking, so getAllPending stays
-        // proportional to the timers running rather than to every island ever made.
+        // the index only carries islands with something cooking, so getAllPending stays proportional to
+        // running timers
         if (entries.isEmpty()) {
             removeFromIndex(pendingIndexKey, islandId.toString());
         } else {
             addToIndex(pendingIndexKey, islandId.toString());
         }
     }
-
-    // ── bank ───────────────────────────────────────────────────────────────────
 
     @Override
     public @Nullable BankAccount getBankAccount(String accountId) {
@@ -593,13 +516,8 @@ public final class EcoStorage implements Storage {
     }
 
     /**
-     * Write the balance and append the ledger entry.
-     *
-     * <p>SQL did both in one transaction so they could not disagree; eco has no transaction, so they
-     * are two writes. They land in the same in-memory buffer microseconds apart and are flushed
-     * together, which makes a split far less likely than the wording suggests — but a crash between
-     * them would keep the balance and lose the ledger line, never the reverse, because the balance is
-     * written first. A ledger that under-reports is the safer failure of the two.
+     * Write the balance and append the ledger entry. eco has no transactions, so these are two writes;
+     * the balance goes first, so a crash between them loses a ledger line, never the balance.
      */
     @Override
     public boolean saveBankAccountWithTxn(BankAccount account, String type, double amount,
@@ -625,15 +543,8 @@ public final class EcoStorage implements Storage {
         return true;
     }
 
-    /**
-     * Write an account and its existing ledger as they already are.
-     *
-     * <p>For {@link SqliteMigration} only. The normal write path appends a transaction because a
-     * balance never changes without one — but a migration is not a transaction, and going through it
-     * would stamp an invented entry on every account and discard the history it was supposed to carry
-     * across. Entries are newest-first, matching what the reader expects and what the ledger is capped
-     * to.
-     */
+    // For SqliteMigration only: writes the account and its existing ledger (newest first) without
+    // appending a transaction, so the migrated history is kept.
     void importBankAccount(BankAccount account, List<BankTxn> newestFirst) {
         UUID id = bankUuid(account.id());
 
@@ -655,10 +566,7 @@ public final class EcoStorage implements Storage {
         write(id, bankTxnsKey, ledger);
     }
 
-    /**
-     * The newest {@code limit} entries. The list is already newest-first and capped at
-     * {@link #MAX_TXNS}, so this is a sublist rather than the sort-and-limit SQL needed an index for.
-     */
+    /** The newest {@code limit} entries; the list is already newest-first and capped at {@link #MAX_TXNS}. */
     @Override
     public List<BankTxn> getBankTransactions(String accountId, int limit) {
         List<String> ledger = orEmpty(read(bankUuid(accountId), bankTxnsKey));
@@ -678,8 +586,7 @@ public final class EcoStorage implements Storage {
     }
 
     static String writeTxn(BankTxn txn) {
-        // The note is player-supplied text, so it is base64'd rather than trusted not to contain the
-        // separator. Everything before it is numeric or a fixed word and stays readable in data.yml.
+        // The note is player text, so it is base64'd rather than trusted not to contain the separator.
         return txn.type() + ";" + txn.amount() + ";" + txn.balanceAfter() + ";" + txn.timestamp()
                 + ";" + encode(txn.note().getBytes(StandardCharsets.UTF_8));
     }
@@ -697,8 +604,6 @@ public final class EcoStorage implements Storage {
     static UUID bankUuid(String accountId) {
         return derived("rsb-bank", accountId);
     }
-
-    // ── eco access ─────────────────────────────────────────────────────────────
 
     private <T> T read(UUID uuid, PersistentDataKey<T> key) {
         return PlayerProfile.load(uuid).read(key);
@@ -739,8 +644,7 @@ public final class EcoStorage implements Storage {
 
     private void addToIndex(PersistentDataKey<List<String>> key, UUID owner, String value) {
         synchronized (indexLock) {
-            // A LinkedHashSet because these lists are rewritten on every profile save and a duplicate
-            // would otherwise be permanent.
+            // a LinkedHashSet: these lists are rewritten on every profile save, so a duplicate would be permanent
             LinkedHashSet<String> updated = new LinkedHashSet<>(orEmpty(read(owner, key)));
             if (updated.add(value)) {
                 write(owner, key, new ArrayList<>(updated));
@@ -757,29 +661,18 @@ public final class EcoStorage implements Storage {
         }
     }
 
-    // ── value helpers ──────────────────────────────────────────────────────────
-
-    /**
-     * A deterministic UUID for a key that has none of its own.
-     *
-     * <p>Name-based (version 3) so the same account or profile-slot maps to the same UUID on every
-     * node and every restart, and so it cannot collide with the random (version 4) ids Minecraft and
-     * this plugin generate — the version nibble differs. The prefixes match the convention
-     * {@link com.mystipixel.royalskyblock.hooks.EcoProfileBridge} already established.
-     */
+    // Name-based (version 3), so the same key maps to the same UUID on every node and restart and can't
+    // collide with random (version 4) ids. Prefixes follow EcoProfileBridge's convention.
     static UUID derived(String prefix, String key) {
         return UUID.nameUUIDFromBytes((prefix + ":" + key).getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Whether a config actually holds a row, rather than being the empty default of an absent key. */
+    // whether a config holds a row rather than the empty default of an absent key
     private static boolean present(Config config) {
         return config != null && config.getInt("v") > 0;
     }
 
-    /**
-     * Longs go in as strings. eco's {@link Config} has no long accessor, and reading a timestamp back
-     * through {@code getInt} would silently truncate it.
-     */
+    // Longs go in as strings: eco's Config has no long accessor, and getInt would truncate a timestamp.
     private static void putLong(Config config, String path, long value) {
         config.set(path, Long.toString(value));
     }

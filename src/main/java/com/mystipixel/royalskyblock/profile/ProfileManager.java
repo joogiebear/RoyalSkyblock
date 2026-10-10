@@ -18,9 +18,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The profile lifecycle: create, list, switch, delete — plus loading/saving a player's per-profile
- * state on join/quit. A profile is a self-contained save (island + inventory + progression); switching
- * swaps the player's whole state and moves them to that profile's island.
+ * The profile lifecycle: create, list, switch, delete, plus loading/saving a player's per-profile state
+ * on join/quit. Switching swaps the player's whole state and moves them to that profile's island.
  */
 public final class ProfileManager {
 
@@ -32,19 +31,14 @@ public final class ProfileManager {
     private final Storage storage;
     private final PlayerStateService state;
 
-    private final Map<UUID, UUID> activeProfile = new ConcurrentHashMap<>();  // player -> active profile
+    private final Map<UUID, UUID> activeProfile = new ConcurrentHashMap<>();  // player to active profile
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
-    private final Map<UUID, Invite> pendingInvites = new ConcurrentHashMap<>(); // invited player -> invite
+    private final Map<UUID, Invite> pendingInvites = new ConcurrentHashMap<>(); // invited player to invite
 
-    /**
-     * Profiles part-way through deletion. The delete drops the cache entry, then removes the island and
-     * the row in the background; anything reading the profile in that window reloaded it from the row
-     * that still existed, and an invite accepted then saved it straight back — the deleted profile
-     * returned. Accepts are refused while a profile is in here.
-     */
+    // Profiles part-way through deletion. Invite accepts are refused for them, or a reload of the
+    // still-existing row would be saved straight back.
     private final java.util.Set<UUID> deleting = ConcurrentHashMap.newKeySet();
 
-    /** A pending coop invite: which profile, who sent it, and when it expires. */
     private record Invite(UUID profileId, String inviterName, long expiresAt) {
         boolean expired() {
             return System.currentTimeMillis() > expiresAt;
@@ -56,8 +50,6 @@ public final class ProfileManager {
         this.storage = storage;
         this.state = state;
     }
-
-    // ── lookups ─────────────────────────────────────────────────────────────────
 
     public @Nullable Profile getProfile(UUID id) {
         if (id == null) {
@@ -105,9 +97,8 @@ public final class ProfileManager {
     }
 
     /**
-     * The active profile id without remembering it: for players who are not online. The cache is
-     * cleared on quit, and caching a lookup made afterwards (eco saving a player's data just after they
-     * left, a leaderboard reading an offline player) put back an entry nothing would remove again.
+     * The active profile id without caching it, for players who are not online (the cache is cleared on
+     * quit and nothing would remove a later entry).
      */
     public @Nullable UUID peekActiveProfileId(UUID player) {
         UUID cached = activeProfile.get(player);
@@ -118,22 +109,13 @@ public final class ProfileManager {
         return getProfile(getActiveProfileId(player.getUniqueId()));
     }
 
-    // ── join / quit state handling ────────────────────────────────────────────────
-
-    /** On join: ensure the player has a profile, then load its state onto them. Main thread. */
-    /** What {@link #preload} gathered off-thread, waiting to be applied when the player joins. */
+    // what preload gathered off-thread, waiting to be applied on join
     private record Preloaded(List<Profile> profiles, UUID active, @Nullable Profile coop, ProfileData data,
                              List<UUID> payouts) {
     }
 
-    /**
-     * The saved active profile, if it is a coop the player is a member of rather than one they own.
-     *
-     * <p>Login used to check the saved active profile against owned profiles only, so a coop never
-     * counted as valid and every coop member was put back on their own profile each time they joined
-     * (or handed a brand-new one, if they owned none). A member who was kicked while offline is no
-     * longer a member, so they still fall through to their own profile, where their payout lands.
-     */
+    // The saved active profile, if it is a coop the player is a member of. A member kicked while offline
+    // isn't one any more and falls through to their own profile, where their payout lands.
     private static @Nullable Profile joinedCoop(UUID player, @Nullable UUID active, List<Profile> owned,
                                                 java.util.function.Function<UUID, Profile> lookup) {
         if (active == null || owned.stream().anyMatch(p -> p.id().equals(active))) {
@@ -146,16 +128,9 @@ public final class ProfileManager {
     private final Map<UUID, Preloaded> preloaded = new ConcurrentHashMap<>();
 
     /**
-     * Read a joining player's profiles and saved state <em>before</em> they enter the world.
-     *
-     * <p>Called from {@code AsyncPlayerPreLoginEvent}, which already runs off the server thread and
-     * fires while the player is still connecting. Doing it here instead of in the join handler keeps
-     * roughly nine database round trips — profiles, members and island per profile, the active id, and
-     * the inventory blob — off the main thread entirely. Because it completes before the player exists
-     * in the world, there is no window where they are online holding the wrong inventory.
-     *
-     * <p>Best-effort: if anything fails, or the event never fires, {@link #handleJoin} silently falls
-     * back to loading synchronously, exactly as before.
+     * Read a joining player's profiles and saved state before they enter the world. Called from
+     * {@code AsyncPlayerPreLoginEvent}, off the main thread. Best-effort: if it fails or never runs,
+     * {@link #handleJoin} loads synchronously.
      */
     public void preload(UUID uuid) {
         try {
@@ -182,11 +157,12 @@ public final class ProfileManager {
         return plugin.conf().getBoolean("settings.debug", false);
     }
 
-    /** Drop a preload for a player who never actually joined (failed login, kick at the door). */
+    /** Drop a preload for a player who never joined (failed login, kick at the door). */
     public void discardPreload(UUID uuid) {
         preloaded.remove(uuid);
     }
 
+    /** On join: ensure the player has a profile, then load its state onto them. Main thread. */
     public void handleJoin(Player player) {
         UUID uuid = player.getUniqueId();
         Preloaded ready = preloaded.remove(uuid);
@@ -204,7 +180,7 @@ public final class ProfileManager {
         deliverCoopPayouts(player);
     }
 
-    /** The synchronous join load, used when no preload is waiting. */
+    // the synchronous join load, used when no preload is waiting
     private void loadOnJoin(Player player) {
         UUID uuid = player.getUniqueId();
         if (debug()) {
@@ -220,7 +196,7 @@ public final class ProfileManager {
             active = created.id();
             storage.setActiveProfile(uuid, active);
             activeProfile.put(uuid, active);
-            // Seed the new profile with the player's current state rather than wiping it.
+            // seed the new profile with the player's current state rather than wiping it
             state.save(player, active);
             return;
         }
@@ -236,11 +212,8 @@ public final class ProfileManager {
         state.load(player, active);
     }
 
-    /**
-     * Apply preloaded state on the main thread. Mirrors the synchronous path exactly, but every read
-     * has already happened; the only queries left are the rare corrections (a brand-new player, or an
-     * active id that no longer points at a real profile).
-     */
+    // Apply preloaded state on the main thread, mirroring the synchronous path; only rare corrections
+    // (a new player, a stale active id) still query.
     private void applyPreloaded(Player player, Preloaded ready) {
         UUID uuid = player.getUniqueId();
         List<Profile> profiles = ready.profiles();
@@ -281,14 +254,10 @@ public final class ProfileManager {
             state.save(player, active);
         }
         activeProfile.remove(player.getUniqueId());
-        // A second login with this account preloaded before this session's save just above. Applying
-        // that copy on join would hand back items given away since the last save. Today the old
-        // connection's close also discards it (onConnectionClose), but only because Paper happens to
-        // close the old connection before the new join; this makes it deliberate.
+        // A second login may have preloaded before this session's save above; applying it on join would hand
+        // back items given away since.
         preloaded.remove(player.getUniqueId());
     }
-
-    // ── create ──────────────────────────────────────────────────────────────────
 
     private Profile createDefaultProfile(Player player) {
         Profile profile = buildProfile(player, Gamemode.SOLO, null, List.of());
@@ -306,11 +275,8 @@ public final class ProfileManager {
         return profile;
     }
 
-    /**
-     * Why a chosen profile name can't be used, or null if it can. Names were never checked: colour
-     * codes rendered in coop members' chat and the coop bank title, any length went, and a second
-     * profile of the same name made the first unreachable by name.
-     */
+    // Why a chosen profile name can't be used, or null if it can: colour codes, length, and duplicate
+    // names (which make one unreachable by name).
     private static @Nullable String nameProblem(String raw, List<Profile> existing) {
         String name = cleanName(raw);
         if (name.isEmpty() || name.length() > 16) {
@@ -325,7 +291,7 @@ public final class ProfileManager {
         return null;
     }
 
-    /** The name with colour codes removed and surrounding space trimmed. */
+    // the name with colour codes removed and surrounding space trimmed
     private static String cleanName(String raw) {
         return raw.replaceAll("(?i)[&\u00a7][0-9a-fk-orx]", "").trim();
     }
@@ -364,8 +330,6 @@ public final class ProfileManager {
         return switchProfile(player, profile.id()).thenApply(ok -> profile);
     }
 
-    // ── switch ──────────────────────────────────────────────────────────────────
-
     /**
      * Switch the player to another of their profiles: save current state, load the target's, and take
      * them to its island (creating one if the profile has none yet). Completes {@code false} if the
@@ -382,7 +346,6 @@ public final class ProfileManager {
             return CompletableFuture.completedFuture(true);
         }
 
-        // Swap state on the main thread.
         if (current != null) {
             state.save(player, current);
         }
@@ -391,7 +354,7 @@ public final class ProfileManager {
         state.load(player, targetId);
         deliverCoopPayouts(player);   // anything held back while they were on an Ironman profile
 
-        // Take them to the target island (creating it if this profile has never had one).
+        // take them to the target island (creating it if this profile has never had one)
         return plugin.islands().ensureIsland(targetId)
                 .thenCompose(island -> plugin.islands().teleportToIsland(player, island))
                 .thenApply(ok -> true);
@@ -400,8 +363,6 @@ public final class ProfileManager {
     private boolean canUse(UUID player, Profile profile) {
         return profile.owner().equals(player) || profile.isMember(player);
     }
-
-    // ── island convenience (active profile) ───────────────────────────────────────
 
     /** Take the player to their active profile's island, creating it if this profile has none yet. */
     public CompletableFuture<Boolean> goToActiveIsland(Player player) {
@@ -419,8 +380,6 @@ public final class ProfileManager {
         return active != null && plugin.islands().getIslandByProfile(active) != null;
     }
 
-    // ── delete ────────────────────────────────────────────────────────────────────
-
     /**
      * Delete one of the player's profiles (and its island). Refuses to delete the active profile or the
      * player's only remaining profile.
@@ -433,12 +392,12 @@ public final class ProfileManager {
         }
         if (!target.owner().equals(uuid)) {
             player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
-                    "&cYou can only delete profiles you own — use &e/is leave &cto leave a coop."));
+                    "&cYou can only delete profiles you own: use &e/is leave &cto leave a coop."));
             return CompletableFuture.completedFuture(false);
         }
         if (targetId.equals(getActiveProfileId(uuid))) {
             player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
-                    "&cYou can't delete the profile you're on — switch to another first."));
+                    "&cYou can't delete the profile you're on: switch to another first."));
             return CompletableFuture.completedFuture(false);
         }
         if (storage.getProfilesByOwner(uuid).size() <= 1) {
@@ -446,8 +405,8 @@ public final class ProfileManager {
                     "&cYou can't delete your only profile."));
             return CompletableFuture.completedFuture(false);
         }
-        // Money in any bank on the profile would become unreachable the moment it is gone, so the delete
-        // waits until it has been withdrawn. Members' personal accounts count: it is their money.
+        // Money in any bank on the profile (members' personal accounts included) would become unreachable,
+        // so the delete waits until it is withdrawn.
         List<String> funded = new java.util.ArrayList<>();
         double coopBalance = plugin.bank().balance(BankService.coopId(targetId));
         if (coopBalance > 0) {
@@ -465,11 +424,8 @@ public final class ProfileManager {
             return CompletableFuture.completedFuture(false);
         }
 
-        // Everyone but the owner leaves first, exactly as if kicked. Deleting a coop used to leave online
-        // members on a profile that no longer existed (their next save wrote into a deleted row) and
-        // destroyed every member's carried items with the profile's rows. As a kick, each is moved off
-        // or recorded as owed, and gets those items back on the profile they land on. Their bank
-        // savings are already safe: the check above refuses the delete while any of it is left.
+        // Everyone but the owner leaves first, exactly as if kicked, so each is moved off or recorded as owed
+        // and gets their carried items back. Their bank savings were checked above.
         List<ProfileMember> others = target.members().stream()
                 .filter(member -> !member.uuid().equals(uuid))
                 .toList();
@@ -500,8 +456,6 @@ public final class ProfileManager {
                     deleting.remove(targetId);
                 });
     }
-
-    // ── coop invites ──────────────────────────────────────────────────────────────
 
     /** Invite a player to the inviter's active Coop profile. Returns an error message, or null on success. */
     public String invite(Player inviter, Player target) {
@@ -615,7 +569,7 @@ public final class ProfileManager {
             return "Only the owner can remove a co-owner.";
         }
         if (target.uuid().equals(actor.getUniqueId())) {
-            return "You can't kick yourself — use /is leave.";
+            return "You can't kick yourself: use /is leave.";
         }
         active.removeMember(target.uuid());
         storage.saveProfile(active);
@@ -631,7 +585,7 @@ public final class ProfileManager {
             return "You're not on a Coop profile.";
         }
         if (active.roleOf(player.getUniqueId()) == IslandRole.OWNER) {
-            return "The owner can't leave — transfer ownership first (/is transfer) or delete the profile.";
+            return "The owner can't leave: transfer ownership first (/is transfer) or delete the profile.";
         }
         if (!active.isMember(player.getUniqueId())) {
             return "You're not a member of this profile.";
@@ -642,8 +596,6 @@ public final class ProfileManager {
         owePayout(player.getUniqueId(), active.id());
         return null;
     }
-
-    // ── coop roles / ownership ─────────────────────────────────────────────────────
 
     /** Promote a member to co-owner. Owner only. Returns an error message, or null on success. */
     public String promote(Player actor, String targetName) {
@@ -700,7 +652,7 @@ public final class ProfileManager {
         if (target.uuid().equals(actor.getUniqueId())) {
             return "You already own this profile.";
         }
-        // The coop counts towards the new owner's profiles from now on; this let them pass the cap.
+        // the coop counts towards the new owner's profile cap from now on
         int max = plugin.conf().getInt("profiles.max-profiles", 3);
         if (storage.getProfilesByOwner(target.uuid()).size() >= max) {
             return target.name() + " already owns the maximum number of profiles (" + max + ").";
@@ -712,7 +664,7 @@ public final class ProfileManager {
         active.setOwner(target.uuid());
         storage.saveProfile(active);
         profileCache.put(active.id(), active);
-        // Upgrade and perk grants were made to the old owner by name; give the new owner the same.
+        // upgrade and perk grants were made to the old owner by name; give the new owner the same
         Island island = plugin.islands().getIslandByProfile(active.id());
         if (island != null) {
             plugin.upgrades().replayUnlockCommands(island);
@@ -726,23 +678,17 @@ public final class ProfileManager {
                 .filter(m -> m.name().equalsIgnoreCase(name)).findFirst().orElse(null);
     }
 
-    /** If the player is online and currently on {@code profileId}, move them to one of their own profiles. */
+    // if the player is online and on profileId, move them to one of their own profiles
     private void moveOffProfileIfActive(UUID player, UUID profileId) {
         Player online = Bukkit.getPlayer(player);
         if (online == null || !profileId.equals(getActiveProfileId(player))) {
             return;
         }
-        // Any open menu was drawn for the profile they just lost; close it rather than leave its
-        // buttons live. switchProfile from the GUI closes first, but a kick arrives from outside.
+        // any open menu was drawn for the profile they lost; a kick arrives from outside the GUI, so close it
         online.closeInventory();
         List<Profile> owned = storage.getProfilesByOwner(player);
-        // Someone with no profile of their own used to be sent to spawn while still set to the coop
-        // they had just been removed from. They get a fresh profile to land on instead, which is also
-        // where their coop payout is delivered.
-        //
-        // Not an Ironman profile if it can be helped: this is where their coop payout lands, and an
-        // Ironman save is meant to have had no outside help. Only someone who owns nothing else, and
-        // has no room for another profile, lands on one; their payout then waits (deliverCoopPayouts).
+        // A player with no other profile gets a fresh one to land on, where their coop payout is delivered.
+        // Avoid Ironman (no outside help) unless they own nothing else and have no room for another profile.
         UUID landing = owned.stream()
                 .filter(p -> p.gamemode() != Gamemode.IRONMAN)
                 .map(Profile::id)
@@ -755,13 +701,8 @@ public final class ProfileManager {
         switchProfile(online, landing);
     }
 
-    // ── coop payouts ──────────────────────────────────────────────────────────────
-
-    /**
-     * A member is off {@code coop}: move them off it if they are on it, then pay out what was theirs
-     * there. Their row and bank account on the coop are kept, not deleted, until that payout lands:
-     * deleting them is how a kick used to destroy the member's savings and the items they carried.
-     */
+    // A member is off the coop: move them off it if they are on it, then pay out what was theirs. Their row
+    // and bank account on the coop are kept until the payout lands.
     private void owePayout(UUID member, UUID coop) {
         storage.addCoopPayout(member, coop);
         moveOffProfileIfActive(member, coop);   // saves what they carry into the coop row first
@@ -769,14 +710,13 @@ public final class ProfileManager {
         if (online != null) {
             deliverCoopPayouts(online);
         }
-        // Offline: delivered on their next join, onto whichever profile they land on.
+        // offline: delivered on their next join, onto whichever profile they land on
     }
 
     /**
      * Deliver every payout {@code player} is owed: personal bank savings from each coop they left into
-     * their purse, and the items they carried there into their inventory, then ender chest. Anything
-     * that does not fit — or that cannot be paid right now — stays owed and is retried on next join.
-     * Main thread.
+     * their purse, and their carried items into inventory, then ender chest. Anything that doesn't fit or
+     * can't be paid now stays owed and is retried on next join. Main thread.
      */
     public void deliverCoopPayouts(Player player) {
         UUID uuid = player.getUniqueId();
@@ -787,8 +727,8 @@ public final class ProfileManager {
         }
         Profile here = getProfile(current);
         if (here != null && here.gamemode() == Gamemode.IRONMAN) {
-            // Coop coins and items would be outside help, which Ironman forbids. They stay owed and are
-            // paid the next time the player is on any other profile (switchProfile delivers too).
+            // coop coins and items would be outside help, which Ironman forbids; they stay owed until the player
+            // is on another profile
             plugin.messages().send(player, "coop.payout-waiting-ironman");
             return;
         }
@@ -827,8 +767,8 @@ public final class ProfileManager {
                         left = new java.util.ArrayList<>(
                                 player.getEnderChest().addItem(left.toArray(new org.bukkit.inventory.ItemStack[0])).values());
                     }
-                    // Save the profile they are on BEFORE touching the coop row, so a crash between the
-                    // two can at worst hand the items over twice, never lose them.
+                    // save the current profile before touching the coop row, so a crash can at worst duplicate the items,
+                    // never lose them
                     if (current != null) {
                         state.save(player, current);
                     }

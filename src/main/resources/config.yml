@@ -1,13 +1,9 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock  ·  Main Configuration
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Scalable per-island Skyblock on Advanced Slime Paper — one island = one slime
-#  world, loaded on demand and unloaded when empty. Sections below are grouped by
-#  system; reload most values with /is reload (world/storage changes need a restart).
-# ═══════════════════════════════════════════════════════════════════════════════
+# RoyalSkyblock: main configuration
+# Each island is its own Advanced Slime Paper world, loaded on demand and unloaded
+# when empty. Most values reload with /is reload; world/storage changes need a restart.
 #
-#  CONFIG FILE MAP — RoyalSkyblock splits settings, text, and content:
-#    config.yml       this file — storage, world backend, island gen, currencies,
+# Config files:
+#    config.yml       this file: storage, world backend, island gen, currencies,
 #                     coop, spawn, flow limiter, teleport
 #    lang.yml         every player-facing string (& colours, %tokens%)
 #    bank.yml         the built-in bank: levels, interest, upgrade costs
@@ -19,35 +15,20 @@
 #    gui/<cat>/*.yml  one file per menu, grouped into folders:
 #                     core / profile / island / coop / bank / level
 #    Reload ALL of the above with /is reload.
-# ═══════════════════════════════════════════════════════════════════════════════
 
-# ── Island storage ───────────────────────────────────────────────────────────
-# Where island METADATA lives (owner, members, level, upgrades). This is the same
-# dual-dialect layer used across the Royal suite. The island BLOCKS live in the
-# slime data-source below, not here.
+# Island storage
+# Where island metadata lives (owner, members, level, upgrades). Island blocks live in
+# the slime data source below.
 storage:
-  # sqlite (default, zero-setup), mysql (a network), or eco.
+  # sqlite (default), mysql (a network), or eco.
   #
-  # eco keeps islands, profiles, rosters and banks in eco's own data layer, exactly as every other
-  # plugin in the suite does — whatever data-handler eco is set to (yaml/mysql/mariadb/mongodb) holds
-  # this plugin's data too, the mysql block below is ignored, and there is no second database to
-  # configure or back up. eco flushes writes on its own save interval rather than immediately.
+  # eco stores everything in eco's own data-handler, like the rest of the suite; the
+  # mysql block below is then ignored. eco storage is for ONE server only: servers
+  # sharing one eco database overwrite each other's data. For a network, use mysql.
   #
-  # eco is for ONE server. eco caches what it has loaded for the server's whole uptime and has no
-  # atomic update, so if several servers run RoyalSkyblock on one shared eco database (mysql/mongodb)
-  # they overwrite each other's island list, pending upgrades and profile lists — islands vanish from
-  # the leaderboard, paid upgrades never finish, profiles drop off their owner's list. For a network,
-  # use mysql below. The plugin warns at startup when eco storage sits on a shared eco handler.
-  #
-  # Switching an existing server over: set this to eco and restart. An existing islands.db is carried
-  # across on that boot — islands, profiles, rosters, saved inventories, timers and bank ledgers —
-  # then renamed to islands.db.migrated and never read again. Nothing is deleted, every row is read
-  # back and compared before the rename, and if anything at all does not match, the file is left
-  # exactly as it was and the plugin refuses to start rather than run on half the data. Stop the
-  # server first; do not migrate while it is running.
-  #
-  # Going the other way, or between eco's own handlers (yaml -> mysql -> mongodb), is eco's job: set
-  # its data-handler and let perform-data-migration move everything, this plugin's data included.
+  # Switching to eco: stop the server, set eco, start. An existing islands.db is
+  # migrated, verified, and renamed to islands.db.migrated; if anything doesn't match,
+  # the file is left alone and the plugin refuses to start.
   type: sqlite
   # SQLite database file name (under the plugin folder).
   sqlite-file: islands.db
@@ -61,31 +42,24 @@ storage:
     # JDBC properties appended to the connection URL (query-string form, same as the rest of the suite).
     properties: "useSSL=false&characterEncoding=utf8"
 
-# ── World backend (Advanced Slime Paper) ─────────────────────────────────────
+# World backend (Advanced Slime Paper)
 world:
   # The ASP data-source islands are stored in. Must be a loader ASP has registered:
-  #   file   — flat .slime files under the ASP world folder (single server only)
-  #   mysql  — slime blobs in MySQL   (recommended: shardable across a network)
-  #   mongo  — slime blobs in MongoDB
+  #   file  : flat .slime files under the ASP world folder (single server only)
+  #   mysql : slime blobs in MySQL   (recommended: shardable across a network)
+  #   mongo : slime blobs in MongoDB
   # For a multi-server network use "mysql" (or "mongo") so any server can load any island.
   slime-data-source: file
 
   # Islands are named "<prefix><owner-uuid>" in the data source.
   world-name-prefix: "island_"
 
-  # Keep an island world loaded this long (seconds) after its last player leaves before unloading it
-  # back to the data source. 0 = unload as soon as it empties. The grace period means a hub round-trip
-  # or a quick relog doesn't pay the save/load cost twice.
-  #
-  # An unloaded island does not tick: no crop growth, no furnaces, no mobs, no minions. That is the
-  # whole point — the server only pays for islands someone is standing on — and the time it missed is
-  # paid back on the next visit by the simulation section below.
+  # Seconds an island stays loaded after its last player leaves. 0 = unload at once.
+  # An unloaded island doesn't tick; the simulation section below pays the time back.
   unload-grace-seconds: 60
 
-  # How many islands may be unloaded in one pass (the check runs every 5 seconds).
-  # Unloading halts a world's chunk system and I/O on the main thread — milliseconds each, but a
-  # server-wide logout would otherwise try to halt every island in a single tick. Longest-empty go
-  # first, the rest wait for the next pass.
+  # Max islands unloaded per pass (every 5 seconds), so a mass logout doesn't unload
+  # every island in one tick. Longest-empty go first.
   max-unloads-per-tick: 2
 
   # Default world properties applied to every new island world.
@@ -98,7 +72,7 @@ world:
     world-type: default
     default-biome: minecraft:plains
 
-# ── Islands ──────────────────────────────────────────────────────────────────
+# Islands
 island:
   # Where inside the island world the schematic origin (or generated starter) is pasted.
   paste:
@@ -120,16 +94,10 @@ island:
   # Base number of guests that can /visit at once (before the guest-limit upgrade adds more).
   base-guest-limit: 3
 
-  # ── What a VISITOR may do on someone else's island ─────────────────────────
-  # This governs visitors only. Co-op members are deliberately not protected from
-  # each other: inviting someone onto your island IS the trust decision, and the
-  # plugin does not second-guess it.
-  #
+  # What a visitor may do on someone else's island (coop members are not restricted).
   #   read-only  Walk around, open doors, press buttons, sit in boats. Cannot take
-  #              or change anything: containers, item frames, armour stands,
-  #              animals, dropped items and crops are all refused. This is the
-  #              default, because an island nobody can move around is a poor
-  #              showcase.
+  #              or change anything (containers, item frames, armour stands,
+  #              animals, dropped items, crops). Default.
   #   strict     Every interaction is refused, including doors.
   #
   # Either way a visitor cannot break, place, or use buckets.
@@ -148,14 +116,9 @@ island:
     # when installed. If neither is present, or the file is missing, the built-in generator below is
     # used instead. Save one in-game with: /is admin schematic save <name>
     schematic: default
-    # ── Built-in generator (fallback when there's no schematic) ──
-    # Builds an island with an 11x11 house at its centre — the player spawns inside, on the floor —
-    # and features arranged around it: a crop farm, a carved pond with sugar cane, a small oak grove
-    # on a rise, a stone outcrop with boulders, and scattered flowers. The outline is irregular and
-    # the underside tapers, so it reads as land rather than a slab.
-    #
-    # A second, smaller island sits across a gap with a portal back to spawn on it. The gap is wider
-    # than a jump on purpose: bridging to it is the first thing a new island asks of you.
+    # Built-in generator (fallback when there's no schematic): an 11x11 house the player
+    # spawns in, a crop farm, a pond with sugar cane, an oak grove and a stone outcrop.
+    # A second island with a portal to spawn sits across a gap the player has to bridge.
     platform-radius: 17          # island radius; the outline bulges a few blocks past this
     platform-block: GRASS_BLOCK  # top surface
     sub-block: DIRT              # two layers beneath the surface
@@ -168,17 +131,11 @@ island:
     bedrock-anchor: true        # a bedrock block under the centre
     chest:
       enabled: true             # set false to skip the starter chest entirely
-      # Starter chest contents, one per line as `<item>` or `<item>:<amount>`.
-      #
-      # The item goes through eco's own lookup, so as well as a vanilla material you can seed anything
-      # the suite knows about. The amount is the LAST segment, so a key containing a colon is fine:
-      #
-      #   - "ecominions:stone"      a Stone Minion in every new island's chest
+      # Starter chest contents, one per line as `<item>` or `<item>:<amount>`. Items go
+      # through eco's lookup, so any installed eco item works:
+      #   - "ecominions:stone"      a Stone Minion
       #   - "ecominions:stone:2"    two of them
-      #   - "ecoitems:my_pickaxe"   or anything else installed
-      #
-      # Nothing referencing another plugin is shipped enabled: a server without it would log a warning
-      # for every island created. Uncomment what your server actually has.
+      #   - "ecoitems:my_pickaxe"
       items:
         - "ICE:2"
         - "LAVA_BUCKET:1"
@@ -188,33 +145,26 @@ island:
         - "SUGAR_CANE:1"
         - "BONE_MEAL:4"
 
-  # A visible world border at the island edge (radius above). Keeps players on their island.
-  # The island border scales with island size and is enforced PER-PLAYER, so players with
-  # royalskyblock.bypass (admins) pass through it while everyone else is kept on-island.
+  # A per-player world border at the island edge; scales with island size. Players with
+  # royalskyblock.bypass don't get one.
   border:
     enabled: true
-    # Border colour: blue | red | green | off. Change live with /is admin border <colour>.
-    # (Minecraft derives border colour from motion, so these are faked with an imperceptible
-    # perpetual lerp. 'off' shows no border.)
+    # blue | red | green | off. Change live with /is admin border <colour>.
     color: blue
     warning-blocks: 2           # red screen vignette this many blocks before the edge
     # Log where the border applies/clears per player (troubleshooting "I don't see a border").
     debug: false
 
-  # ── World rules (gamemode + gamerules for every island) ──────────────────────
-  # Island worlds are created on demand and are NOT managed by Multiverse, so RoyalSkyblock
-  # applies these itself — gamerules when an island loads, the gamemode when a player enters
-  # one. Everything here is editable; nothing is hardcoded.
+  # World rules: gamerules applied when an island loads, gamemode when a player enters.
+  # Island worlds aren't managed by Multiverse, so RoyalSkyblock sets these itself.
   world-rules:
-    # Minecraft gamemode players are put in while on an island: survival | adventure | creative
-    # | spectator. (This is the MC gamemode — separate from a profile's Solo/Coop/Ironman type.)
-    # Set enforce-gamemode false to leave gamemode untouched. Give staff/builders the
-    # royalskyblock.playmode.bypass permission so they can stay in creative, etc.
+    # Minecraft gamemode on islands: survival | adventure | creative | spectator (not the
+    # profile's Solo/Coop/Ironman). enforce-gamemode: false leaves it alone;
+    # royalskyblock.playmode.bypass exempts staff.
     enforce-gamemode: true
     gamemode: survival
-    # Gamerules set on every island world when it loads. Keys accept the Minecraft 26.2 ids
-    # (keep_inventory), the classic names (keepInventory), or a minecraft: prefix — all resolve.
-    # Add or remove ANY valid gamerule freely; unknown names are skipped with a warning.
+    # Any gamerule. Keys accept 26.2 ids (keep_inventory), classic names (keepInventory)
+    # or a minecraft: prefix. Unknown names are skipped with a warning.
     gamerules:
       keep_inventory: true              # don't drop items on death
       mob_griefing: false               # creepers/endermen don't wreck the island
@@ -222,25 +172,21 @@ island:
       show_advancement_messages: false  # no "made the advancement" spam
       # Deliberately left at vanilla defaults (uncomment to override):
       #   advance_time: true            # islands cycle day/night
-      #   fall_damage: true             # survival — fall damage applies
+      #   fall_damage: true             # fall damage applies
       #   spawn_monsters: true          # vanilla mobs spawn on unlit islands at night
       #
-      # IMPORTANT if you use island-mobs below: set spawn_monsters: false. Otherwise vanilla hostiles
-      # spawn alongside RoyalSkyblock's tiered mobs — and since vanilla mobs carry no tier tag, the
-      # Intimidation bridge can't calm them, so talismans look broken.
+      # If you use island-mobs below, set spawn_monsters: false: vanilla mobs carry no tier
+      # tag, so the Intimidation bridge can't calm them.
       #   spawn_monsters: false
 
-  # ── Void protection ──────────────────────────────────────────────────────────
-  # Falling off an island normally means slow vanilla void-damage ticks — and the higher
-  # your max health climbs, the longer it drags. Instead, catch the fall below 'below-y'.
+  # Void protection: catch a fall below below-y instead of slow vanilla void damage.
   void:
     enabled: true
-    # Y treated as "the void". Islands paste at y≈100 (world floor is -64), so anything
-    # well below the island is safe. Raise it to catch the fall sooner — but keep it under
-    # anything players build or mine down to, or they'd be yanked up mid-build.
+    # Y treated as the void. Islands paste at y~100 (world floor is -64). Keep it below
+    # anything players build or mine down to.
     below-y: 0
     # What happens when a player drops below below-y on an island:
-    #   teleport - pull them back to the island home (recommended — no slow death)
+    #   teleport - pull them back to the island home (recommended)
     #   kill     - kill instantly (still respects keep_inventory) instead of ticking down
     #   none     - leave vanilla void behaviour alone
     action: teleport
@@ -249,22 +195,16 @@ island:
     # Chat line shown on rescue (& colour codes; leave blank for silent).
     message: "&cYou fell into the void and were pulled back to your island."
 
-# ── Profiles (Hypixel-style saves: each has its own island, inventory & progression) ─
+# Profiles (Hypixel-style saves: each has its own island, inventory & progression)
 profiles:
   # How many profiles a player may have.
   max-profiles: 3
 
-  # Let eco resolve a player's data to their active profile, rather than copying it on every switch.
-  #
-  # Copying works on any eco, but it moves every key the whole suite has registered — thousands of
-  # them, almost all unset — twice per switch. When eco can be told which UUID a player's data
-  # belongs to, none of that is needed: it reads and writes the profile directly.
-  #
-  # Requires an eco that supports it. On one that does not, this does nothing and copying continues,
-  # so it is safe to leave on.
+  # Let eco read and write the active profile's data directly instead of copying every key
+  # on each switch. Needs an eco that supports it; otherwise copying continues. Safe to leave on.
   eco-resolver: true
 
-# ── Coop (shared-island profiles) ─────────────────────────────────────────────
+# Coop (shared-island profiles)
 coop:
   # Max members on a Coop profile, including the owner.
   max-members: 4
@@ -285,25 +225,19 @@ coop:
     # Require owner/co-owner to withdraw? Deposits are always open to members.
     withdraw-requires-manager: false
 
-# ── Currencies (used by upgrade costs) ────────────────────────────────────────
-# Define named currencies; upgrades reference them by key. Two kinds:
-#   type: vault    -> your server's Vault economy (works with any economy plugin).
-#   type: command  -> ANYTHING ELSE. Affordability is checked with a PlaceholderAPI balance placeholder;
-#                     charging/refunding run console commands. %player% and %amount% are substituted.
-#                     This makes any currency plug in: EcoBits gems, PlayerPoints, a token plugin, an
-#                     item/block economy — anything that exposes a balance placeholder + give/take command.
-#
-# Define as many currencies as you like, then point each upgrade at one with `currency:` in upgrades.yml
-# (and the bank uses Vault). 'coins' (Vault) is the DEFAULT so upgrades work out of the box on any Vault
-# server; the rest below are EXAMPLES — keep, edit, or delete them to match what your server runs.
+# Currencies (used by upgrade costs)
+# Named currencies; upgrade costs reference them by key (e.g. 5000 coins). Two kinds:
+#   type: vault    -> your server's Vault economy.
+#   type: command  -> anything else: balance from a PlaceholderAPI placeholder, charge and
+#                     refund via console commands (%player% and %amount% are substituted).
+# 'coins' (Vault) is the default; the rest are examples to keep, edit or delete.
 currencies:
   coins:
     type: vault
     display-name: "coins"
 
-  # EcoBits gems (needs EcoBits + PlaceholderAPI). IMPORTANT: replace "gems" below with YOUR
-  # EcoBits currency id (the `id:` in EcoBits/config.yml — often e.g. "skyblockgem"), in all three
-  # places. EcoBits syntax is: ecobits <give|take> <player> <currency-id> <amount>.
+  # EcoBits gems (needs EcoBits + PlaceholderAPI). Replace "gems" with your EcoBits currency
+  # id (the `id:` in EcoBits/config.yml) in all three places.
   gems:
     type: command
     display-name: "gems"
@@ -311,7 +245,7 @@ currencies:
     take-command: "ecobits take %player% gems %amount%"
     give-command: "ecobits give %player% gems %amount%"
 
-  # More examples — uncomment/edit for your setup:
+  # More examples: uncomment/edit for your setup:
   #
   # PlayerPoints:
   #   tokens:
@@ -329,10 +263,7 @@ currencies:
   #     take-command: "yourplugin take %player% crystals %amount%"
   #     give-command: "yourplugin give %player% crystals %amount%"
 
-# ── Spawn / hub (where players go when they leave or lose an island) ──────────
-# When a player's island is deleted (and later: when they leave one, or an island
-# unloads out from under them), they are sent here. Point `world` at whatever world
-# you use as your hub — "hub", "spawn", "world", anything you run.
+# Spawn / hub: where players go when they leave or lose an island. Point `world` at your hub.
 spawn:
   world: world
   # Route players to this spawn on JOIN and on death (bedless respawns), unless they logged out on
@@ -345,8 +276,7 @@ spawn:
   z: 0.5
   yaw: 0.0
   pitch: 0.0
-  # Catch players who fall off the hub. A protected hub usually has no damage at all, so without this
-  # someone who walks off the edge falls forever instead of dying to the void.
+  # Catch players who fall off the hub (a no-damage hub would let them fall forever).
   void:
     enabled: true
     # Below this Y the player is sent back to spawn. Keep it under the lowest part of the hub build
@@ -355,20 +285,11 @@ spawn:
     # Chat line shown on rescue (& colour codes; leave blank for silent).
     message: "&7You fell off the hub and were brought back to spawn."
 
-# ── NPC-only commands ─────────────────────────────────────────────────────────
-# Make services visit-only, Hypixel style: a command listed here is refused when a player TYPES
-# it, and they're told where to go instead. Hub NPCs still open it, and so do menu buttons and hotbar
-# items, because commands run by a plugin never pass through the typed-command check.
-#
-# Point each NPC at `/is admin npc-open <player> <command>` (run from the console, e.g. Citizens'
-# `npc command add is admin npc-open <p> bazaar`). That route still applies gamemodes/*.yml, so
-# an Ironman profile can't reach the Bazaar by clicking its NPC.
-#
-# List the command's main name or any alias; the rest of its aliases are covered automatically.
-# `where` fills %where% in lang.yml's general.npc-only message.
-#
-# royalskyblock.npconly.<key> lets a player type that one anyway, e.g. royalskyblock.npconly.bazaar
-# as a perk. Ops have it by default.
+# NPC-only commands: refused when a player types them; NPCs, menu buttons and hotbar items
+# still work. Point each NPC at `/is admin npc-open <player> <command>` from the console
+# (e.g. Citizens' `npc command add is admin npc-open <p> bazaar`); gamemode rules still apply.
+# List the main name or any alias. `where` fills %where% in lang.yml's general.npc-only.
+# royalskyblock.npconly.<key> lets a player type one anyway (ops have it by default).
 npc-only-commands:
   enabled: false
   commands:
@@ -379,76 +300,49 @@ npc-only-commands:
     bank:
       where: "Bank"
 
-# ── Offline simulation (catch-up) ─────────────────────────────────────────────
-# Islands unload when empty (see world.unload-grace-seconds), so nothing on them ticks while the
-# owner is away. On the next visit RoyalSkyblock fast-forwards what that time should have produced.
-#
-# Crops are handled natively below. ANYTHING ELSE that should catch up — minions especially — hooks
-# the IslandCatchupEvent API instead of being configured here; it receives the island, the world and
-# the (already-clamped) offline seconds, and pays its own dues. That keeps RoyalSkyblock from needing
-# to know a minion plugin exists.
+# Offline simulation: when an unloaded island is next visited, fast-forward the time it missed.
+# Crops are handled here; other plugins (minions) use the IslandCatchupEvent API.
 simulation:
   enabled: true
 
-  # Never simulate more than this many hours, however long the island actually sat unloaded.
-  # Crops self-cap (they can only reach ripe), so this mainly bounds what minion-style listeners are
-  # told — otherwise an island untouched for a year would mint a year of output on one login.
+  # Max hours simulated, however long the island sat unloaded. Mainly bounds minion output.
   # 0 = no cap (not recommended once minions are in).
   max-offline-hours: 24
 
-  # Vertical band the scan walks, shared by every simulator. Islands paste at y=100, so this covers
-  # the buildable area without walking all 384 blocks of world height on every visit.
+  # Vertical band the scan walks (islands paste at y=100).
   scan-y-min: 60
   scan-y-max: 180
 
   crops:
     enabled: true
-    # Expected real seconds for one growth stage on a normal (hydrated, lit) farm. Vanilla grows crops
-    # on random ticks, so this is an average, not a schedule: each stage is rolled independently, which
-    # is why a field planted together still ripens unevenly. ~130s ≈ vanilla wheat's ~15 min to ripe.
-    # Lower = more generous catch-up.
+    # Average seconds per growth stage on a hydrated, lit farm (each stage is rolled, so fields
+    # ripen unevenly). ~130s is close to vanilla wheat. Lower = more generous.
     seconds-per-stage: 130
     # Covers the age-based crops: wheat, carrots, potatoes, beetroot, nether wart, cocoa, berries.
 
-  # Sugar cane and cactus — the backbone of most skyblock farms. These don't ripen, they stack, so
-  # they're tuned per BLOCK grown rather than per growth stage.
+  # Sugar cane and cactus, tuned per block grown.
   stacking-plants:
     enabled: true
-    # Expected real seconds to add one block to a column. Vanilla cane/cactus grow roughly every
-    # 18 minutes on average; lower this to be more generous.
+    # Average seconds to add one block to a column (vanilla is ~18 minutes).
     seconds-per-block: 1080
-    # Tallest a column may reach. Vanilla is 3. Growth never places into anything but air, so a farm
-    # built under a ceiling stays under its ceiling regardless of this.
+    # Tallest a column may reach (vanilla is 3). Growth only places into air.
     max-height: 3
 
-  # NOTE: melon/pumpkin stems and saplings are NOT simulated — stems spawn fruit in a neighbouring
-  # block and saplings generate a whole tree, both of which can overwrite what a player built. They
-  # still grow normally while someone is on the island.
+  # Melon/pumpkin stems and saplings are not simulated: they could overwrite builds.
 
-# ── Island mob spawning (optional; needs a mob backend from an extension) ─────
-# RoyalSkyblock spawns night mobs on islands and picks the tier from the player's Combat skill.
-# It's PLAYER-DRIVEN — each pass only looks at online players on islands, never scans every island —
-# so it's cheap and never keeps an island loaded. It spawns via the provider's API (SpawnReason COMMAND),
-# so turn OFF vanilla hostiles on islands with the spawn_monsters gamerule (island.world-rules) to avoid
-# doubling up. Per-island toggle: the MOB_SPAWNS island setting (on by default).
-# Extensions load from plugins/RoyalSkyblock/extensions/, one jar and one folder each. An extension
-# adds a feature (a farming world) or teaches RoyalSkyblock to use another plugin (a mob backend, a
-# skills backend) — install the other plugin AND its extension for that integration to exist.
-#
-# Deleting the jar is the real off switch. This list turns one off without deleting it, which is for
-# isolating a fault: an extension named here loads and then stops, so the jar being present no longer
-# means it is running. Names are the extension's own, case-insensitive.
+# Extensions load from plugins/RoyalSkyblock/extensions/. Names listed here (case-insensitive)
+# load and then stop, for isolating a fault without deleting the jar.
 extensions:
   disabled: []
 
+# Island mob spawning (optional; needs a mob backend from an extension). Night mobs spawn near
+# online players on islands, tiered by Combat skill. Turn off vanilla hostiles with the
+# spawn_monsters gamerule (island.world-rules). Per-island toggle: the MOB_SPAWNS setting.
 island-mobs:
   enabled: false                 # off until your provider mobs are configured
-  # Which mob backend spawns them. A backend is registered by an extension, so adding MythicMobs
-  # support means dropping in another extension jar — this value then selects it. Names of everything
-  # registered are printed if the one named here is missing.
+  # Mob backend id, registered by an extension.
   provider: ecomobs
-  # Which skills backend supplies combat level and the intimidation stat. Blank means "whichever one
-  # is installed", which is right when a server runs exactly one — name it only to disambiguate.
+  # Skills backend for combat level and the intimidation stat. Blank = whichever is installed.
   progression: ""
   combat-skill: combat           # skill id, in whichever progression backend is in use
   scan-interval-ticks: 200       # how often a spawn pass runs (200 = every 10s)
@@ -463,19 +357,17 @@ island-mobs:
   spawn-radius-max: 28
   max-mobs-per-island: 12         # our tagged mobs alive on an island at once
   max-spawns-per-scan-per-island: 3
-  spawn-attempts: 6               # tries to find a valid spot per spawn (bounded — no island scan)
+  spawn-attempts: 6               # tries to find a valid spot per spawn
   debug: false
   # Intimidation: island mobs whose tier is at or below a player's Intimidation stat ignore them.
-  # The Talismans intimidation chain only GRANTS the stat (add_stat) and the stat has no effects of
-  # its own — this bridge is what acts on it. Only mobs RoyalSkyblock spawned are affected.
+  # Only mobs RoyalSkyblock spawned are affected.
   intimidation:
     enabled: true
     stat: intimidation           # stat id the talismans grant, in the progression backend above
-    # Ignore level = min(combat level, stat) — the formula in the talismans' own descriptions.
-    # Set false to use the raw stat regardless of the player's Combat level.
+    # Ignore level = min(combat level, stat). false = use the raw stat.
     cap-to-combat-level: true
 
-  # Mob id looked up in the provider. %family% and %level% are filled in — e.g. private_island_zombie_7.
+  # Mob id looked up in the provider, e.g. private_island_zombie_7.
   mob-id-format: "private_island_%family%_%level%"
   # Weighted families to pick from. Each family needs matching provider mobs
   # <family>_1 .. <family>_<combat-level-cap>, e.g. private_island_zombie_1 .. _15.
@@ -504,41 +396,31 @@ island-mobs:
       weight: 3
       enabled: true
 
-# ── Anti-crash: liquid flow limiter ───────────────────────────────────────────
+# Anti-crash: liquid flow limiter
 flow-limiter:
   enabled: true
-  # Max water/lava flow events per world per second before further flow is blocked for the rest of
-  # that second. Defuses lag machines (someone flooding an island to crash the server). Each island
-  # is its own world, so this budget is effectively per-island.
+  # Max water/lava flow events per world (= per island) per second before flow is blocked for
+  # the rest of that second. Defuses lag machines.
   max-per-second: 800
-  # When a player with royalskyblock.bypass empties a bucket in a world, the limiter is paused there
-  # for this many seconds — so admin/builder liquid work isn't throttled.
+  # Seconds the limiter pauses in a world after a royalskyblock.bypass player empties a bucket.
   admin-bypass-seconds: 30
 
-# ── Teleport safety ──────────────────────────────────────────────────────────
+# Teleport safety
 teleport:
   # Scan upward for a safe (non-suffocating, solid-footed) spot before dropping a
   # player at a home/visit location. If none is found within this many blocks, fall
   # back to the raw location.
   safe-scan-height: 8
 
-# ── Perks ─────────────────────────────────────────────────────────────────────
-#  The perks themselves live in perks/, one file per perk. These are the switches.
-#
-#  Perks are OPTIONAL and OFF by default. They overlap the purchased upgrades
-#  system, so most servers won't want both.
-#
-#  While OFF: no effects, no menu button, no overhead.
-#  While ON:  each perk is a libreforge effect holder, active while its owner stands
-#             on their own island and the island is high enough level, and its
-#             unlock-commands run ONCE the first time the island reaches that level.
+# Perks: optional, off by default (they overlap upgrades). The perks themselves are in perks/.
+# When on, a perk is active while its owner is on their own island at the required level, and its
+# unlock-commands run once when the island first reaches it.
 perks:
   enabled: false
-  # Seconds between re-applying on-island potion effects (kept a touch shorter than
-  # the effect duration so they never flicker). Lower = snappier, slightly more work.
+  # Seconds between re-applying on-island potion effects.
   effect-refresh-seconds: 6
 
-# ── Messages / misc ──────────────────────────────────────────────────────────
+# Messages / misc
 settings:
   # Seconds a chat prompt (e.g. naming an island) waits for input before giving up.
   chat-prompt-timeout-seconds: 30
@@ -547,22 +429,13 @@ settings:
   # Print extra timing/debug lines to console.
   debug: false
 
-# ── Profiles ──────────────────────────────────────────────────────────────────
+# Profiles
 profile:
-  # Hotbar slots (1-9) owned by another plugin, left out of the per-profile inventory.
-  #
-  # A profile swap replaces the whole inventory, so an item another plugin pins to a slot
-  # would otherwise be saved into whichever profile was active and handed back on a
-  # different one — duplicating it, or losing it. List the slot here and RoyalSkyblock
-  # saves everything else and leaves that square alone.
-  #
-  # Example: RoyalJoin's menu item in the far-right slot.
+  # Hotbar slots (1-9) owned by another plugin (e.g. RoyalJoin's menu item), left out of the
+  # per-profile inventory so the item isn't duplicated or lost on a profile switch.
   externally-managed-hotbar-slots: []
 
-# ── Island trash ──────────────────────────────────────────────────────────────
-# Deleted islands' worlds are archived to plugins/RoyalSkyblock/trash/ as .slime
-# files before the store forgets them, whatever backend the live store uses.
-# /is delete is two words typed in anger, and the island IS the player's progress.
+# Island trash: deleted islands are archived to plugins/RoyalSkyblock/trash/ as .slime files.
 #   /is admin trash list                       - what's recoverable
 #   /is admin trash restore <archive> <player> - give the blocks back to their
 #                                                active profile (must have no island)

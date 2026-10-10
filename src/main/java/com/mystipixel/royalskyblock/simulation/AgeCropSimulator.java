@@ -10,12 +10,8 @@ import org.bukkit.block.data.Ageable;
 import java.util.Set;
 
 /**
- * Crops that grow by ageing in place: wheat, carrots, potatoes, beetroot, nether wart, cocoa,
- * sweet berries, torchflower and pitcher crop.
- *
- * <p>These are the easy case — read {@code age}, write a bigger {@code age}. Anything that grows by
- * <em>placing</em> a block (cane, cactus, melon/pumpkin stems) needs its own simulator, because the
- * question there is "where does the new block go" rather than "what age is this one".
+ * Crops that grow by ageing in place: wheat, carrots, potatoes, beetroot, nether wart, cocoa, sweet
+ * berries and torchflower. Plants that grow by placing a block need their own simulator.
  */
 public final class AgeCropSimulator implements BlockSimulator {
 
@@ -23,9 +19,8 @@ public final class AgeCropSimulator implements BlockSimulator {
             Material.WHEAT, Material.CARROTS, Material.POTATOES, Material.BEETROOTS,
             Material.NETHER_WART, Material.COCOA, Material.SWEET_BERRY_BUSH,
             Material.TORCHFLOWER_CROP);
-    // No PITCHER_CROP: it is a two-block plant whose halves must age together. Ageing each block on
-    // its own left a lower half past the stage that needs an upper half, which vanilla then breaks on
-    // the next neighbour update, and mismatched halves on the plants that survived.
+    // No PITCHER_CROP: its two halves must age together, and ageing them separately leaves a lower half
+    // that vanilla breaks on the next update.
 
     private final RoyalSkyblockPlugin plugin;
 
@@ -45,7 +40,7 @@ public final class AgeCropSimulator implements BlockSimulator {
         }
         double perStage = plugin.conf().getDouble("simulation.crops.seconds-per-stage", 130);
         if (perStage <= 0) {
-            return;                             // treated as "disabled", not "instant"
+            return;                             // treated as disabled, not instant
         }
         int grown = GrowthModel.stagesGrown(ctx.offlineSeconds(), perStage,
                 age.getMaximumAge() - age.getAge(), ctx.random()::nextDouble);

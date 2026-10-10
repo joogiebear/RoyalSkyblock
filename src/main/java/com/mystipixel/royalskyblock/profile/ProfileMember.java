@@ -5,9 +5,8 @@ import com.mystipixel.royalskyblock.island.IslandRole;
 import java.util.UUID;
 
 /**
- * A member of a profile (coop roster row): who they are, their {@link IslandRole}, and when they
- * joined. The name is a cached last-known value for display. For a Solo/Ironman profile this is just
- * the owner; for Coop it can be several players sharing the island and economy.
+ * A coop roster row: who, their {@link IslandRole}, and when they joined. The name is a cached
+ * last-known value for display. A Solo/Ironman profile has just the owner.
  */
 public final class ProfileMember {
 

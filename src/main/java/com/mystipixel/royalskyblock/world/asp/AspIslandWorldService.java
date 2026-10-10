@@ -22,13 +22,10 @@ import java.util.concurrent.Executor;
 import java.util.function.Supplier;
 
 /**
- * The one and only Advanced Slime Paper adapter. Everything ASP-specific lives here; the rest of the
- * plugin sees only {@link IslandWorldService}.
+ * The Advanced Slime Paper adapter; everything ASP-specific lives here.
  *
- * <p>Threading contract from ASP: {@code createEmptyWorld}/{@code readWorld}/{@code saveWorld} may run
- * off the main thread (and should, since they hit the data source), while {@code loadWorld} and any
- * Bukkit world touch must run on the server thread. This class hops threads accordingly and hands
- * callers a plain Bukkit {@link World}.
+ * <p>ASP threading: {@code createEmptyWorld}/{@code readWorld}/{@code saveWorld} may (and should) run
+ * off the main thread, while {@code loadWorld} and any Bukkit world access must run on it.
  */
 public final class AspIslandWorldService implements IslandWorldService {
 
@@ -67,9 +64,8 @@ public final class AspIslandWorldService implements IslandWorldService {
                 .supplyAsync(() -> asp.createEmptyWorld(worldName, false, props, loader), async)
                 // ...load it into the server on the main thread...
                 .thenCompose(slime -> onMain(() -> asp.loadWorld(slime, true)))
-                // ...then persist the fresh world (awaited, so a later delete/unload can't race an
-                // in-flight save) before handing back the Bukkit world. If that first save fails the
-                // create fails, and the world is unloaded rather than left loaded with no row.
+                // ...then persist the fresh world (awaited, so a later delete/unload can't race the save) before
+                // handing back the Bukkit world. If that save fails the world is unloaded and the create fails.
                 .thenCompose(instance -> CompletableFuture
                         .runAsync(() -> save(instance), async)
                         .exceptionallyCompose(error -> unloadIsland(worldName, false)
@@ -80,7 +76,6 @@ public final class AspIslandWorldService implements IslandWorldService {
 
     @Override
     public CompletableFuture<World> loadIsland(String worldName) {
-        // Already loaded? Hand back the live world.
         SlimeWorldInstance loaded = asp.getLoadedWorld(worldName);
         if (loaded != null) {
             return CompletableFuture.completedFuture(loaded.getBukkitWorld());
@@ -111,7 +106,7 @@ public final class AspIslandWorldService implements IslandWorldService {
     public void saveIslandNow(String worldName) {
         SlimeWorldInstance instance = asp.getLoadedWorld(worldName);
         if (instance != null) {
-            save(instance);                      // calling thread — the scheduler is gone during disable
+            save(instance);                      // calling thread: the scheduler is gone during disable
         }
     }
 
@@ -126,9 +121,8 @@ public final class AspIslandWorldService implements IslandWorldService {
                 : CompletableFuture.completedFuture(null);
         return saved.thenCompose(ignored -> onMain(() -> {
             World world = instance.getBukkitWorld();
-            // We handle persistence via ASP above, so never let Bukkit double-save here.
-            // Bukkit refuses (false) while anyone is still in the world. Carrying on would let a delete
-            // remove the file under a live world, so fail and let the caller retry or abort.
+            // Persistence is handled via ASP above, so Bukkit must not save. Bukkit refuses (false) while anyone
+            // is in the world; fail rather than let a delete remove the file under a live world.
             if (!Bukkit.unloadWorld(world, false)) {
                 throw new IllegalStateException("Bukkit refused to unload island world '" + worldName
                         + "' (players still in it?)");
@@ -144,7 +138,7 @@ public final class AspIslandWorldService implements IslandWorldService {
                     try {
                         loader.deleteWorld(worldName);
                     } catch (UnknownWorldException ignored2) {
-                        // Already gone — nothing to delete.
+                        // already gone, nothing to delete
                     } catch (Exception e) {
                         throw new RuntimeException("Failed to delete island world '" + worldName + "'", e);
                     }
@@ -173,8 +167,7 @@ public final class AspIslandWorldService implements IslandWorldService {
 
     @Override
     public void shutdown() {
-        // ASP handles final world flushing on server stop. Close our loader's own resources (e.g. the
-        // MySQL slime pool) if it holds any.
+        // ASP flushes worlds on server stop; close our loader's own resources (e.g. the MySQL slime pool).
         if (loader instanceof AutoCloseable closeable) {
             try {
                 closeable.close();
@@ -186,17 +179,8 @@ public final class AspIslandWorldService implements IslandWorldService {
         this.loader = null;
     }
 
-    // ── internals ────────────────────────────────────────────────────────────
-
-    /**
-     * Throws on failure rather than logging and carrying on. Every caller acts on the result: unload
-     * keeps the island loaded and retries, delete aborts instead of archiving stale bytes, create
-     * fails. Swallowing the error here meant all of them went ahead as if the blocks were on disk.
-     *
-     * <p>ASP's own call is not enough to know: for a loaded world it logs a failed write and returns
-     * normally (see {@link SaveTrackingLoader}). So the outcome is read back from the loader, which is
-     * the only thing that saw it.
-     */
+    // Throws on failure: every caller acts on the result. ASP's saveWorld logs a failed write on a loaded
+    // world and returns normally, so the outcome is read back from SaveTrackingLoader.
     private void save(SlimeWorld world) {
         long mark = loader.mark();
         try {
@@ -212,7 +196,6 @@ public final class AspIslandWorldService implements IslandWorldService {
         }
     }
 
-    /** Build the ASP data-source loader from config. Called once during {@link #initialize()}. */
     private SlimeLoader buildLoader() {
         String source = plugin.conf().getString("world.slime-data-source", "file").toLowerCase();
         switch (source) {
@@ -235,7 +218,7 @@ public final class AspIslandWorldService implements IslandWorldService {
                 }
             }
             case "mongo" -> throw new IllegalStateException(
-                    "world.slime-data-source 'mongo' is not wired yet — use 'file' or 'mysql'.");
+                    "world.slime-data-source 'mongo' is not wired yet: use 'file' or 'mysql'.");
             default -> {
                 File dir = new File(plugin.getDataFolder(), "slime-worlds");
                 return new RsbFileLoader(dir);
@@ -243,7 +226,6 @@ public final class AspIslandWorldService implements IslandWorldService {
         }
     }
 
-    /** Build the world property map for new/loaded island worlds from config. */
     private SlimePropertyMap buildProperties() {
         SlimePropertyMap map = new SlimePropertyMap();
         ConfigurationSection p = plugin.conf().getConfigurationSection("world.properties");
@@ -265,7 +247,7 @@ public final class AspIslandWorldService implements IslandWorldService {
         return map;
     }
 
-    /** Run {@code supplier} on the server thread, completing the returned future with its result. */
+    // run supplier on the main thread, completing the returned future with its result
     private <T> CompletableFuture<T> onMain(Supplier<T> supplier) {
         CompletableFuture<T> future = new CompletableFuture<>();
         Runnable task = () -> {

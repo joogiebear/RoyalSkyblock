@@ -3,8 +3,8 @@ package com.mystipixel.royalskyblock.island;
 import java.util.Locale;
 
 /**
- * A per-island toggle. New privacy/behaviour flags are added here and they automatically appear in
- * the settings menu. Each has a stable {@link #key()} (persisted), a default, and display metadata.
+ * A per-island toggle; new ones appear in the settings menu automatically. Each has a stable,
+ * persisted {@link #key()}, a default, and display metadata.
  */
 public enum IslandSetting {
 

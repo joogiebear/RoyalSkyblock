@@ -11,12 +11,8 @@ import org.jetbrains.annotations.NotNull;
 import java.util.List;
 
 /**
- * {@code /bank} — RoyalSkyblock owns the single bank command. On a Coop profile it opens the bank hub
- * (personal + coop); otherwise it opens the personal bank directly.
- *
- * <p>An eco {@link PluginCommand} like the rest of the suite. Being declared players-only means eco
- * turns away the console with {@code messages.not-player} from this plugin's own lang.yml, which is
- * why the handler no longer checks for a {@link Player} itself.
+ * {@code /bank}: on a Coop profile it opens the bank hub (personal + coop); otherwise the personal
+ * bank. Declared players-only, so eco turns the console away with {@code messages.not-player}.
  */
 public final class BankCommand extends PluginCommand {
 

@@ -28,23 +28,17 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
 /**
- * The one place that walks an island and hands its blocks to {@link BlockSimulator}s.
+ * Walks an island once on catch-up and hands its blocks to the registered {@link BlockSimulator}s:
+ * snapshot chunks on the main thread, scan off it, write back on it.
  *
- * <p>Every simulator needs the same three awkward things: snapshot chunks on the main thread, scan
- * them off it, then write back on the main thread. Each of those has a trap, and this feature found
- * all of them the hard way — a snapshot without {@code includeMaxblocky} throws on the first height
- * lookup; chunk sections are indexed from the world's <em>minimum</em> height, so {@code y >> 4} is
- * wrong in any world with a negative floor; and {@code getLoadedChunks()} is empty at catch-up time
- * because the event fires before the arriving player is teleported in. Doing this once, here, means
- * a simulator can't rediscover them.
- *
- * <p>Simulators read a frozen snapshot and queue changes, so they're independent of each other and
- * of ordering. Writes are re-checked against the live world before applying — the snapshot is a
- * moment old, and a player may already have harvested.
+ * <p>Traps handled here: snapshots need {@code includeMaxblocky} or the first height lookup throws;
+ * chunk sections are indexed from the world's minimum height, not y=0; and {@code getLoadedChunks()}
+ * is empty at catch-up time. Writes are re-checked against the live world, since a player may have
+ * harvested since the snapshot.
  */
 public final class IslandScanner implements Listener {
 
-    /** How long a catch-up waits for the island's chunks before dropping the offline time. */
+    // how long a catch-up waits for the island's chunks before dropping the offline time
     private static final long CHUNK_LOAD_TIMEOUT_SECONDS = 120;
 
 
@@ -57,13 +51,13 @@ public final class IslandScanner implements Listener {
     }
 
     /**
-     * Add a simulator. Call from {@code onEnable}; there is no unregister, because a catch-up that
-     * lost a simulator halfway would silently under-pay an island.
+     * Add a simulator. Call from {@code onEnable}. There is no unregister: losing a simulator mid catch-up
+     * would under-pay an island.
      */
     public void register(BlockSimulator simulator) {
         Set<Material> materials = simulator.materials();
         if (materials == null || materials.isEmpty()) {
-            plugin.getLogger().warning("Simulator " + simulator.name() + " asked for no materials — ignored.");
+            plugin.getLogger().warning("Simulator " + simulator.name() + " asked for no materials: ignored.");
             return;
         }
         all.add(simulator);
@@ -75,8 +69,6 @@ public final class IslandScanner implements Listener {
     public List<BlockSimulator> registered() {
         return List.copyOf(all);
     }
-
-    // ------------------------------------------------------------------ catch-up
 
     @EventHandler(priority = EventPriority.NORMAL, ignoreCancelled = true)
     public void onCatchup(IslandCatchupEvent event) {
@@ -91,21 +83,19 @@ public final class IslandScanner implements Listener {
         int loY = Math.max(world.getMinHeight(), plugin.conf().getInt("simulation.scan-y-min", 60));
         int hiY = Math.min(world.getMaxHeight() - 1, plugin.conf().getInt("simulation.scan-y-max", 180));
         if (loY > hiY) {
-            plugin.getLogger().warning("simulation.scan-y-min is above scan-y-max — nothing will ever be "
+            plugin.getLogger().warning("simulation.scan-y-min is above scan-y-max: nothing will ever be "
                     + "simulated. Check config.yml.");
             return;
         }
 
-        // The island's own footprint. NOT getLoadedChunks(): this fires the instant the world loads,
-        // before the arriving player is teleported in, so almost nothing is loaded yet.
+        // the island's own footprint, not getLoadedChunks(): this fires before the arriving player is
+        // teleported in, so almost nothing is loaded yet
         int centreX = plugin.conf().getInt("island.paste.x", 0);
         int centreZ = plugin.conf().getInt("island.paste.z", 0);
         int radius = Math.max(16, island.radius());
 
-        // Loaded asynchronously, then snapshotted. getChunkAt() here pulled the whole footprint in on
-        // the server thread the moment the world loaded — 121 chunks at radius 80, more after size
-        // upgrades — which is a lag spike every time an island wakes up. gen=false: an ungenerated
-        // chunk is empty void with nothing to simulate, so it is skipped rather than created.
+        // Loaded asynchronously, then snapshotted, to avoid a lag spike when an island wakes up. gen=false:
+        // an ungenerated chunk is empty void, so it is skipped rather than created.
         List<long[]> coords = new ArrayList<>();
         List<CompletableFuture<Chunk>> loads = new ArrayList<>();
         for (int cx = (centreX - radius) >> 4; cx <= (centreX + radius) >> 4; cx++) {
@@ -116,20 +106,18 @@ public final class IslandScanner implements Listener {
         }
         CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new))
                 .orTimeout(CHUNK_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                // Back on the server thread either way: a timeout completes on a timer thread, and
-                // snapshots must be taken on the server thread.
+                // back on the main thread either way: a timeout completes on a timer thread, and snapshots need the main thread
                 .whenComplete((ignored, error) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (error != null) {
                         plugin.getLogger().warning("Catch-up: chunks of " + world.getName() + " did not load ("
-                                + error + ") — " + offline + "s of offline progress is being dropped.");
+                                + error + "): " + offline + "s of offline progress is being dropped.");
                         return;
                     }
                     Map<Long, ChunkSnapshot> snapshots = new HashMap<>();
                     for (int i = 0; i < loads.size(); i++) {
                         Chunk chunk = loads.get(i).join();
                         if (chunk != null) {
-                            // includeMaxblocky MUST be true — the scan uses getHighestBlockYAt, and a
-                            // snapshot without the height map throws rather than degrading.
+                            // includeMaxblocky must be true: the scan uses getHighestBlockYAt, which throws without the height map
                             snapshots.put(key((int) coords.get(i)[0], (int) coords.get(i)[1]),
                                     chunk.getChunkSnapshot(true, false, false));
                         }
@@ -138,12 +126,12 @@ public final class IslandScanner implements Listener {
                 }));
     }
 
-    /** Snapshots in hand: scan them off the server thread, then write the results back on it. */
+    // snapshots in hand: scan them off the main thread, then write the results back on it
     private void scanSnapshots(World world, long offline, int radius, int loY, int hiY,
                                Map<Long, ChunkSnapshot> snapshots, boolean debug) {
         if (snapshots.isEmpty()) {
             plugin.getLogger().warning("Catch-up: no chunks to scan for " + world.getName()
-                    + " — " + offline + "s of offline time is being dropped.");
+                    + ": " + offline + "s of offline time is being dropped.");
             return;
         }
         if (debug) {
@@ -158,10 +146,8 @@ public final class IslandScanner implements Listener {
             try {
                 seen = scan(ctx);
             } catch (Throwable t) {
-                // The scheduler would otherwise log "generated an exception while executing task N",
-                // naming no island and giving no hint that time was lost — and the catch-up has
-                // already cleared the stamp, so the island never gets that time back. Say so.
-                plugin.getLogger().severe("Catch-up scan failed for " + world.getName() + " — "
+                // Name the island and the lost time: the stamp is already cleared, so the island never gets it back.
+                plugin.getLogger().severe("Catch-up scan failed for " + world.getName() + "; "
                         + offline + "s of offline progress was dropped: " + t);
                 t.printStackTrace();
                 return;
@@ -171,7 +157,7 @@ public final class IslandScanner implements Listener {
         });
     }
 
-    /** @return how many blocks any simulator asked to see (the number that explains a no-op) */
+    // returns how many blocks any simulator asked to see
     private int scan(Context ctx) {
         int seen = 0;
         for (ChunkSnapshot snap : ctx.snapshots.values()) {
@@ -194,7 +180,7 @@ public final class IslandScanner implements Listener {
                             try {
                                 sim.simulate(block, ctx);
                             } catch (Throwable t) {
-                                // One bad simulator must not cost the island everything else's work.
+                                // one bad simulator must not cost the island everyone else's work
                                 plugin.getLogger().warning("Simulator " + sim.name() + " failed on "
                                         + type + " at " + block.x() + "," + block.y() + "," + block.z()
                                         + ": " + t);
@@ -214,8 +200,7 @@ public final class IslandScanner implements Listener {
         for (Map.Entry<Pos, BlockData> e : ctx.queued.entrySet()) {
             Pos p = e.getKey();
             Block block = ctx.world.getBlockAt(p.x(), p.y(), p.z());
-            // Re-check against what we scanned: the snapshot is a moment old and the player may
-            // already have harvested. Never overwrite a block that changed under us.
+            // re-check against the snapshot: the player may already have harvested; never overwrite a changed block
             BlockData was = ctx.snapshotDataAt(p.x(), p.y(), p.z());
             if (was == null || !block.getBlockData().matches(was)) {
                 continue;
@@ -224,9 +209,8 @@ public final class IslandScanner implements Listener {
             changed++;
         }
         if (debug) {
-            // Report the zero case too, and break it down per simulator: silence is indistinguishable
-            // from a broken scan, and a merged count can't tell "cane never seen" from "cane seen but
-            // didn't grow" — the two problems that kept the cane test inconclusive.
+            // Report the zero case too, per simulator: "cane seen but didn't grow" and "cane never seen" are
+            // different problems.
             StringBuilder perSim = new StringBuilder();
             for (BlockSimulator sim : all) {
                 int[] s = ctx.statsBySim.getOrDefault(sim.name(), new int[2]);
@@ -236,25 +220,18 @@ public final class IslandScanner implements Listener {
             }
             plugin.getLogger().info("Catch-up: changed " + changed + " of " + ctx.queued.size()
                     + " queued (" + blocksSeen + " blocks seen) in " + ctx.world.getName()
-                    + " for " + ctx.offline + "s offline — " + perSim + ".");
+                    + " for " + ctx.offline + "s offline: " + perSim + ".");
         }
     }
-
-    // ------------------------------------------------------------------ context
 
     private static long key(int x, int z) {
         return ((long) x << 32) | (z & 0xffffffffL);
     }
 
-    /**
-     * Block coordinate key. A record rather than a packed long: the queue is at most a few thousand
-     * entries, so the packing would buy nothing measurable, and hand-rolled bit twiddling is how you
-     * get an off-by-one that silently writes to the wrong block.
-     */
+    // block coordinate key; a record rather than a packed long to avoid bit-twiddling mistakes
     private record Pos(int x, int y, int z) {
     }
 
-    /** Read-only island view + change queue, handed to every simulator. */
     private final class Context implements SimulationContext {
         private final World world;
         private final long offline;
@@ -263,9 +240,7 @@ public final class IslandScanner implements Listener {
         private final int hiY;
         private final Map<Pos, BlockData> queued = new HashMap<>();
 
-        // Per-simulator diagnostics. "cane grew 0 of 3 seen" is a completely different problem from
-        // "crops grew 0 of 0 seen", and the merged count can't tell them apart — which is exactly why
-        // the cane test kept being inconclusive. Single-threaded (one async scan task), so plain maps.
+        // per-simulator diagnostics; single-threaded (one async scan task), so plain maps
         private final Map<String, int[]> statsBySim = new HashMap<>();   // name -> {seen, queued}
         private String currentSim;
 

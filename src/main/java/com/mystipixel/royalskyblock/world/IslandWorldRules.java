@@ -10,18 +10,13 @@ import org.bukkit.entity.Player;
 import java.util.Locale;
 
 /**
- * Applies the configured world rules to island worlds: a Minecraft gamemode (enforced when a player
- * is on an island) and an arbitrary set of gamerules (applied when the island world loads).
+ * Applies {@code island.world-rules} to island worlds: a gamemode (enforced when a player is on an
+ * island) and gamerules (applied when the world loads). Island worlds aren't managed by Multiverse, so
+ * nothing else sets these.
  *
- * <p><b>Why this lives in RoyalSkyblock.</b> Island worlds are created on demand and are <em>not</em>
- * managed by Multiverse, so nothing else on the server can set their gamerules or reliably put players
- * into the right gamemode when they arrive. RoyalSkyblock owns the island lifecycle, so it does both.
- *
- * <p><b>Nothing is hardcoded.</b> The gamemode and every gamerule come straight from
- * {@code island.world-rules} in config.yml. Gamerule keys are resolved leniently — the Minecraft 26.2
- * ids ({@code keep_inventory}), the classic Bukkit names ({@code keepInventory}) and an optional
- * {@code minecraft:} prefix all work — so admins can copy names from {@code /mv gamerule list} or any
- * older guide and they still resolve. Unknown names are skipped with a warning, never a crash.
+ * <p>Gamerule keys resolve leniently: 26.2 ids ({@code keep_inventory}), classic names
+ * ({@code keepInventory}) and a {@code minecraft:} prefix all work. Unknown names are skipped with a
+ * warning.
  */
 public final class IslandWorldRules {
 
@@ -30,8 +25,6 @@ public final class IslandWorldRules {
     public IslandWorldRules(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
     }
-
-    // ── gamerules ────────────────────────────────────────────────────────────────
 
     /** Apply every gamerule listed under {@code island.world-rules.gamerules} to the given world. */
     public void applyGameRules(World world) {
@@ -46,7 +39,7 @@ public final class IslandWorldRules {
             GameRule<?> rule = resolveRule(key);
             if (rule == null) {
                 plugin.getLogger().warning("Unknown gamerule '" + key
-                        + "' in island.world-rules.gamerules — skipped.");
+                        + "' in island.world-rules.gamerules: skipped.");
                 continue;
             }
             applyOne(world, rule, sec, key);
@@ -63,7 +56,7 @@ public final class IslandWorldRules {
                 world.setGameRule((GameRule<Integer>) rule, sec.getInt(key));
             } else {
                 plugin.getLogger().warning("Gamerule '" + key + "' has unsupported type "
-                        + type.getSimpleName() + " — skipped.");
+                        + type.getSimpleName() + ": skipped.");
             }
         } catch (RuntimeException e) {
             plugin.getLogger().warning("Could not set gamerule '" + key + "': " + e.getMessage());
@@ -71,8 +64,8 @@ public final class IslandWorldRules {
     }
 
     /**
-     * Resolve a config key to a Bukkit {@link GameRule}, trying the key as written, then its
-     * snake_case&harr;camelCase variants, so both 26.2 ids and classic names work. {@code null} if none match.
+     * Resolve a config key to a Bukkit {@link GameRule}, trying it as written, then its
+     * snake_case&harr;camelCase variants. {@code null} if none match.
      */
     public static GameRule<?> resolveRule(String key) {
         if (key == null || key.isBlank()) {
@@ -89,12 +82,9 @@ public final class IslandWorldRules {
         return rule;
     }
 
-    // ── gamemode ─────────────────────────────────────────────────────────────────
-
     /**
-     * Put the player into the configured island gamemode if they are on an island, enforcement is on,
-     * and they lack {@code royalskyblock.playmode.bypass}. A no-op everywhere else, so the hub and any
-     * other world are left entirely alone.
+     * Put the player into the configured island gamemode if they are on an island, enforcement is on, and
+     * they lack {@code royalskyblock.playmode.bypass}. A no-op everywhere else.
      */
     public void applyGameMode(Player player) {
         if (player == null
@@ -120,8 +110,6 @@ public final class IslandWorldRules {
             return null;
         }
     }
-
-    // ── name helpers ─────────────────────────────────────────────────────────────
 
     private static String snakeToCamel(String s) {
         StringBuilder out = new StringBuilder(s.length());

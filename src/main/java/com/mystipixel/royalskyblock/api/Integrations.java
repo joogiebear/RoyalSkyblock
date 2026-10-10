@@ -10,31 +10,17 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Where an extension announces what it can supply, and where RoyalSkyblock looks for it.
+ * Registry where extensions announce mob and progression backends, and where RoyalSkyblock looks
+ * them up.
  *
- * <p>Support for a third-party plugin — a mob backend, a skills backend — is an extension that
- * registers here, not a branch inside this plugin's enable. Adding MythicMobs support becomes a new
- * jar; it changes nothing in RoyalSkyblock and nothing in any other extension.
+ * <p>Register from an extension's {@code onEnable}, which eco runs before the host's
+ * {@code handleEnable}. The host's services don't exist yet at that point, so registering must
+ * only hand over an object; anything needing {@code islands()}, {@code worlds()} or
+ * {@code storage()} belongs in the extension's {@code onAfterLoad}.
  *
- * <h2>When to register</h2>
- *
- * <p>From an extension's {@code onEnable}, which eco runs <b>before</b> the host's {@code handleEnable}.
- * That ordering is the reason a registry works at all: everything registered by an extension is in
- * place by the time RoyalSkyblock reads it to start island mob spawning.
- *
- * <p>The corollary is that the host's services do <em>not</em> exist yet at that moment. Registering
- * must therefore hand over an object and touch nothing — anything needing {@code islands()},
- * {@code worlds()} or {@code storage()} belongs in the extension's {@code onAfterLoad}.
- *
- * <p>This registry is built when the plugin is constructed rather than in {@code handleEnable},
- * precisely so that it exists before the first extension enables.
- *
- * <h2>Ids</h2>
- *
- * <p>Ids are matched case-insensitively against config values (<code>island-mobs.provider</code>), so
- * an admin typing {@code EcoMobs} gets the provider registered as {@code ecomobs}. Registering an id
- * twice replaces the first: an extension shipped by a server owner is meant to be able to override a
- * built-in one without having to remove it.
+ * <p>Ids are matched case-insensitively against config values ({@code island-mobs.provider}).
+ * Registering an id twice replaces the first, so a server owner's extension can override a
+ * built-in one.
  */
 public final class Integrations {
 
@@ -44,8 +30,6 @@ public final class Integrations {
     private static String key(String id) {
         return id == null ? "" : id.trim().toLowerCase(Locale.ROOT);
     }
-
-    // ── mob backends ───────────────────────────────────────────────────────────
 
     /** Register a mob backend. Keyed on the provider's own {@link IslandMobProvider#id()}. */
     public void registerMobProvider(IslandMobProvider provider) {
@@ -57,12 +41,10 @@ public final class Integrations {
         return mobProviders.get(key(id));
     }
 
-    /** Every registered mob backend id, in registration order — for diagnostics and error messages. */
+    /** Every registered mob backend id, in registration order. */
     public Collection<String> mobProviderIds() {
         return List.copyOf(mobProviders.keySet());
     }
-
-    // ── progression backends ───────────────────────────────────────────────────
 
     /** Register a skills/stats backend. Keyed on the provider's own {@link ProgressionProvider#id()}. */
     public void registerProgressionProvider(ProgressionProvider provider) {
@@ -76,10 +58,7 @@ public final class Integrations {
 
     /**
      * The first registered progression backend that reports itself usable, or null if there is none.
-     *
-     * <p>For callers that want "whatever skills plugin this server runs" rather than a named one. With
-     * a single backend installed — the normal case — this saves an admin configuring a name to select
-     * the only option available.
+     * For callers that want whatever skills plugin the server runs rather than a named one.
      */
     public @Nullable ProgressionProvider anyProgressionProvider() {
         for (ProgressionProvider provider : progression.values()) {

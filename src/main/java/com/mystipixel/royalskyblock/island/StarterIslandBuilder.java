@@ -19,24 +19,18 @@ import java.util.Locale;
 import java.util.logging.Logger;
 
 /**
- * Generates the starter island in code (no schematic needed).
+ * Generates the starter island in code: a house at the centre where the player spawns, terrain and
+ * features around it, and a second island across a gap with a portal back to spawn. Deterministic, so
+ * every island is identical; features are placed against the generated heightmap.
  *
- * <p>A house at the centre that the player spawns inside, terrain and features arranged around it, and
- * a second island across a gap carrying a portal back to spawn — reachable only once the player bridges
- * to it, which is the first thing a skyblock island should ask of you.
- *
- * <p>Shaped rather than stamped: an organic outline, a surface that rolls, a stone outcrop, and an
- * underside that tapers to a point. Deterministic, so every island is identical and the result can be
- * reasoned about; features are placed against the generated heightmap rather than a fixed y.
- *
- * <p>All block writes touch the world, so this must run on the server thread.
+ * <p>Writes blocks, so it must run on the main thread.
  */
 public final class StarterIslandBuilder {
 
-    /** Marks a column that isn't part of the island. */
+    // marks a column that isn't part of the island
     private static final int NO_COLUMN = Integer.MIN_VALUE;
 
-    /** Half-width of the house's floor plan, so the building is {@code HOUSE * 2 + 1} across. */
+    // half-width of the house floor plan, so it is HOUSE * 2 + 1 across
     private static final int HOUSE = 5;
 
     private StarterIslandBuilder() {
@@ -56,7 +50,7 @@ public final class StarterIslandBuilder {
             world.getBlockAt(x, y - 12, z).setType(Material.BEDROCK, false);
         }
 
-        // -- the house, dead centre, floor exactly at y so island.home-offset (y+1) lands on it --
+        // the house, floor exactly at y so island.home-offset (y+1) lands on it
         for (int dx = -HOUSE - 1; dx <= HOUSE + 1; dx++) {
             for (int dz = -HOUSE - 1; dz <= HOUSE + 1; dz++) {
                 level(world, surface, span, x, z, dx, dz, y, sub);
@@ -68,7 +62,6 @@ public final class StarterIslandBuilder {
             placeStarterChest(world, x - 3, y + 1, z - 3, chestCfg, logger);
         }
 
-        // -- features around the house --
         farm(world, surface, span, x, y, z, sub);
         pond(world, surface, span, x, z);
         if (trees) {
@@ -77,13 +70,11 @@ public final class StarterIslandBuilder {
         outcropDetail(world, surface, span, x, z);
         scatterDetail(world, x, z, span, surface, platform);
 
-        // -- the second island, across a gap the player has to bridge --
         if (cfg == null || cfg.getBoolean("portal-island", true)) {
             portalIsland(world, x, y, z, cfg, platform, sub);
         }
     }
 
-    /** Build the main island's terrain and return its heightmap. */
     private static int[][] terrain(World world, int x, int y, int z, int span, int radius,
                                    Material platform, Material sub) {
         int[][] surface = new int[span * 2 + 1][span * 2 + 1];
@@ -98,8 +89,7 @@ public final class StarterIslandBuilder {
                     continue;
                 }
                 double falloff = 1.0 - (dist / edge);
-                // Flat under the house, rolling further out — a hill through the middle of a building
-                // would look like the house had been dropped on it.
+                // flat under the house, rolling further out
                 double roll = Math.max(0, dist - HOUSE - 2) * 0.16;
                 int top = y + (int) Math.round(Math.min(roll, 2.2) + knoll(dx, dz));
                 int depth = 3 + (int) Math.round(7.0 * falloff * falloff);
@@ -122,12 +112,7 @@ public final class StarterIslandBuilder {
         return surface;
     }
 
-    /**
-     * A second island across a gap, carrying a portal home.
-     *
-     * <p>Deliberately out of jump range: bridging to it is the first small goal a new island gives you,
-     * and the portal is the reward for doing it.
-     */
+    // a second island out of jump range, carrying a portal home: bridging to it is the first goal
     private static void portalIsland(World world, int x, int y, int z,
                                      @Nullable ConfigurationSection cfg, Material platform, Material sub) {
         int distance = cfg != null ? cfg.getInt("portal-island-distance", 34) : 34;
@@ -161,13 +146,8 @@ public final class StarterIslandBuilder {
         buildPortal(world, cx, cy + 1, cz);
     }
 
-    /**
-     * A 4x5 obsidian frame with portal blocks in it.
-     *
-     * <p>Placed directly rather than lit, because a void world has no guarantee of flint and steel, and
-     * the portal is meant to be there from the first second. Where it sends you is handled by the
-     * listener — walking in never reaches the nether.
-     */
+    // Placed directly rather than lit (no guaranteed flint and steel). The portal listener handles where
+    // it sends you; it never reaches the nether.
     private static void buildPortal(World world, int x, int y, int z) {
         for (int dz = -2; dz <= 2; dz++) {
             world.getBlockAt(x, y - 1, z + dz).setType(Material.OBSIDIAN, false);   // sill
@@ -184,12 +164,7 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /**
-     * The house: 11x11, plank walls with log posts, a pitched roof, and a door facing the portal island
-     * so the way onward is obvious from the doorstep.
-     *
-     * <p>The centre column is left clear — that is where the player spawns.
-     */
+    // 11x11 house with the door facing the portal island. The centre column is left clear for the spawn.
     private static void buildHouse(World world, int cx, int y, int cz) {
         int r = HOUSE;
         for (int dx = -r; dx <= r; dx++) {
@@ -214,7 +189,6 @@ public final class StarterIslandBuilder {
                 }
             }
         }
-        // windows
         for (int d = -2; d <= 2; d += 2) {
             world.getBlockAt(cx - r, y + 2, cz + d).setType(Material.GLASS_PANE, false);
             world.getBlockAt(cx + r, y + 2, cz + d).setType(Material.GLASS_PANE, false);
@@ -256,7 +230,7 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /** Hydrated crop beds on the -x/-z shoulder. */
+    // hydrated crop beds on the -x/-z shoulder
     private static void farm(World world, int[][] surface, int span, int x, int y, int z, Material sub) {
         int fx = -10;
         int fz = -4;
@@ -286,7 +260,7 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /** A pond carved into the +x/+z shoulder, with cane on its rim. */
+    // a pond carved into the +x/+z shoulder, with cane on its rim
     private static void pond(World world, int[][] surface, int span, int x, int z) {
         int px = 8;
         int pz = 8;
@@ -310,7 +284,6 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /** A few oaks on the knoll side, rather than one lonely tree. */
     private static void grove(World world, int[][] surface, int span, int x, int z) {
         int[][] spots = {{-8, 7}, {-12, 3}, {-6, 11}};
         for (int[] spot : spots) {
@@ -321,7 +294,6 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /** Boulders on the stone shoulder, so it reads as rock rather than a bare patch. */
     private static void outcropDetail(World world, int[][] surface, int span, int x, int z) {
         int[][] spots = {{9, -8}, {12, -5}, {7, -11}};
         for (int[] spot : spots) {
@@ -329,21 +301,18 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /**
-     * The island's outline at this bearing. Two out-of-phase waves give a lumpy edge; a circle and a
-     * square both read as artificial.
-     */
+    // two out-of-phase waves give a lumpy edge; a circle or square looks artificial
     private static double outline(int dx, int dz, int radius) {
         double angle = Math.atan2(dz, dx);
         return radius + 2.4 * Math.sin(3 * angle + 0.7) + 1.5 * Math.cos(5 * angle + 2.1);
     }
 
-    /** A raised knoll on the -x/+z side, falling off smoothly so it blends into the surface. */
+    // a raised knoll on the -x/+z side, falling off smoothly
     private static double knoll(int dx, int dz) {
         return 3.6 * Math.exp(-(sq(dx + 9.0) + sq(dz - 7.0)) / 60.0);
     }
 
-    /** The stone shoulder on the +x/-z side. */
+    // the stone shoulder on the +x/-z side
     private static boolean isOutcrop(int dx, int dz) {
         return sq(dx - 10.0) + sq(dz + 8.0) < 34.0;
     }
@@ -361,12 +330,8 @@ public final class StarterIslandBuilder {
         return surface[ix][iz];
     }
 
-    /**
-     * Flatten one column to {@code y}: clear what is above, fill if it is hollow.
-     *
-     * <p>Skips columns outside the island. Levelling a pad that overhangs the edge would otherwise fill
-     * empty sky with dirt and leave square tabs jutting into the void.
-     */
+    // Flatten one column to y: clear above, fill if hollow. Skips columns outside the island so a pad
+    // doesn't fill empty sky with dirt.
     private static void level(World world, int[][] surface, int span,
                               int originX, int originZ, int dx, int dz, int y, Material fill) {
         if (surfaceAt(surface, span, dx, dz) == NO_COLUMN) {
@@ -385,7 +350,6 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /** A small rock cluster for the outcrop. */
     private static void boulder(World world, int x, int surfaceY, int z) {
         if (surfaceY == NO_COLUMN) {
             return;
@@ -397,10 +361,7 @@ public final class StarterIslandBuilder {
         world.getBlockAt(x, y + 1, z).setType(Material.COBBLESTONE, false);
     }
 
-    /**
-     * Grass tufts and flowers on exposed grass. Placement is a hash of the coordinates rather than a
-     * random, so every island is identical and the result is reproducible.
-     */
+    // grass tufts and flowers; placement hashes the coordinates so every island is identical
     private static void scatterDetail(World world, int x, int z, int span, int[][] surface, Material platform) {
         for (int dx = -span; dx <= span; dx++) {
             for (int dz = -span; dz <= span; dz++) {
@@ -429,12 +390,12 @@ public final class StarterIslandBuilder {
         }
     }
 
-    /** Set a block from a blockdata string, skipping gracefully if that data is invalid on this version. */
+    // set a block from a blockdata string, skipping data that is invalid on this version
     private static void setData(World world, int x, int y, int z, String data) {
         try {
             world.getBlockAt(x, y, z).setBlockData(Bukkit.createBlockData(data), false);
         } catch (IllegalArgumentException badData) {
-            // unknown block/state on this MC version — leave it as-is
+            // unknown block/state on this MC version, leave it as-is
         }
     }
 
@@ -451,7 +412,7 @@ public final class StarterIslandBuilder {
         Block block = world.getBlockAt(x, y, z);
         BlockData data = Bukkit.createBlockData(crop);
         if (data instanceof Ageable ageable) {
-            // Mostly grown so a new player can harvest + replant right away.
+            // mostly grown so a new player can harvest and replant right away
             ageable.setAge(Math.max(0, ageable.getMaximumAge() - 1));
         }
         block.setBlockData(data, false);
@@ -489,7 +450,7 @@ public final class StarterIslandBuilder {
                                           @Nullable ConfigurationSection chestCfg, Logger logger) {
         Block block = world.getBlockAt(x, y, z);
         block.setType(Material.CHEST, false);
-        // Live (non-snapshot) state so inventory writes actually persist.
+        // live (non-snapshot) state so inventory writes persist
         if (!(block.getState(false) instanceof Chest chest)) {
             return;
         }
@@ -507,19 +468,9 @@ public final class StarterIslandBuilder {
         chest.update(true, false);
     }
 
-    /**
-     * One starter-chest line: {@code <item>} or {@code <item>:<amount>}.
-     *
-     * <p>The item goes through eco's own {@link Items#lookup lookup}, so anything the suite knows
-     * about works and not just a vanilla material — {@code ecominions:stone}, {@code ecoitems:<id>},
-     * {@code ecoarmor:<id>}. Starting every island with a minion is then a line of config rather than
-     * a special case in this class, and a server seeds whatever its own content plugins provide.
-     *
-     * <p>The amount is the <b>last</b> colon-separated segment, and only when it parses as a number.
-     * Splitting on the first colon would have been simpler and wrong: an eco lookup key contains one,
-     * so {@code ecominions:stone} would have been read as the material "ecominions" and skipped with a
-     * baffling warning.
-     */
+    // One starter-chest line: <item> or <item>:<amount>, looked up through eco (ecominions:stone,
+    // ecoitems:<id>, ...). The amount is the last colon-separated segment, and only if numeric, because
+    // the lookup key itself contains a colon.
     private static @Nullable ItemStack parseItem(String line, Logger logger) {
         if (line == null || line.isBlank()) {
             return null;
@@ -533,13 +484,13 @@ public final class StarterIslandBuilder {
                 amount = Math.max(1, Integer.parseInt(tail));
                 key = key.substring(0, lastColon).trim();
             } catch (NumberFormatException notAnAmount) {
-                // "ecominions:stone" with no amount — leave the key whole and take one.
+                // "ecominions:stone" with no amount: keep the key whole and take one
             }
         }
 
         ItemStack item = Items.lookup(key).getItem();
         if (item.getType() == Material.AIR) {
-            logger.warning("Starter chest: '" + key + "' matched no item — skipping. Use a material "
+            logger.warning("Starter chest: '" + key + "' matched no item: skipping. Use a material "
                     + "(DIAMOND), or a plugin item (ecominions:stone) if that plugin is installed.");
             return null;
         }
@@ -558,7 +509,7 @@ public final class StarterIslandBuilder {
         }
         Material material = Material.matchMaterial(raw.trim().toUpperCase(Locale.ROOT));
         if (material == null || !material.isBlock()) {
-            logger.warning("Starter island: '" + raw + "' is not a valid block for " + key + " — using " + fallback + ".");
+            logger.warning("Starter island: '" + raw + "' is not a valid block for " + key + ": using " + fallback + ".");
             return fallback;
         }
         return material;

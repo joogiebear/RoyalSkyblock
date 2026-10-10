@@ -17,22 +17,12 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Converts a legacy {@code upgrades.yml} / {@code perks.yml} into the one-file-per-thing layout.
+ * Converts a legacy {@code upgrades.yml} / {@code perks.yml} into the one-file-per-thing layout. Runs
+ * only from {@code /is admin split-content}.
  *
- * <p>Both layouts have always loaded, but the folders are only written on a fresh install — an
- * existing server keeps its monolith and never sees them appear. That is deliberate (nothing should
- * rewrite an admin's config behind their back) and it leaves upgrading servers with no way across,
- * which is what this closes. It runs from {@code /is admin split-content}, never on its own.
- *
- * <h2>Why it slices text</h2>
- *
- * <p>The obvious implementation — load with Bukkit, write each section back out — would destroy the
- * thing the folder layout exists for. Bukkit's YAML writer keeps no comments, so a config whose value
- * is half documentation comes back as bare keys. Every block is therefore cut out of the original
- * file verbatim and only shifted left, so what an admin wrote is what they get, alignment included.
- *
- * <p>The split is conservative on purpose: an id that already has a file is skipped rather than
- * overwritten, and the monolith is renamed rather than deleted.
+ * <p>Works on text rather than loading and re-saving with Bukkit, whose YAML writer drops comments:
+ * each block is cut from the original verbatim and only shifted left. An id that already has a file
+ * is skipped, and the monolith is renamed rather than deleted.
  */
 public final class ContentSplitter {
 
@@ -53,14 +43,9 @@ public final class ContentSplitter {
         this.plugin = plugin;
     }
 
-    // ── the pure part ──────────────────────────────────────────────────────────
-
     /**
-     * Cut every {@code <indent>key:} block out of {@code lines}.
-     *
-     * <p>A comment block sitting directly above a key belongs to that key. The file's own banner does
-     * not — it documents all of them — so scanning starts past it, or the first item would adopt the
-     * whole preamble and the rest would get nothing.
+     * Cut every {@code <indent>key:} block out of {@code lines}. A comment block directly above a key
+     * belongs to it; the file's own banner is skipped so the first item doesn't adopt it.
      *
      * @param container the section the items live under ({@code perks}), or null if they are at root
      */
@@ -112,7 +97,7 @@ public final class ContentSplitter {
 
             int bodyEnd = n + 1 < keyLines.size() ? keyLines.get(n + 1) : end;
             List<String> body = new ArrayList<>(lines.subList(keyLine + 1, bodyEnd));
-            // Trailing blanks and comments introduce the NEXT item, so they are not part of this one.
+            // trailing blanks and comments introduce the next item
             while (!body.isEmpty() && isCommentOrBlank(body.get(body.size() - 1))) {
                 body.remove(body.size() - 1);
             }
@@ -121,11 +106,8 @@ public final class ContentSplitter {
         return blocks;
     }
 
-    /**
-     * Where a content section starting at {@code start} ends: the first real line indented less than
-     * the items, i.e. the next root-level key. Settings below the section used to count as part of its
-     * last item, which then failed its indentation check — and trimming the section deleted them.
-     */
+    // Where a content section starting at start ends: the first real line indented less than the
+    // items. Settings below the section must not count as part of its last item.
     static int sectionEnd(List<String> lines, int start, int itemIndent) {
         for (int i = start; i < lines.size(); i++) {
             String line = lines.get(i);
@@ -164,10 +146,8 @@ public final class ContentSplitter {
     }
 
     /**
-     * Shift lines left by {@code amount}, preserving everything else.
-     *
-     * <p>Returns null if any line is indented less than that, which would mean the block was not
-     * shaped the way it was read. Refusing beats emitting YAML that parses differently.
+     * Shift lines left by {@code amount}. Returns null if any line is indented less than that: refusing
+     * beats emitting YAML that parses differently.
      */
     public static @Nullable List<String> dedent(List<String> lines, int amount) {
         String prefix = " ".repeat(amount);
@@ -216,10 +196,8 @@ public final class ContentSplitter {
             return null;
         }
         String name = rest.substring(0, rest.length() - 1).strip();
-        // Every key at the item level is an item, whatever it is called. Only accepting valid ids here
-        // made "Mythic:" read as part of the item above it: that item then failed its indentation check
-        // and was skipped, and Mythic was never mentioned. Whether a name can become a file is decided
-        // later, loudly (validId).
+        // Every key at the item level is an item, whatever it's called; whether it can become a file is
+        // decided later, loudly (validId).
         if (name.length() >= 2 && (name.startsWith("\"") && name.endsWith("\"")
                 || name.startsWith("'") && name.endsWith("'"))) {
             name = name.substring(1, name.length() - 1);
@@ -234,8 +212,6 @@ public final class ContentSplitter {
     private static String stripTrailing(String line) {
         return line.stripTrailing();
     }
-
-    // ── the file-touching part ─────────────────────────────────────────────────
 
     /**
      * Split both monoliths.
@@ -255,9 +231,8 @@ public final class ContentSplitter {
         if (apply && !written.isEmpty()) {
             plugin.upgrades().reload();
             plugin.perks().reload();
-            // The effect chains are compiled separately from the content, and the split just moved the
-            // files they are read from. Without this they would keep serving what was compiled at boot
-            // from a monolith that no longer exists, until something else happened to reload them.
+            // The effect chains are compiled separately from the content and the split just moved their
+            // source files, so recompile them now.
             RoyalHolders.INSTANCE.reload(plugin);
             notes.add("Reloaded upgrades, perks, and their effect chains.");
         }
@@ -277,7 +252,7 @@ public final class ContentSplitter {
         try {
             lines = Files.readAllLines(monolith.toPath(), StandardCharsets.UTF_8);
         } catch (IOException e) {
-            notes.add(monolithName + ": could not be read — " + e.getMessage());
+            notes.add(monolithName + ": could not be read: " + e.getMessage());
             return;
         }
 
@@ -290,7 +265,7 @@ public final class ContentSplitter {
 
         List<String> invalid = blocks.keySet().stream().filter(id -> !validId(id)).toList();
         if (!invalid.isEmpty()) {
-            notes.add(monolithName + ": NOT split — these ids can't become file names (lowercase letters,"
+            notes.add(monolithName + ": NOT split: these ids can't become file names (lowercase letters,"
                     + " digits, _ and - only): " + String.join(", ", invalid)
                     + ". Rename them in " + monolithName + " and run it again. Nothing was changed.");
             return;
@@ -309,7 +284,7 @@ public final class ContentSplitter {
             }
             String rendered = renderFile(header.replace("{id}", id), entry.getValue(), keyIndent, bodyIndent);
             if (rendered == null) {
-                skipped.add(folderName + "/" + id + ".yml (unexpected indentation — left alone)");
+                skipped.add(folderName + "/" + id + ".yml (unexpected indentation: left alone)");
                 incomplete = true;
                 continue;
             }
@@ -334,13 +309,12 @@ public final class ContentSplitter {
         }
         if (incomplete) {
             // Retiring it now would take the skipped items out of the live config.
-            notes.add(monolithName + ": kept as it is — not every item made it into " + folderName
+            notes.add(monolithName + ": kept as it is: not every item made it into " + folderName
                     + "/ (see skipped). Fix those and run it again.");
             return;
         }
-        // Retire the monolith only once its content is safely in the folder. perks.yml survives with
-        // its two switches — those are settings, not content — and leaving the perks: section beside
-        // the folder would mean edits to it silently doing nothing, which is the trap this avoids.
+        // Retire the monolith only once its content is safely in the folder. perks.yml keeps its two
+        // settings; a perks: section left beside the folder would silently do nothing.
         if (container == null) {
             retire(monolith, notes);
         } else {
@@ -348,7 +322,7 @@ public final class ContentSplitter {
         }
     }
 
-    /** Keep everything above the content section; drop the section itself. */
+    // keep everything above the content section; drop the section itself
     private void trimContainer(File file, List<String> lines, String container, List<String> notes) {
         int cut = -1;
         for (int i = 0; i < lines.size(); i++) {
@@ -368,7 +342,7 @@ public final class ContentSplitter {
         }
         head.add("");
         head.add("# The " + container + " themselves live in the " + container + "/ folder, one file each,");
-        head.add("# the way every eco plugin ships its content. The file name is the id — copy a file");
+        head.add("# the way every eco plugin ships its content. The file name is the id: copy a file");
         head.add("# there to add one, there is nothing to register. This file keeps only the settings.");
         head.add("");
         head.addAll(tail);                                    // settings that came after the section
@@ -379,7 +353,7 @@ public final class ContentSplitter {
             notes.add(file.getName() + ": content moved out, settings kept (backup: "
                     + file.getName() + ".pre-split).");
         } catch (IOException e) {
-            notes.add(file.getName() + ": could not be trimmed — " + e.getMessage());
+            notes.add(file.getName() + ": could not be trimmed: " + e.getMessage());
         }
     }
 
@@ -388,15 +362,13 @@ public final class ContentSplitter {
         if (monolith.renameTo(backup)) {
             notes.add(monolith.getName() + ": moved to " + backup.getName() + ".");
         } else {
-            notes.add(monolith.getName() + ": could NOT be renamed — it is still being read, so the "
+            notes.add(monolith.getName() + ": could NOT be renamed: it is still being read, so the "
                     + "folder files are shadowed by it. Move it aside by hand.");
         }
     }
 
-    /**
-     * The banner shipped on this kind of content file, retitled with a {@code {id}} placeholder.
-     * Falls back to a one-line header if the jar resource has moved.
-     */
+    // The banner shipped on this kind of content file, retitled with an {id} placeholder. Falls back to
+    // a one-line header if the jar resource has moved.
     private String headerFor(String folderName, String sample, String title) {
         String fallback = "# ═══════════════════════════════════════════════════════════════════════════════\n"
                 + "#  RoyalSkyblock  ·  " + title + ": {id}\n"

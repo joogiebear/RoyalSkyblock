@@ -16,50 +16,32 @@ import org.bukkit.entity.Player
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Lets a menu button run a libreforge effect chain, the way an EcoMenus button does.
- *
- * A slot's `left-click:`/`right-click:` list is already written as `id:` + `args:` — the exact shape
- * libreforge compiles — so anything in it that is not one of the six built-in menu actions is handed
- * to [Effects] instead of being rejected. The built-ins stay: they do things libreforge has no
- * vocabulary for, like opening another RoyalSkyblock menu.
+ * Lets a menu button run a libreforge effect chain. Anything in a slot's `left-click:`/`right-click:`
+ * list that isn't a built-in menu action is compiled by [Effects]:
  *
  * ```yaml
  * left-click:
  *   - id: open_menu          # built-in, unchanged
  *     args:
  *       menu: upgrades
- *   - id: give_money         # any of the 275 eco effects
+ *   - id: give_money         # any eco effect
  *     args:
  *       amount: 100
  *       chance: 50
  * ```
  *
- * A button can therefore carry conditions, chances, cooldowns and delays without RoyalSkyblock
- * implementing any of them — which is the difference between a bespoke menu system and one an eco
- * user already knows how to configure.
- *
- * Chains are compiled when menus load, not when a button is first clicked. That is deliberate: it
- * keeps config parsing out of inventory events, and it means a broken chain is reported at startup
- * with the file and slot named — the way every other eco plugin reports its violations — instead of
- * the first time some player happens to press that button.
+ * Chains are compiled when menus load, so a broken one is reported at startup with its file and slot.
  */
 object MenuChains {
 
-    /**
-     * The trigger chains run under. A chain needs one to dispatch, and registering it rather than
-     * inventing a private handle means `menu_click` is also usable by other content — a Talisman can
-     * react to a player using a menu.
-     */
+    // the trigger chains run under; registered, so other content can react to menu_click
     private val TRIGGER = RoyalTrigger(
         "menu_click",
         "Fires when a player clicks a RoyalSkyblock menu button.",
         "skyblock"
     )
 
-    /**
-     * Actions the menu engine implements itself. These are not libreforge effects and must not be
-     * handed to it — `open_menu` in particular has no eco equivalent.
-     */
+    // actions the menu engine implements itself; never hand these to libreforge
     private val BUILT_IN = setOf(
         "open_menu", "close", "player_command", "console_command", "message", "play_sound"
     )
@@ -78,8 +60,8 @@ object MenuChains {
     }
 
     /**
-     * Compile every chain in a menu up front, so violations are reported at load rather than on the
-     * first click. Safe to call repeatedly; each slot is compiled once.
+     * Compile every chain in a menu up front, so violations are reported at load. Safe to call
+     * repeatedly; each slot is compiled once.
      */
     @JvmStatic
     fun precompile(menuId: String, template: MenuTemplate) {
@@ -93,10 +75,7 @@ object MenuChains {
     @JvmStatic
     fun isBuiltIn(id: String): Boolean = id.lowercase() in BUILT_IN
 
-    /**
-     * Run the libreforge half of a slot's click, if it has one. The caller has already run the
-     * built-ins; this handles everything else.
-     */
+    /** Run the libreforge half of a slot's click, if it has one. The caller has already run the built-ins. */
     @JvmStatic
     fun run(menuId: String, slot: MenuSlot, rightClick: Boolean, player: Player) {
         val chain = compileFor(menuId, slot, rightClick) ?: return
@@ -107,7 +86,7 @@ object MenuChains {
         )
     }
 
-    /** Compile (and cache) one slot's chain for one click type, or null when it has no eco effects. */
+    // compile (and cache) one slot's chain for one click type, or null when it has no eco effects
     private fun compileFor(menuId: String, slot: MenuSlot, rightClick: Boolean): Chain? {
         val effects: List<MenuEffect> =
             if (rightClick && slot.rightClick().isNotEmpty()) slot.rightClick() else slot.leftClick()
@@ -123,7 +102,7 @@ object MenuChains {
         }
     }
 
-    /** A MenuEffect is already id + args; wrap it as the config libreforge expects. */
+    // a MenuEffect is already id + args; wrap it as the config libreforge expects
     private fun MenuEffect.toConfig(): Config = TransientConfig(
         mapOf<String, Any>("id" to id(), "args" to args())
     )

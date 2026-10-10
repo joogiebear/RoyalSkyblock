@@ -7,11 +7,9 @@ import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 
 /**
- * Optional item resolution via the eco platform, so eco item ids (e.g. {@code ecoitems:corrupt_soil})
- * can be shown as GUI icons — most notably future upgrade-cost icons. Matches the rest of the suite.
- *
- * <p>Every {@code com.willfp.*} type is only touched after the {@link #present} guard, so if eco is
- * absent the JVM never links it and this class degrades to vanilla-only.
+ * Optional item resolution via eco, so eco item ids (e.g. {@code ecoitems:corrupt_soil}) can be used
+ * as GUI icons. Every {@code com.willfp.*} type is only touched after the {@link #present} guard, so
+ * without eco the JVM never links it and this class is vanilla-only.
  */
 public final class EcoHook {
 
@@ -55,7 +53,7 @@ public final class EcoHook {
         return null;
     }
 
-    /** eco config ids vary (ecoitems: vs ecoitem: vs the bare id); try the common forms. */
+    // eco config ids vary (ecoitems: vs ecoitem: vs the bare id); try the common forms
     private static String[] lookupCandidates(String id) {
         int colon = id.indexOf(':');
         if (colon < 0) {
@@ -70,7 +68,7 @@ public final class EcoHook {
         if (id.contains(":")) {
             String ns = id.substring(0, id.indexOf(':'));
             if (!ns.equalsIgnoreCase("minecraft")) {
-                return null; // custom namespace — resolve via eco
+                return null; // custom namespace, resolve via eco
             }
             raw = id.substring(id.indexOf(':') + 1);
         }

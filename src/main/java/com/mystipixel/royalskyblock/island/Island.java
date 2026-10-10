@@ -11,12 +11,10 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * The in-memory model of one island. An island belongs to a {@link com.mystipixel.royalskyblock.profile.Profile}
- * (not directly to a player) — the profile owns the roster, so membership/roles are resolved through
- * the profile. Persisted metadata maps to the {@code islands} table; the island's blocks live in the
- * ASP slime data-source.
- *
- * <p>Home coordinates are stored relative to the island world's own origin.
+ * The in-memory model of one island. An island belongs to a
+ * {@link com.mystipixel.royalskyblock.profile.Profile}, which owns the roster, so membership and roles
+ * resolve through the profile. Blocks live in the ASP slime data source. Home coordinates are relative
+ * to the island world's origin.
  */
 public final class Island {
 
@@ -27,30 +25,26 @@ public final class Island {
 
     private int radius;
     private double level;
-    /** Highest integer level whose level-up rewards have already been paid out. */
+    // highest integer level whose level-up rewards have been paid out
     private int rewardLevel;
-    /** Highest integer level whose perk unlock-commands have already run (perks are opt-in). */
+    // highest integer level whose perk unlock-commands have run
     private int perkLevel;
 
-    /**
-     * Epoch millis when this island's world was last unloaded, or 0 while it is loaded (or has never
-     * been unloaded). An unloaded world does not tick, so this is the clock that offline simulation
-     * reads on the next load to work out how much time it owes the island.
-     */
+    // epoch millis of the last unload, or 0 while loaded; offline simulation reads it on the next load
     private long unloadedAt;
 
     private double homeX, homeY, homeZ;
     private float homeYaw, homePitch;
 
-    // Guest spawn (where visitors land), in island-world coordinates. Unset -> visitors use home.
+    // guest spawn (where visitors land), in island-world coordinates; unset means visitors use home
     private boolean hasGuestHome;
     private double guestX, guestY, guestZ;
     private float guestYaw, guestPitch;
 
-    /** Upgrade tier per upgrade key (e.g. "size" -> 3). Populated in the upgrades phase. */
+    // upgrade tier per upgrade key (e.g. "size" -> 3)
     private final Map<String, Integer> upgrades = new ConcurrentHashMap<>();
 
-    /** Explicitly-set setting overrides (key -> enabled). Unset settings use their default. */
+    // explicitly set setting overrides; unset settings use their default
     private final Map<String, Boolean> settings = new ConcurrentHashMap<>();
 
     public Island(UUID id, UUID profileId, String worldName, long createdAt) {
@@ -121,8 +115,6 @@ public final class Island {
         this.unloadedAt = unloadedAt;
     }
 
-    // ── upgrades ────────────────────────────────────────────────────────────────
-
     public int upgradeTier(String key) {
         return upgrades.getOrDefault(key, 0);
     }
@@ -164,8 +156,6 @@ public final class Island {
         }
     }
 
-    // ── settings ──────────────────────────────────────────────────────────────────
-
     public boolean isEnabled(IslandSetting setting) {
         return settings.getOrDefault(setting.key(), setting.defaultEnabled());
     }
@@ -200,8 +190,6 @@ public final class Island {
         }
     }
 
-    // ── home ────────────────────────────────────────────────────────────────────
-
     public void setHome(double x, double y, double z, float yaw, float pitch) {
         this.homeX = x;
         this.homeY = y;
@@ -224,8 +212,6 @@ public final class Island {
         }
         return new Location(world, homeX, homeY, homeZ, homeYaw, homePitch);
     }
-
-    // ── guest spawn ────────────────────────────────────────────────────────────────
 
     public boolean hasGuestHome() {
         return hasGuestHome;

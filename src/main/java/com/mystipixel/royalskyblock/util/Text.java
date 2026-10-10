@@ -4,9 +4,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.serializer.legacy.LegacyComponentSerializer;
 
 /**
- * Small text helper shared across the plugin. Uses Adventure under the hood so we stay on Paper's
- * modern API, while still accepting the familiar {@code &}-code strings used throughout the configs
- * (matching the rest of the Royal suite).
+ * Text helper on Adventure that accepts the {@code &}-code strings used throughout the configs.
  */
 public final class Text {
 
@@ -22,9 +20,8 @@ public final class Text {
     }
 
     /**
-     * The same colouring as {@link #color}, returned as a legacy {@code §}-formatted String for the
-     * APIs that still take one — notably eco's {@code MenuBuilder.setTitle}. Round-tripping through
-     * the component serializer rather than swapping the {@code &} character keeps hex colours working.
+     * The same colouring as {@link #color}, as a legacy {@code §}-formatted String for APIs that still take
+     * one (eco's {@code MenuBuilder.setTitle}). Goes through the serializer so hex colours keep working.
      */
     public static String legacy(String input) {
         return SECTION.serialize(color(input));

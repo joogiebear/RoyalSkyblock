@@ -8,22 +8,19 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Random;
 
 /**
- * What a {@link BlockSimulator} is given while an island catches up: a read-only view of the island
- * as it was found, and a queue for the changes it wants made.
+ * What a {@link BlockSimulator} gets during catch-up: a read-only view of the island as it was found,
+ * and a queue for changes.
  *
- * <p><b>Threading.</b> Simulators run off the main thread against an immutable snapshot. Reads here
- * are safe; the live world is not. Never call Bukkit world/entity methods from
- * {@link BlockSimulator#simulate} — queue the change with {@link #set} and RoyalSkyblock applies it
- * on the main thread, batched, once every simulator has had its say.
+ * <p><b>Threading.</b> Simulators run off the main thread. Never call Bukkit world/entity methods
+ * from {@link BlockSimulator#simulate}; queue the change with {@link #set} and RoyalSkyblock applies
+ * it on the main thread once every simulator has run.
  *
- * <p><b>Reads see the original island, not other simulators' queued work.</b> Two simulators are
- * therefore independent and order doesn't matter, which is what keeps them composable. The flip side
- * is that if two of them queue the same block, last write wins — so don't register two simulators
- * for the same material unless you mean it.
+ * <p>Reads see the original island, not other simulators' queued changes, so order doesn't matter.
+ * If two simulators queue the same block, the last write wins.
  */
 public interface SimulationContext {
 
-    /** The island world being caught up. Provided for identity/logging — do not mutate it. */
+    /** The island world being caught up. For identity/logging only: do not mutate it. */
     World world();
 
     /**
@@ -39,8 +36,8 @@ public interface SimulationContext {
     @Nullable Material typeAt(int x, int y, int z);
 
     /**
-     * Was this position inside the scanned region? A false here means "unknown", not "air" — a
-     * simulator that needs to be sure a space is free must check this before trusting a null.
+     * Whether this position was inside the scanned region. False means unknown, not air: check this
+     * before trusting a null from {@link #dataAt}.
      */
     boolean inScan(int x, int y, int z);
 

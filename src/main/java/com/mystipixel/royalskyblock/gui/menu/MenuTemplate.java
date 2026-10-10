@@ -13,10 +13,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A single menu loaded from a {@code gui/*.yml} file in the EcoMenus dialect shared with the rest of
- * the Royal suite: {@code title}, {@code rows}, an optional page {@code mask} (filler pattern where
- * {@code 0} marks dynamic-content slots), and fixed {@code slots} — each with a 1-based
- * {@code row}/{@code column} placed directly on the slot, an inline {@code item} spec, {@code lore},
+ * A menu loaded from a {@code gui/*.yml} file in the suite's EcoMenus dialect: {@code title},
+ * {@code rows}, an optional {@code mask} ({@code 0} marks dynamic-content slots), and fixed
+ * {@code slots}, each with a 1-based {@code row}/{@code column}, an inline {@code item}, {@code lore},
  * and {@code left-click}/{@code right-click} effect lists.
  */
 public final class MenuTemplate {
@@ -43,14 +42,8 @@ public final class MenuTemplate {
     public record SoundSpec(String name, float volume, float pitch) {
     }
 
-    /**
-     * Read the {@code sounds:} block. Keys are free-form ({@code open}, {@code click}, ...) so a menu can
-     * define whatever the engine asks for without the parser needing to know the names.
-     *
-     * <p>Sound ids are written as the Bukkit enum ({@code UI_BUTTON_CLICK}) and converted to the
-     * namespaced key Paper expects, so configs match the rest of the suite. {@code enabled: false}
-     * silences one without deleting it.
-     */
+    // Keys are free-form (open, click, ...). Ids are written as the Bukkit enum (UI_BUTTON_CLICK) and
+    // converted to Paper's namespaced key; enabled: false silences one.
     private static Map<String, SoundSpec> parseSounds(FileConfiguration cfg) {
         ConfigurationSection section = cfg.getConfigurationSection("sounds");
         if (section == null) {
@@ -62,8 +55,7 @@ public final class MenuTemplate {
             if (entry == null) {
                 continue;
             }
-            // 'name' is the suite's key (RoyalBank, RoyalWardrobe, RoyalAuctions all use it);
-            // 'sound' is accepted too so a config written either way works.
+            // "name" is the suite's key; "sound" is accepted too
             String name = entry.getString("name", entry.getString("sound", ""));
             if (name.isBlank() || !entry.getBoolean("enabled", true)) {
                 continue;
@@ -162,11 +154,7 @@ public final class MenuTemplate {
         return map;
     }
 
-    /**
-     * Resolve a slot's 1-based {@code row}/{@code column} into a 0-based inventory index. Row/column sit
-     * directly on the slot (the eco-menus convention); a legacy nested {@code location: {row, column}}
-     * is still accepted as a fallback.
-     */
+    // 1-based row/column on the slot to a 0-based index; a legacy nested location: {row, column} still works
     private static int slotIndex(Map<?, ?> raw, int size) {
         Object rowObj = raw.get("row");
         Object colObj = raw.get("column");
@@ -184,8 +172,6 @@ public final class MenuTemplate {
         return index >= 0 && index < size ? index : -1;
     }
 
-    // ── accessors / rendering ────────────────────────────────────────────────────
-
     public String title() {
         return title;
     }
@@ -198,12 +184,12 @@ public final class MenuTemplate {
         return slots;
     }
 
-    /** Inventory indices marked {@code 0} in the mask — where dynamic content (e.g. profile icons) go. */
     /** A configured sound by key, or null when the menu doesn't define one. */
     public SoundSpec sound(String key) {
         return sounds.get(key);
     }
 
+    /** Inventory indices marked {@code 0} in the mask, where dynamic content goes. */
     public List<Integer> contentSlots() {
         return contentSlots;
     }
@@ -217,26 +203,17 @@ public final class MenuTemplate {
         return null;
     }
 
-    /**
-     * The mask's filler item, or null when the menu declares no mask. Exposed for the eco Menu API
-     * menus, which place filler as real slots.
-     */
+    /** The mask's filler item, or null when the menu declares no mask. */
     public ItemStack maskFiller() {
         return maskFiller;
     }
 
-    // ── helpers ────────────────────────────────────────────────────────────────────
-
-    /** Bukkit enum ids ({@code UI_BUTTON_CLICK}) are what the configs use; Paper wants the namespaced key. */
     private static String normaliseSoundName(String name) {
         return name.trim().toLowerCase(Locale.ROOT).replace('_', '.');
     }
 
-    /**
-     * A slot's own {@code sound:} block — the same {@code name}/{@code volume}/{@code pitch}/{@code enabled}
-     * shape as a menu-level entry. Null when the slot declares none, or sets {@code enabled: false},
-     * which means clicking it is silent.
-     */
+    // A slot's own sound: block (same shape as a menu-level entry). Null when it declares none or sets
+    // enabled: false, meaning a silent click.
     private static SoundSpec parseSlotSound(Object raw) {
         Map<String, Object> map = new LinkedHashMap<>();
         if (raw instanceof ConfigurationSection cs) {

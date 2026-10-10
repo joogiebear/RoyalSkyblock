@@ -12,20 +12,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Everything RoyalSkyblock persists, behind one interface.
- *
- * <p>Extracted so there can be more than one backing store. Today's implementation, {@link SqlStorage},
- * owns its own SQLite/MySQL connection pool — which makes RoyalSkyblock the odd one out in the eco
- * suite, where <em>no</em> plugin configures a database: eco holds a single {@code data-handler} and
- * every plugin's data goes through it. A second implementation backed by eco's data layer is the point
- * of this interface, and would bring MySQL/MongoDB/YAML for free, make islands network-shared on a
- * multi-node setup, and let profiles keep island data and eco data in one store instead of two.
- *
- * <p>The shape of this interface is deliberately unchanged from the SQL implementation's public API,
- * so extracting it moved no behaviour and no caller. Note what that shape assumes, because it is what
- * a key-value backing store has to work around: {@link #getAllIslands()} is a full scan used by the
- * level leaderboard and boot-time load, and eco's profile API is keyed lookup with no query layer. An
- * eco-backed implementation has to maintain its own index to answer it.
+ * Everything RoyalSkyblock persists. Implemented by {@link SqlStorage} (SQLite/MySQL) and
+ * {@link EcoStorage} (eco's data layer). {@link #getAllIslands()} is the one full scan, which a
+ * key-value store has to answer with its own index.
  */
 public interface Storage {
 
@@ -34,8 +23,6 @@ public interface Storage {
 
     /** Release resources. Called on disable. */
     void close();
-
-    // ── islands ────────────────────────────────────────────────────────────────
 
     /**
      * The island, or {@code null} if there is no such island.
@@ -48,23 +35,18 @@ public interface Storage {
     /** As {@link #getIsland}: {@code null} only when the profile has no island. */
     @Nullable Island getIslandByProfile(UUID profileId);
 
-    /**
-     * Every island. A full scan: used by the level leaderboard and to warm the island cache at boot.
-     * The one method with no keyed equivalent, and so the one that shapes any non-relational backing.
-     */
+    /** Every island. A full scan: used by the level leaderboard and to warm the island cache at boot. */
     List<Island> getAllIslands();
 
     boolean saveIsland(Island island);
 
     boolean deleteIsland(UUID id);
 
-    // ── profiles ───────────────────────────────────────────────────────────────
-
     @Nullable Profile getProfile(UUID id);
 
     List<Profile> getProfilesByOwner(UUID owner);
 
-    /** Profiles this player belongs to but does not own — i.e. coop membership. */
+    /** Profiles this player belongs to but does not own, i.e. coop membership. */
     List<UUID> getProfileIdsByMember(UUID uuid);
 
     boolean saveProfile(Profile profile);
@@ -76,20 +58,16 @@ public interface Storage {
 
     void setActiveProfile(UUID player, UUID profileId);
 
-    // ── per-profile player state (inventory, xp, health) ───────────────────────
-
     @Nullable ProfileData getProfileData(UUID profileId, UUID playerUuid);
 
     boolean saveProfileData(UUID profileId, UUID playerUuid, ProfileData data);
 
     void deleteProfileData(UUID profileId, UUID playerUuid);
 
-    // ── coop payouts ───────────────────────────────────────────────────────────
-
     /**
-     * Record that {@code player} is owed what they had on {@code fromProfile} — their personal bank
-     * savings there and the items they carried — after leaving or being kicked from that coop. Their
-     * {@code profile_data} row and bank account on it are kept until the payout is delivered.
+     * Record that {@code player} is owed what they had on {@code fromProfile} (their personal bank
+     * savings and the items they carried) after leaving or being kicked from that coop. Their
+     * {@code profile_data} row and bank account there are kept until the payout is delivered.
      */
     void addCoopPayout(UUID player, UUID fromProfile);
 
@@ -98,15 +76,11 @@ public interface Storage {
 
     void removeCoopPayout(UUID player, UUID fromProfile);
 
-    // ── in-progress upgrades ───────────────────────────────────────────────────
-
     List<PendingUpgrade> getAllPending();
 
     boolean savePending(PendingUpgrade p);
 
     void deletePending(UUID islandId, String upgradeKey);
-
-    // ── bank ───────────────────────────────────────────────────────────────────
 
     @Nullable BankAccount getBankAccount(String accountId);
 
@@ -115,9 +89,8 @@ public interface Storage {
                                    double balanceAfter, String note);
 
     /**
-     * The most recent {@code limit} transactions for an account, newest first. Never asks for the
-     * whole history, which is what lets a non-relational store keep a capped list per account rather
-     * than an append-only table.
+     * The most recent {@code limit} transactions for an account, newest first. Never the whole history,
+     * so a non-relational store can keep a capped list per account.
      */
     List<BankTxn> getBankTransactions(String accountId, int limit);
 }

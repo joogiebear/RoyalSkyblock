@@ -4,11 +4,9 @@ package com.mystipixel.royalskyblock.bank;
  * One bank account, keyed by an opaque string id (personal = {@code p:<profile>:<player>}, coop =
  * {@code c:<profile>}). {@code lastInterest} is epoch seconds of the last interest claim.
  *
- * <p>{@code interestFloor} is the lowest balance held since the last claim, and interest is paid on
- * it rather than on the balance at the moment of claiming — otherwise depositing just before a claim
- * and withdrawing just after earned a full period's interest on money that was never there. A
- * negative floor means "not recorded yet" (an account saved before this existed) and reads as the
- * balance.
+ * <p>{@code interestFloor} is the lowest balance held since the last claim; interest is paid on it so
+ * depositing just before a claim earns nothing. A negative floor means not recorded yet and reads as
+ * the balance.
  */
 public record BankAccount(String id, double balance, int level, long lastInterest, double interestFloor) {
 

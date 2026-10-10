@@ -70,47 +70,19 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * RoyalSkyblock entry point.
+ * RoyalSkyblock entry point. Every island is its own Advanced Slime Paper world, loaded on demand and
+ * unloaded when empty. Kotlin because [LibreforgePlugin]'s APIs are; the rest of the plugin is Java.
  *
- * Scalable per-island Skyblock: every island is its own Advanced Slime Paper world, loaded on
- * demand and unloaded when empty, with island metadata in the shared dual-dialect (SQLite/MySQL)
- * store.
- *
- * ## Why this class is Kotlin while the rest of the plugin is Java
- *
- * RoyalSkyblock is built on eco/libreforge, so the entry point must extend [LibreforgePlugin],
- * whose lifecycle and element-registration APIs are Kotlin. Only this class moved; the other 22
- * packages are still Java and compile in the same module (Kotlin scans `src/main/java` too, so
- * joint compilation resolves both directions). The class keeps its original name and its entire
- * public accessor surface, so no Java caller changed.
- *
- * ## Lifecycle mapping — the parts that are not obvious
- *
- * [org.bukkit.plugin.java.JavaPlugin.onEnable]/`onDisable`/`reload` are all `final` on `EcoPlugin`,
- * so the work moved to [handleEnable]/[handleDisable]/[handleReload]. Two consequences drove the
- * shape of this class:
- *
- *  - **Every repeating task lives in [createTasks].** `EcoPlugin.reload()` calls
- *    `scheduler.cancelAll()`, which is `Bukkit.getScheduler().cancelTasks(plugin)` — it cancels
- *    *every* task this plugin owns, including ones registered straight through Bukkit. Anything
- *    registered in [handleEnable] would be killed by the first reload and never come back, silently
- *    stopping island unloading, upgrade timers and perk ticks. eco re-invokes [createTasks] after
- *    that cancellation, which is exactly the recovery point. eco only calls it from `reload()`,
- *    never from `onEnable`, so [handleEnable] calls it once itself for first boot.
- *  - **Config reads go through [conf], never `getConfig()`.** `EcoPlugin.getConfig()` logs
- *    "Call to default config method in eco plugin!" on *every* call and re-converts the config each
- *    time; with ~96 call sites, some per-mob-spawn, that would flood the console.
+ * `onEnable`/`onDisable`/`reload` are final on `EcoPlugin`, so the work is in
+ * [handleEnable]/[handleDisable]/[handleReload]:
+ *  - Every repeating task lives in [createTasks]. `EcoPlugin.reload()` cancels all of this plugin's
+ *    tasks and then re-invokes [createTasks]; a task registered anywhere else dies on the first reload.
+ *  - Config reads go through [conf], never `getConfig()`, which logs a warning on every call under eco.
  */
 class RoyalSkyblockPlugin : LibreforgePlugin() {
 
-    /**
-     * Third-party backends, registered by extensions.
-     *
-     * Initialised here rather than in [handleEnable] on purpose: eco enables extensions **before** the
-     * host's [handleEnable] runs, so a registry created there would still be null when the first
-     * extension tried to register into it. Building it with the plugin is what makes the whole
-     * mechanism work.
-     */
+    // Built with the plugin, not in handleEnable: eco enables extensions before the host's handleEnable,
+    // and they register into this.
     private val integrationRegistry = Integrations()
 
     private var generatorService: GeneratorService? = null
@@ -135,29 +107,23 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     private var bankService: BankService? = null
     private var borderService: BorderService? = null
 
-    /** Wallet lookups for the bank "deposit all". */
+    // wallet lookups for the bank "deposit all"
     private var vaultHook: VaultHook? = null
     private var ecoBridge: EcoProfileBridge? = null
     private var messageManager: MessageManager? = null
     private var guiManager: GuiManager? = null
-    /** Resolves every placeholder. Independent of PlaceholderAPI; both front ends share it. */
+    // resolves every placeholder; independent of PlaceholderAPI, both front ends share it
     private var placeholders: IslandPlaceholders? = null
     private var papiRegistered = false
 
-    /**
-     * SPIKE: which eco test-slot each player is currently on (defaults to 1). Removed once the real
-     * profile system lands.
-     */
+    // SPIKE: which eco test slot each player is on (defaults to 1)
     private val ecoSlot: MutableMap<UUID, Int> = ConcurrentHashMap()
 
-    /** True once the ASP world backend initialised. When false, island world ops are unavailable. */
+    // true once the ASP world backend initialised; when false, island world ops are unavailable
     @Volatile
     private var worldBackendReady = false
 
-    /**
-     * Bukkit-shaped view of eco's `config.yml`, cached because [com.willfp.eco.core.config.interfaces.Config.toBukkit]
-     * re-converts on each call. Invalidated on reload and whenever [setConfigValue] writes.
-     */
+    // cached Bukkit view of config.yml; invalidated on reload and whenever setConfigValue writes
     @Volatile
     private var cachedConfig: FileConfiguration? = null
 
@@ -172,27 +138,14 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         fun get(): RoyalSkyblockPlugin = instance!!
     }
 
-    /**
-     * No config categories yet — island/upgrade configs become libreforge categories in a later
-     * phase. Declared explicitly so the intent is visible rather than inherited by accident.
-     */
     override fun loadConfigCategories(): List<ConfigCategory> = emptyList()
 
     /**
-     * Read-side config accessor. Use this instead of `getConfig()` everywhere in the plugin — see
-     * the class docs for why `getConfig()` is unusable under eco.
+     * Read-side config accessor. Use this instead of `getConfig()` everywhere in the plugin.
      *
-     * Reads `config.yml` off disk rather than going through `configYml.toBukkit()`. eco's conversion
-     * does not round-trip *nested* sections as Bukkit [org.bukkit.configuration.ConfigurationSection]s:
-     * `getConfigurationSection("currencies")` resolves but `getConfigurationSection("coins")` inside
-     * it comes back null, so CurrencyService silently skipped every currency and the config check
-     * started reporting "currency 'coins' isn't defined". Eleven call sites use nested sections, and
-     * most of them fall back to defaults rather than failing loudly, so this went unnoticed until the
-     * validator caught it. Loading the file gives a genuine YamlConfiguration with the exact
-     * semantics the pre-port `getConfig()` had.
-     *
-     * eco still owns writing and merging the file; this only reads it. Safe from [handleEnable]
-     * onwards — eco writes config.yml before the plugin enables.
+     * Reads `config.yml` off disk rather than via `configYml.toBukkit()`, whose nested sections don't
+     * round-trip as Bukkit sections (a section inside `currencies` comes back null). eco still owns
+     * writing and merging the file. Safe from [handleEnable] onwards.
      */
     fun conf(): FileConfiguration {
         cachedConfig?.let { return it }
@@ -202,9 +155,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     }
 
     /**
-     * Persist a single `config.yml` value. Writes must go through eco's config rather than
-     * `conf().set(...)` + `saveConfig()`: [conf] hands out a converted copy, so a write there would
-     * be silently dropped on the next read. Used by `/is admin border <colour>`.
+     * Persist a single `config.yml` value through eco's config. Not `conf().set(...)` + `saveConfig()`:
+     * [conf] is a converted copy, so that write would be dropped on the next read.
      */
     fun setConfigValue(path: String, value: Any?) {
         configYml.set(path, value)
@@ -216,17 +168,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         cachedConfig = null
     }
 
-    /**
-     * Pick the metadata store from `storage.type`.
-     *
-     * `SQLITE`/`MYSQL` use this plugin's own database; `ECO` hands everything to eco's data layer,
-     * which is how the rest of the suite works and what makes islands network-shared without a
-     * second database to configure. SQLite stays the default so no existing server changes backend
-     * on an update.
-     *
-     * Switching an existing server to `ECO` carries its `islands.db` across on that first boot — see
-     * [migrateSqliteIfPresent], which runs after the store is open.
-     */
+    // SQLITE/MYSQL use this plugin's own database; ECO uses eco's data layer like the rest of the suite.
+    // SQLite stays the default. Switching to ECO migrates islands.db on first boot (migrateSqliteIfPresent).
     private fun createStorage(): Storage {
         val type = conf().getString("storage.type", "SQLITE")!!.uppercase(Locale.ROOT)
         if (type == "ECO") {
@@ -236,14 +179,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         return SqlStorage(this)
     }
 
-    /**
-     * ECO storage is single-server. eco keeps anything that is not an online player in memory for a
-     * server's whole uptime and has no atomic update, so on a network each server rewrites the shared
-     * lists (all islands, pending upgrades, each player's profiles) from its own stale copy and drops
-     * the others' changes: islands vanish from the leaderboard, paid upgrades are never finished, a
-     * profile disappears from its owner's list. There is no way to detect "more than one server", so
-     * warn whenever eco's handler is one that multiple servers can share.
-     */
+    // ECO storage is single-server: eco caches non-player data for the whole uptime and has no atomic
+    // update, so servers sharing a handler drop each other's changes. Warn whenever the handler is shareable.
     private fun warnIfEcoStorageShared() {
         val ecoFolder = server.pluginManager.getPlugin("eco")?.dataFolder ?: return
         val handler = org.bukkit.configuration.file.YamlConfiguration
@@ -256,27 +193,18 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
     }
 
-    /**
-     * Carry an existing `islands.db` into eco, once, on the boot that switches to it.
-     *
-     * Returns false to abort startup. That is the whole point: the alternatives to stopping are
-     * coming up on a half-populated store, or coming up empty — and an empty skyblock server looks
-     * exactly like one whose islands have all been deleted. The source file is left untouched unless
-     * every row was written *and* read back, so aborting always leaves a server that still works on
-     * `storage.type: sqlite`.
-     */
+    // Carry an existing islands.db into eco, once, on the boot that switches to it. Returns false to abort
+    // startup rather than come up on a half-populated or empty store; the source file stays untouched
+    // unless every row was written and read back.
     private fun migrateSqliteIfPresent(store: EcoStorage): Boolean {
         val file = File(dataFolder, conf().getString("storage.sqlite-file", "islands.db")!!)
         if (!file.isFile) {
             return true
         }
-        // Migrated on an earlier boot and kept until now. The marker is written after every migrated
-        // row, and on a fresh boot eco can only have loaded it from its storage — so reading it back
-        // here proves eco saved the migration, and the file can go. (Had eco saved nothing, the
-        // marker would be blank and the migration below simply runs again: every write is keyed by
-        // an id that does not change.)
+        // Migrated on an earlier boot: the marker can only have come from eco's storage, so eco saved the
+        // migration and the file can go. (A blank marker just re-runs it; every write is keyed by a stable id.)
         if (store.migrationMarker() == file.name) {
-            logger.info("eco has saved everything migrated from ${file.name} — retiring it now.")
+            logger.info("eco has saved everything migrated from ${file.name}: retiring it now.")
             val confirmed = SqliteMigration(this, file, store)
             if (!confirmed.retireSource()) {
                 return false
@@ -284,10 +212,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             confirmed.cleanSidecars()
             return true
         }
-        // A store that already has islands and was never migrated into belongs to something else.
-        // Merging one server's islands into another's is not a thing anyone asked for by dropping a
-        // file in a folder, so it stops instead. A retry after a half-finished run is fine: that
-        // store carries the marker, and every write is keyed by an id that does not change.
+        // A store with islands and no marker belongs to something else: stop rather than merge two servers'
+        // islands. A retry after a half-finished run carries the marker, so it's fine.
         if (store.hasIslands() && store.migrationMarker().isBlank()) {
             logger.severe("${file.name} is present, but eco already holds islands that did not come")
             logger.severe("from a completed migration. Refusing to merge two sets of islands together. If")
@@ -296,7 +222,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             return false
         }
 
-        logger.info("storage.type is ECO and ${file.name} is present — migrating it into eco's data layer.")
+        logger.info("storage.type is ECO and ${file.name} is present: migrating it into eco's data layer.")
         val migration = SqliteMigration(this, file, store)
         val report = migration.run()
 
@@ -309,23 +235,15 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             return false
         }
 
-        logger.info("Migrated ${report.summary()} — every row read back and matched.")
+        logger.info("Migrated ${report.summary()}: every row read back and matched.")
         store.setMigrationMarker(file.name)
-        // Not retired yet. The read-back above sees eco's memory, and eco saves on its own schedule, so
-        // a crash before that save would lose the migration after the file was gone. The next boot
-        // checks every row came back from eco's storage and retires the file then.
+        // Not retired yet: the read-back saw eco's memory, not its storage. The next boot confirms and retires it.
         logger.info("${file.name} is kept until the next restart confirms eco has saved all of it.")
         return true
     }
 
-    /**
-     * Where background metadata writes go: one thread this plugin owns, so they run in the order they
-     * were made and can be finished at shutdown.
-     *
-     * They used to go through Bukkit's async scheduler, which cancels a disabling plugin's queued
-     * tasks: an island's unload stamp, a level or a setting saved just before a restart was silently
-     * dropped, or ran against a pool that had already been closed. [handleDisable] drains this first.
-     */
+    // Background metadata writes go to one thread this plugin owns, so they run in order and can be
+    // drained at shutdown (Bukkit cancels a disabling plugin's queued async tasks).
     private var storageWriter: java.util.concurrent.ExecutorService? = null
 
     /** Run [task] (a storage write) on the storage thread; inline if that thread is gone (shutdown). */
@@ -353,7 +271,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         val store = createStorage()
         this.storage = store
         if (!store.connect()) {
-            logger.severe("Storage failed to initialise — disabling RoyalSkyblock.")
+            logger.severe("Storage failed to initialise: disabling RoyalSkyblock.")
             server.pluginManager.disablePlugin(this)
             return
         }
@@ -364,13 +282,12 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
 
         this.ecoBridge = EcoProfileBridge()
-        // Prefer letting eco resolve a player's data to their active profile: the copying bridge is
-        // correct but moves every registered key twice per switch. Only available on an eco that
-        // supports it, so this asks rather than assumes, and the bridge stays in charge if it cannot.
+        // Prefer eco resolving a player's data to their active profile (the copying bridge moves every key
+        // twice per switch). Only on an eco that supports it; otherwise the bridge stays in charge.
         if (conf().getBoolean("profiles.eco-resolver", true) && ecoBridge!!.isPresent) {
             if (EcoProfileResolver.install(this)) {
                 ecoBridge!!.isResolverActive = true
-                logger.info("eco resolves profiles directly — progression is per-profile with no copying.")
+                logger.info("eco resolves profiles directly: progression is per-profile with no copying.")
             }
         }
         this.worldService = if (aspAvailable()) AspIslandWorldService(this) else NoOpIslandWorldService()
@@ -392,8 +309,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         this.borderService = BorderService(this)
         this.guiManager = GuiManager(this)
 
-        // Bring up the world backend asynchronously. If the server isn't running ASP, keep the plugin
-        // enabled but flag island world ops as unavailable so commands can explain clearly.
+        // Bring up the world backend asynchronously. Without ASP the plugin stays enabled but island world ops
+        // are flagged unavailable so commands can explain.
         worldService!!.initialize().whenComplete { _, error ->
             if (error != null) {
                 logger.severe("Island world backend unavailable: ${rootMessage(error)}")
@@ -414,10 +331,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         server.pluginManager.registerEvents(guiManager!!, this)
         server.pluginManager.registerEvents(borderService!!, this)
 
-        // Placeholders. Registered with eco unconditionally, so %royalskyblock_...% resolves inside
-        // eco configs — effect chains, menu titles, item lore — on any server, with or without
-        // PlaceholderAPI. The PAPI expansion is an additional front end onto the same resolver, for
-        // TAB, scoreboards and chat.
+        // Registered with eco unconditionally, so %royalskyblock_...% resolves in eco configs without
+        // PlaceholderAPI; the PAPI expansion is an extra front end onto the same resolver.
         val resolver = IslandPlaceholders(this)
         this.placeholders = resolver
         EcoPlaceholders.register(this, resolver)
@@ -425,12 +340,11 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             papiRegistered = RoyalSkyblockExpansion(this, resolver).register()
         }
 
-        // Resume in-progress upgrade timers and complete any that elapsed while offline.
+        // resume in-progress upgrade timers and complete any that elapsed while offline
         upgradeManager!!.loadPending()
 
-        // Offline simulation. The scanner walks a returning island once and dispatches its blocks to
-        // registered BlockSimulators; addons register their own the same way these do. Anything that
-        // isn't block-shaped (minions) listens to IslandCatchupEvent directly instead.
+        // Offline simulation: the scanner dispatches a returning island's blocks to registered
+        // BlockSimulators. Non-block things (minions) listen to IslandCatchupEvent instead.
         val scanner = islandScanner!!
         scanner.register(AgeCropSimulator(this))
         scanner.register(StackingPlantSimulator(this))
@@ -440,21 +354,19 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         server.pluginManager.registerEvents(GeneratorListener(this), this)
         server.pluginManager.registerEvents(IslandPortalListener(this), this)
 
-        // RoyalSkyblock's own island state, published to libreforge so any eco plugin — and this
-        // plugin's own perks and upgrades — can ask questions about an island in config.
+        // island state published to libreforge as conditions
         IslandConditions.register()
         IslandTriggers.register()
         MenuChains.register()
 
-        // Perks and island upgrades as libreforge effect holders. Registered after the services they
-        // read (perks, upgrades, islands, profiles) exist, and after every element their chains may use.
+        // registered after the services they read and every element their chains may use
         RoyalHolders.register(this)
         server.pluginManager.registerEvents(RoyalHolderListener(), this)
 
         startIslandMobSpawning()
 
         logger.info(
-            "RoyalSkyblock enabled — metadata store: "
+            "RoyalSkyblock enabled; metadata store: "
                 + conf().getString("storage.type", "sqlite")!!.uppercase(Locale.ROOT)
                 + ", island world source: " + conf().getString("world.slime-data-source", "file") + "."
         )
@@ -462,24 +374,23 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // eco only invokes createTasks() from reload(), so start the repeating tasks once here.
         createTasks()
 
-        // Deferred a tick: worlds (Multiverse) and Vault economies register during other plugins'
-        // enable, which may run after ours — checking inline would flag a healthy hub/economy as missing.
+        // Deferred a tick: worlds and Vault economies register during other plugins' enable, which may run
+        // after ours.
         server.scheduler.runTask(this, Runnable { ConfigValidator(this).validate() })
-        // The full status panel prints once the ASP backend finishes initialising (see above).
+        // the full status panel prints once the ASP backend finishes initialising (see above)
     }
 
     /**
-     * Every repeating task. Re-invoked by eco after `reload()` cancels all of this plugin's tasks —
-     * see the class docs. Must stay idempotent: it runs once per enable and once per reload, always
-     * after a cancellation, so it never double-registers.
+     * Every repeating task. Re-invoked by eco after `reload()` cancels all of this plugin's tasks, so it
+     * runs once per enable and once per reload, always after a cancellation.
      */
     override fun createTasks() {
         val upgrades = upgradeManager ?: return // enable aborted (storage failure); nothing to tick
 
         server.scheduler.runTaskTimer(this, Runnable { upgrades.tick() }, 40L, 20L)
-        // Live upgrade-menu countdowns (self-guards to no-op when nothing is cooking).
+        // live upgrade-menu countdowns (no-op when nothing is cooking)
         server.scheduler.runTaskTimer(this, Runnable { guiManager?.tickOpenMenus() }, 20L, 20L)
-        // Background island-level refresh for occupied islands (0 = off).
+        // background level refresh for occupied islands (0 = off)
         val autoRecalcMinutes = levelService!!.config().autoRecalcMinutes()
         if (autoRecalcMinutes > 0) {
             val period = autoRecalcMinutes * 60L * 20L
@@ -487,23 +398,20 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                 this, Runnable { levelService?.autoRecalcActiveIslands() }, period, period
             )
         }
-        // Level-gated perks tick (self-guards to a no-op when perks are disabled).
+        // perks tick (no-op when perks are disabled)
         val perkPeriod = perkService!!.refreshSeconds() * 20L
         server.scheduler.runTaskTimer(this, Runnable { perkService?.tick() }, perkPeriod, perkPeriod)
-        // Drop empty island worlds. Without this an island ticks forever once visited, so the
-        // server's cost scales with islands-ever-visited instead of players online.
+        // drop empty island worlds
         server.scheduler.runTaskTimer(this, Runnable { unloadService?.tick() }, 200L, 100L)
-        // Trash retention pruning, shortly after startup and daily after — the trash must not become
-        // the unbounded island graveyard it exists to prevent worlds becoming.
+        // trash retention pruning, shortly after startup and daily after
         server.scheduler.runTaskTimerAsynchronously(
             this, Runnable { islandManager?.trash()?.pruneOld() }, 20L * 120L, 20L * 60L * 60L * 24L
         )
-        // Island mob spawning. Null until startIslandMobSpawning has run (it starts itself then);
-        // here it is what brings the timer back after a reload. start() stops any old timer first.
+        // Island mob spawning: null until startIslandMobSpawning has run; here it restarts the timer after a
+        // reload. start() stops any old timer first.
         mobSpawnService?.start()
 
-        // The level leaderboard is refreshed off-thread. No longer gated on PlaceholderAPI: the rank
-        // placeholder is served to eco as well, so the cache has to be warm regardless.
+        // leaderboard refresh off-thread; the rank placeholder is served to eco too, so always keep it warm
         server.scheduler.runTaskTimerAsynchronously(this, Runnable {
             try {
                 placeholders?.refreshLeaderboard()
@@ -513,7 +421,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }, 20L, 60L * 20L)
     }
 
-    /** A one-glance boot summary: which dependencies are active and what an admin should configure first. */
+    // one-glance boot summary: which dependencies are active and what to configure first
     private fun printStatusPanel() {
         val vault = vaultHook?.isReady == true
         val storageType = conf().getString("storage.type", "sqlite")!!.uppercase(Locale.ROOT)
@@ -521,9 +429,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         logger.info("======================== RoyalSkyblock ========================")
         logger.info(
             " Islands (ASP)    : " + if (worldBackendReady) "READY (source: $worldSource)"
-            else "UNAVAILABLE — install Advanced Slime Paper (island create/teleport off)"
+            else "UNAVAILABLE: install Advanced Slime Paper (island create/teleport off)"
         )
-        logger.info(" Economy (Vault)  : " + if (vault) "READY" else "NOT FOUND — bank & coin costs disabled")
+        logger.info(" Economy (Vault)  : " + if (vault) "READY" else "NOT FOUND: bank & coin costs disabled")
         logger.info(
             " Bank             : " + if (bankService!!.available()) "READY (native, $storageType)"
             else "needs Vault + bank.yml levels"
@@ -539,11 +447,11 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         logger.info(" Metadata storage : $storageType")
         logger.info(
             " Perks            : " + if (perkService!!.enabled()) "ON (${perkService!!.perkCount()} perks)"
-            else "off (optional — set perks.enabled in config.yml)"
+            else "off (optional: set perks.enabled in config.yml)"
         )
         logger.info(
             " Placeholders     : registered with eco (%royalskyblock_...%)"
-                + if (papiRegistered) " + PlaceholderAPI" else " — PlaceholderAPI not found"
+                + if (papiRegistered) " + PlaceholderAPI" else " (PlaceholderAPI not found)"
         )
         logger.info(" ---------------------------------------------------------------")
         logger.info(" Configure first  : spawn.world + currencies in config.yml")
@@ -552,10 +460,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     }
 
     override fun handleDisable() {
-        // Save everyone still online and every loaded island SYNCHRONOUSLY. On shutdown the Bukkit
-        // scheduler is stopping, so the normal async profile saves and the unload-tick's island save
-        // won't run — without this, anyone online at shutdown (or when the server restarts for a
-        // deploy) loses whatever they did since the last periodic save: inventory, eco/skills, blocks.
+        // Save everyone online and every loaded island synchronously: the scheduler is stopping, so the
+        // normal async saves won't run.
         var savedPlayers = 0
         var savedIslands = 0
         profileManager?.let { profiles ->
@@ -576,14 +482,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                     continue // not an island (hub, base world, ...)
                 }
                 try {
-                    // Synchronous on purpose: Bukkit won't schedule tasks for a disabling plugin, so
-                    // the async saveIsland() path throws here and the save is silently lost.
+                    // synchronous: Bukkit won't schedule tasks for a disabling plugin
                     worlds.saveIslandNow(world.name)
-                    // Its metadata too, synchronously: level, settings and upgrades changed since the
-                    // last background save would otherwise depend on the queue below finishing.
-                    // Stamped as unloaded now, like the unload service does, so the downtime is caught
-                    // up when it next loads. Only islands the unload service had put to sleep used to
-                    // get offline progress; anything still loaded at a restart lost the whole outage.
+                    // Its metadata too, synchronously, stamped as unloaded so the downtime is caught up on next load.
                     islands.getIslandByWorld(world)?.let { island ->
                         island.setUnloadedAt(System.currentTimeMillis())
                         storage?.saveIsland(island)
@@ -596,7 +497,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
         logger.info("Shutdown save: $savedPlayers player(s), $savedIslands island(s).")
 
-        // Let queued background writes finish before the pool they write to is closed.
+        // let queued background writes finish before the pool they write to is closed
         storageWriter?.let { writer ->
             writer.shutdown()
             if (!writer.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS)) {
@@ -612,9 +513,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     }
 
     /**
-     * Reload config + messages from disk. Reached through `EcoPlugin.reload()`, which is `final` —
-     * it refreshes eco's own configs and cancels this plugin's tasks first, then calls this, then
-     * re-runs [createTasks]. Deliberately does not touch the scheduler itself.
+     * Reload config and messages from disk. Called by `EcoPlugin.reload()` after it refreshes eco's
+     * configs and cancels this plugin's tasks, and before it re-runs [createTasks]. Doesn't touch the
+     * scheduler.
      */
     override fun handleReload() {
         cachedConfig = null // eco reloaded configYml underneath us
@@ -628,8 +529,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         bankLevels?.reload()
         borderService?.reload()
         borderService?.refreshAll() // re-apply borders live (colour/size/toggle changes)
-        // Invalidate BEFORE the menus reload: the reload compiles every chain and reports the broken
-        // ones. Invalidating afterwards threw that away, so bad chains only surfaced on first click.
+        // invalidate before the menus reload, which compiles every chain and reports broken ones
         MenuChains.invalidate()
         guiManager?.reload()
         mobSpawnService?.reloadSettings() // toggling island-mobs.enabled on/off still needs a restart
@@ -638,8 +538,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     }
 
     /**
-     * Anonymous usage reporting. eco registers bStats itself from the id in `eco.yml`, so the plugin
-     * only supplies the custom charts. Server owners who want no reporting disable it globally in
+     * bStats custom charts. eco registers bStats itself from the id in `eco.yml`; owners opt out in
      * plugins/bStats/config.yml.
      */
     override fun getCustomCharts(): List<EcoMetricsChart> = listOf(
@@ -653,13 +552,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         EcoMetricsChart.simplePie("perks_enabled") { (perkService?.enabled() == true).toString() }
     )
 
-    /**
-     * Register the commands with eco.
-     *
-     * eco injects them into the server's command map itself, so neither needs a `commands:` entry in
-     * plugin.yml any more — the name, aliases, description, permission and players-only flag all come
-     * from the command class, which is where every other plugin in the suite declares them.
-     */
+    // eco injects the commands into the command map, so none need a commands: entry in plugin.yml
     private fun registerCommands() {
         CommandIsland(this).register()
         BankCommand(this).register()
@@ -668,10 +561,10 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     /** Whether a Vault economy is present and ready (bank & coin costs depend on it). */
     fun economyReady(): Boolean = vaultHook?.isReady == true
 
-    /** The player's Vault wallet balance (0 if no economy). Used by the coop-bank "deposit all" button. */
+    /** The player's Vault wallet balance (0 if no economy). */
     fun purseBalance(player: Player): Double = vaultHook?.balance(player) ?: 0.0
 
-    /** Guarded Vault lookup — only links `net.milkbowl.vault.*` when Vault is actually present. */
+    // only links net.milkbowl.vault.* when Vault is present
     private fun resolveVault(): VaultHook? {
         if (server.pluginManager.getPlugin("Vault") == null) {
             return null
@@ -684,7 +577,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
     }
 
-    /** Whether WorldEdit/FAWE is on the classpath (so we can safely load the WE schematic impl). */
+    // whether WorldEdit/FAWE is on the classpath, so the WE schematic impl can load
     private fun worldEditAvailable(): Boolean {
         if (!server.pluginManager.isPluginEnabled("WorldEdit")
             && !server.pluginManager.isPluginEnabled("FastAsyncWorldEdit")
@@ -699,7 +592,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
     }
 
-    /** Whether the ASP world API is on the classpath (i.e. the server is the ASP fork). */
+    // whether the ASP world API is on the classpath (the server is the ASP fork)
     private fun aspAvailable(): Boolean = try {
         Class.forName("com.infernalsuite.asp.api.AdvancedSlimePaperAPI", false, javaClass.classLoader)
         true
@@ -707,7 +600,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         false
     }
 
-    /** Human-readable intimidation state for a player — what /is admin mobspawn status shows. */
+    /** Human-readable intimidation state for a player, shown by /is admin mobspawn status. */
     fun intimidationSummary(player: Player): String {
         val combat = combatSource
         val intimidation = intimidationSource
@@ -724,17 +617,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         return "combat $combatLevel, intimidation $stat -> island mobs of level $ignore and below ignore you"
     }
 
-    /**
-     * Stand up island mob spawning if it's enabled and a usable provider is installed. Soft in every
-     * direction: no mob backend -> skip; no skills backend -> mobs fall back to level 1; disabled ->
-     * nothing runs. Backends come from extensions; this plugin names no third-party plugin at all.
-     */
-    /**
-     * Resolve the progression backend an admin asked for, or the only one installed.
-     *
-     * A blank `island-mobs.progression` means "whichever is present", which is the right default when
-     * a server runs exactly one skills plugin — the common case, and one that should not need naming.
-     */
+    // The progression backend an admin named, or the only one installed when island-mobs.progression is
+    // blank.
     private fun progressionBackend(): ProgressionProvider? {
         val configured = conf().getString("island-mobs.progression", "")?.trim().orEmpty()
         if (configured.isEmpty()) {
@@ -750,6 +634,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         return provider?.takeIf { it.available() }
     }
 
+    // Start island mob spawning if enabled and a provider is installed. No mob backend: skip; no skills
+    // backend: mobs fall back to level 1. Backends come from extensions.
     private fun startIslandMobSpawning() {
         if (!conf().getBoolean("island-mobs.enabled", false)) {
             return
@@ -758,7 +644,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         val provider = integrationRegistry.mobProvider(providerId)
         if (provider == null || !provider.available()) {
             logger.warning(
-                "island-mobs is enabled but provider '$providerId' isn't available — island mob "
+                "island-mobs is enabled but provider '$providerId' isn't available: island mob "
                     + "spawning is off. Registered providers: ${integrationRegistry.mobProviderIds()} "
                     + "(a backend comes from an extension in plugins/RoyalSkyblock/extensions/)."
             )
@@ -770,7 +656,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         val progression = progressionBackend()
         if (progression == null) {
             logger.info(
-                "No skills backend registered — island mobs default to level 1. A backend comes from "
+                "No skills backend registered: island mobs default to level 1. A backend comes from "
                     + "an extension in plugins/RoyalSkyblock/extensions/."
             )
         } else {
@@ -779,7 +665,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                 combat = source
             } else {
                 logger.warning(
-                    "${progression.id()} could not read skill '$skillId' — island mobs default to level 1."
+                    "${progression.id()} could not read skill '$skillId': island mobs default to level 1."
                 )
             }
         }
@@ -789,9 +675,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         service.start()
         logger.info("Island mob spawning: provider ${provider.id()}, ${service.familyCount()} families.")
 
-        // Intimidation targeting bridge. The Talismans intimidation chain only GRANTS the stat
-        // (add_stat) — the stat itself has no effects, so this is what actually makes weak island
-        // mobs ignore the player.
+        // the Talismans chain only grants the intimidation stat; this bridge makes weak island mobs ignore
+        // the player
         if (conf().getBoolean("island-mobs.intimidation.enabled", true) && progression != null) {
             val statId = conf().getString("island-mobs.intimidation.stat", "intimidation")!!
             val stat = progression.stat(statId, 0)
@@ -802,31 +687,22 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                 logger.info("Intimidation bridge active (${progression.id()} stat: $statId).")
             } else {
                 logger.warning(
-                    "Intimidation bridge off — ${progression.id()} could not read stat '$statId'."
+                    "Intimidation bridge off: ${progression.id()} could not read stat '$statId'."
                 )
             }
         }
     }
 
     /**
-     * Where extensions register third-party backends (mob plugins, skills plugins).
-     *
-     * Safe to call from an extension's `onEnable` — it exists from construction, unlike every other
-     * accessor on this class. See [Integrations] for the registration contract.
+     * Where extensions register third-party backends (mob plugins, skills plugins). Safe to call from an
+     * extension's `onEnable`: it exists from construction. See [Integrations].
      */
     fun integrations(): Integrations = integrationRegistry
 
     /**
-     * Whether an extension is allowed to run, per `extensions.disabled` in config.yml.
-     *
-     * Extensions call this from their own `onEnable` and return early if it says no. Deleting the jar
-     * remains the real off switch — this exists to isolate a misbehaving extension without needing
-     * file access, and is worth understanding as the second source of truth it is.
-     *
-     * Safe to call this early: [conf] reads config.yml off disk, and eco has already written that file
-     * by the time any extension enables. A missing or unreadable file reads as "nothing disabled",
-     * because failing open is right here — an extension silently not loading is far harder to diagnose
-     * than one that loaded when you expected it not to.
+     * Whether an extension may run, per `extensions.disabled` in config.yml. Extensions call this from
+     * their own `onEnable` and return early if it says no. A missing or unreadable file reads as nothing
+     * disabled.
      */
     fun extensionEnabled(name: String): Boolean =
         conf().getStringList("extensions.disabled").none { it.equals(name, ignoreCase = true) }
@@ -840,9 +716,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     fun unloads(): IslandUnloadService = unloadService!!
 
     /**
-     * Offline-simulation registry. Register a [com.mystipixel.royalskyblock.api.BlockSimulator] from
-     * your onEnable to teach RoyalSkyblock how a block catches up on time its island spent unloaded;
-     * register nothing for a material and that material simply doesn't grow.
+     * Offline-simulation registry. Register a [com.mystipixel.royalskyblock.api.BlockSimulator] from your
+     * onEnable to teach RoyalSkyblock how a block catches up on time its island spent unloaded.
      */
     fun simulators(): IslandScanner = islandScanner!!
 
@@ -875,7 +750,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
     fun profiles(): ProfileManager = profileManager!!
 
-    /** The profile manager, or null before it exists — the resolver runs during startup. */
+    /** The profile manager, or null before it exists (the resolver runs during startup). */
     fun profilesOrNull(): ProfileManager? = profileManager
 
     fun playerState(): PlayerStateService = stateService!!

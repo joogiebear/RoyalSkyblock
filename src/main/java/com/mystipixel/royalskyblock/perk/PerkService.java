@@ -25,19 +25,18 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Level-gated perks — an <b>opt-in</b> alternative/companion to upgrades. Disabled by default; when off,
- * every method is a cheap no-op (no effects, no commands, no menu). When on, a repeating tick applies
- * each perk's potion effects to players standing on their own island (level permitting) and runs a
- * perk's one-time unlock-commands the first time the island reaches its level.
+ * Level-gated perks, an opt-in companion to upgrades. Disabled by default, in which case every method
+ * is a cheap no-op. When on, a repeating tick applies each perk's potion effects to players on their
+ * own island (level permitting) and runs a perk's unlock-commands once when the island reaches its level.
  */
 public final class PerkService {
 
-    /** The perks shipped in the jar, written out on a fresh install, in unlock order. */
+    // the perks shipped in the jar, written on a fresh install, in unlock order
     private static final String[] DEFAULT_PERKS =
             {"haste", "regen", "prospector", "swift", "bountiful_veins", "homefield", "overseer",
              "scholar"};
 
-    /** Shipped perks that need another plugin, and the plugin each needs. */
+    // shipped perks that need another plugin, and the plugin each needs
     private static final Map<String, String> PERK_REQUIREMENTS = Map.of("overseer", "EcoMinions");
 
     private final RoyalSkyblockPlugin plugin;
@@ -47,13 +46,9 @@ public final class PerkService {
 
     public PerkService(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
-        // No perks.yml is written any more: the switches moved to config.yml's perks: section, which
-        // is where every plugin in the suite keeps its settings, and the perks themselves live in
-        // perks/. An existing perks.yml is still read — see reload() and legacyDefinesPerks().
-        // Fresh install ships the folder, not a monolith. Written only when there is neither a perks/
-        // folder NOR a legacy perks.yml that already defines perks — otherwise the shipped defaults
-        // would land beside an admin's own versions of the same ids and, being read first, silently
-        // shadow their tuning.
+        // Settings live in config.yml and perks in perks/; a legacy perks.yml is still read. Ship the folder
+        // only when there is neither a perks/ folder nor a legacy perks.yml defining perks, or the defaults
+        // would shadow an admin's own versions of the same ids.
         if (!new File(plugin.getDataFolder(), "perks").isDirectory() && !legacyDefinesPerks()) {
             for (String id : DEFAULT_PERKS) {
                 plugin.saveResource("perks/" + id + ".yml", false);
@@ -63,18 +58,8 @@ public final class PerkService {
         reload();
     }
 
-    /**
-     * Park a shipped perk as {@code _<id>.yml} when the plugin it needs isn't installed.
-     *
-     * <p>{@link #reload()} skips {@code _}-prefixed files, the same convention eco uses for its
-     * {@code _example.yml} templates, so the perk still ships and is still documented — it just isn't
-     * live on a server that cannot run it. The alternative is worse than log noise: libreforge drops a
-     * condition it cannot resolve and keeps the rest, so an ungated {@code overseer} would hand the
-     * minion bonus to everyone at the required level, no minions required.
-     *
-     * <p>Only ever runs on a fresh install, and only for perks with a declared requirement. The
-     * required plugins are all in {@code softdepend}, so they have enabled by the time this asks.
-     */
+    // Park a shipped perk as _<id>.yml when its required plugin isn't installed; reload() skips _ files.
+    // Otherwise libreforge drops the unresolvable condition and an ungated perk applies to everyone.
     private void parkIfUnsupported(String id) {
         String required = PERK_REQUIREMENTS.get(id);
         if (required == null || Bukkit.getPluginManager().isPluginEnabled(required)) {
@@ -83,23 +68,12 @@ public final class PerkService {
         File file = new File(plugin.getDataFolder(), "perks/" + id + ".yml");
         File parked = new File(plugin.getDataFolder(), "perks/_" + id + ".yml");
         if (file.isFile() && file.renameTo(parked)) {
-            plugin.getLogger().info("Perk '" + id + "' needs " + required + ", which isn't installed — "
+            plugin.getLogger().info("Perk '" + id + "' needs " + required + ", which isn't installed; "
                     + "shipped as _" + id + ".yml (rename it to enable once " + required + " is in).");
         }
     }
 
-    /**
-     * Load every perk, from {@code perks/*.yml} and from a legacy {@code perks.yml}.
-     *
-     * <p>One file per perk is the layout every eco plugin uses, so a perk can be added by copying a
-     * file — its name is the perk's id — with nothing to register anywhere. The toggle and refresh
-     * interval stay in {@code perks.yml}, which is settings rather than content.
-     *
-     * <p><b>Both sources are read.</b> A server with a commented {@code perks.yml} keeps working
-     * untouched; nothing is auto-split, because rewriting YAML through Bukkit strips every comment.
-     * A folder file wins if both define the same id.
-     */
-    /** Whether a legacy perks.yml already carries perk definitions (rather than just the switches). */
+    // whether a legacy perks.yml carries perk definitions rather than just the switches
     private boolean legacyDefinesPerks() {
         File file = new File(plugin.getDataFolder(), "perks.yml");
         if (!file.isFile()) {
@@ -110,17 +84,8 @@ public final class PerkService {
         return section != null && !section.getKeys(false).isEmpty();
     }
 
-    /**
-     * Read {@code enabled} and {@code effect-refresh-seconds} from config.yml, or from a legacy
-     * perks.yml that still declares them.
-     *
-     * <p>The switches moved to config.yml to match the rest of the suite, where settings live in
-     * config.yml and content lives in a folder. A server that upgrades still has them in perks.yml
-     * saying {@code enabled: true}, and reading only the new home would switch every perk off with
-     * nothing in the log to explain it — the config equivalent of a silent failure. The old file
-     * therefore still wins where it speaks, and says so once so the move is a choice rather than a
-     * surprise.
-     */
+    // Read enabled and effect-refresh-seconds from config.yml, or from a legacy perks.yml that still
+    // declares them (which wins, so an upgrade doesn't silently turn perks off).
     private void readSwitches(FileConfiguration legacy) {
         boolean legacyDeclares = legacy.isSet("enabled") || legacy.isSet("effect-refresh-seconds");
         if (legacyDeclares) {
@@ -131,7 +96,7 @@ public final class PerkService {
             }
             warnedAboutLegacySwitches = true;
             plugin.getLogger().info("Reading perk settings from perks.yml. They now belong in "
-                    + "config.yml under perks: — copy them across and delete perks.yml, which is only "
+                    + "config.yml (under perks:); copy them across and delete perks.yml, which is only "
                     + "still read so this move cannot turn your perks off silently.");
             return;
         }
@@ -139,9 +104,13 @@ public final class PerkService {
         refreshSeconds = Math.max(2, plugin.conf().getInt("perks.effect-refresh-seconds", 6));
     }
 
-    /** Logged once per boot, not once per reload — this is guidance, not a warning to chase. */
+    // logged once per boot, not per reload
     private boolean warnedAboutLegacySwitches;
 
+    /**
+     * Load every perk from {@code perks/*.yml} (file name is the id) and from a legacy
+     * {@code perks.yml}, which is never auto-split. A folder file wins if both define the same id.
+     */
     public void reload() {
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "perks.yml"));
         readSwitches(cfg);
@@ -169,7 +138,7 @@ public final class PerkService {
         perks.sort(Comparator.comparingInt(Perk::requiredLevel));
     }
 
-    /** Read one perk. {@code p} is the file itself for a folder perk, or a section of the legacy file. */
+    // p is the file itself for a folder perk, or a section of the legacy file
     private void loadPerk(String key, ConfigurationSection p) {
         {
             {
@@ -256,7 +225,7 @@ public final class PerkService {
         }
     }
 
-    /** Run unlock-commands for perks newly crossed since the island's last recorded perk level. */
+    // run unlock-commands for perks newly crossed since the island's last recorded perk level
     private void checkUnlocks(Island island, int level) {
         int from = island.perkLevel();
         if (level <= from) {
@@ -298,7 +267,7 @@ public final class PerkService {
             try {
                 amplifier = Math.max(0, Integer.parseInt(parts[parts.length - 1].trim()));
             } catch (NumberFormatException ignored) {
-                // no amplifier — default 0
+                // no amplifier, default 0
             }
         }
         PotionEffectType type = resolveEffect(name);
@@ -312,7 +281,7 @@ public final class PerkService {
                 return type;
             }
         } catch (Throwable ignored) {
-            // registry lookup unavailable — fall through
+            // registry lookup unavailable, fall through
         }
         try {
             return PotionEffectType.getByName(name.toUpperCase(Locale.ROOT));

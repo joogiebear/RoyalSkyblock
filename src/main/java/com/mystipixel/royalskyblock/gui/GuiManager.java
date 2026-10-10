@@ -41,16 +41,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 
 /**
- * Loads, renders, and drives the {@code gui/*.yml} menus in the shared EcoMenus dialect. Buttons run
+ * Loads, renders and drives the {@code gui/*.yml} menus in the shared EcoMenus dialect. Buttons run
  * effect lists; the standard effects delegate to commands ({@code player_command}) so the GUI stays a
- * thin launcher over existing logic instead of duplicating it.
- *
- * <p>New menus (profile switcher, upgrades, ...) are just new {@code gui/<id>.yml} files registered in
- * {@link #MENUS} — the engine renders them with no extra code.
+ * thin launcher over existing logic. A new menu is a new {@code gui/<id>.yml} registered in
+ * {@link #MENUS}.
  */
 public final class GuiManager implements Listener {
 
-    /** Menu ids ↔ gui/<id>.yml file names ↔ the {@code open_menu} effect's {@code menu} arg. */
+    /** Menu ids: the gui/<id>.yml file name and the {@code open_menu} effect's {@code menu} arg. */
     public static final String MAIN = "main";
     public static final String CONFIRM_DELETE = "confirm-delete";
     public static final String PROFILES = "profiles";
@@ -70,8 +68,8 @@ public final class GuiManager implements Listener {
     public static final String TOP = "top";
     public static final String PERKS = "perks";
 
-    // Menu files live in gui/<category>/ folders for organisation. The menu id is the file's basename,
-    // so the constants above and every open_menu reference are unaffected by the folder layout.
+    // The menu id is the file's basename, so the gui/<category>/ folders don't affect the constants
+    // above or any open_menu reference.
     private static final String[] MENU_PATHS = {
             "core/main", "core/confirm-delete",
             "profile/profiles", "profile/create-profile",
@@ -81,36 +79,23 @@ public final class GuiManager implements Listener {
             "level/level", "level/top", "level/perks",
     };
 
-    /**
-     * Fully config-driven menus: every slot comes from the yml, so {@link #fillDynamic} has nothing to
-     * add and eco renders each slot straight from its template.
-     */
+    // fully config-driven menus: eco renders each slot straight from its template
     private static final Set<String> ECO_RENDERED = Set.of(
             MAIN, CONFIRM_DELETE, CREATE_PROFILE, MANAGE, BANK_HUB);
 
-    /**
-     * Data-driven menus, also rendered through eco but with their contents computed per viewer.
-     *
-     * <p>Each render, their {@code fillX} builder paints a fresh {@link MenuCanvas} that eco's slots
-     * read from (see {@link #renderDynamic}), so a {@link Menu#refresh} redraws from current state.
-     */
+    // data-driven menus: each render, their fillX builder paints a fresh MenuCanvas (see renderDynamic)
     private static final Set<String> ECO_DYNAMIC = Set.of(
             PROFILES, SETTINGS, UPGRADES, VISIT, COOP, COOP_INVITE, COOP_MEMBER,
             BANK_PERSONAL, COOP_BANK, COOP_BANK_TXNS, LEVEL, TOP, PERKS);
 
-    /**
-     * eco menus currently open, so {@link #tickOpenMenus} can refresh one in place.
-     */
+    // eco menus currently open, so tickOpenMenus can refresh one in place
     private final Map<UUID, OpenEcoMenu> openEcoMenus = new ConcurrentHashMap<>();
 
 
-    /**
-     * Rows the visit browser and leaderboard fetched off-thread, per viewer and menu, waiting for the
-     * refresh that paints them. Cleared when the menu closes, so every opening fetches fresh rows.
-     */
+    // Rows the visit browser and leaderboard fetched off-thread, per viewer and menu, waiting for the
+    // refresh that paints them. Cleared on close, so every opening fetches fresh rows.
     private final Map<String, List<BrowseRow>> browseRows = new ConcurrentHashMap<>();
 
-    /** A player's open eco menu and which menu it is. */
     private record OpenEcoMenu(String menuId, Menu menu) {
     }
 
@@ -133,21 +118,19 @@ public final class GuiManager implements Listener {
             if (!file.exists()) {
                 plugin.saveResource("gui/" + path + ".yml", false); // saveResource creates parent folders
             }
-            String id = path.substring(path.lastIndexOf('/') + 1); // menu id = basename
+            String id = path.substring(path.lastIndexOf('/') + 1);
             byId.put(id, MenuTemplate.load(file, "&6&lSkyblock", 5));
         }
-        // Compile every menu's effect chains now, so a broken one is reported here with its file and
-        // slot named rather than the first time a player presses that button.
+        // compile every menu's effect chains now, so a broken one is reported with its file and slot
         com.mystipixel.royalskyblock.libreforge.MenuChains.invalidate();
         for (Map.Entry<String, MenuTemplate> entry : byId.entrySet()) {
             com.mystipixel.royalskyblock.libreforge.MenuChains.precompile(entry.getKey(), entry.getValue());
         }
-        // Catch a menu added to MENU_PATHS but never classified. Without this the mistake only shows up
-        // as a menu that does nothing when a player runs the command that opens it.
+        // catch a menu added to MENU_PATHS but never classified
         for (String id : byId.keySet()) {
             if (!ECO_RENDERED.contains(id) && !ECO_DYNAMIC.contains(id)) {
                 plugin.getLogger().severe("Menu '" + id + "' is loaded but not registered as static or "
-                        + "dynamic — it will not open. Add it to ECO_RENDERED or ECO_DYNAMIC.");
+                        + "dynamic: it will not open. Add it to ECO_RENDERED or ECO_DYNAMIC.");
             }
         }
     }
@@ -178,23 +161,13 @@ public final class GuiManager implements Listener {
             openEcoDynamicMenu(player, menuId, template, title, context);
             return;
         }
-        // Unreachable for the shipped menus — reload() verifies every loaded id is registered. A new
-        // menu added to MENU_PATHS without being classified lands here, and saying so is better than
-        // silently opening nothing.
-        plugin.getLogger().severe("Menu '" + menuId + "' is not registered as static or dynamic — "
+        // a menu added to MENU_PATHS without being classified; reload() should have reported it
+        plugin.getLogger().severe("Menu '" + menuId + "' is not registered as static or dynamic: "
                 + "add it to ECO_RENDERED or ECO_DYNAMIC in GuiManager.");
     }
 
-    /**
-     * Render a fully config-driven menu through eco.
-     *
-     * <p>The menu is rebuilt per open rather than cached: the title is fixed at build time and may
-     * carry placeholders, and rebuilding keeps a {@code /is reload} taking effect immediately instead
-     * of leaving stale menus behind.
-     *
-     * <p>eco owns the click handling, so the click sound and effect dispatch are done in the handler
-     * passed here, the same way the dynamic path does them, so both feel identical.
-     */
+    // Rebuilt per open rather than cached: the title is fixed at build time and may carry
+    // placeholders, and /is reload takes effect immediately.
     private void openEcoMenu(Player player, String menuId, MenuTemplate template, String title) {
         Menu menu = ecoMenus.build(template, title, this::placeholders, (viewer, slot, rightClick) -> {
             List<MenuEffect> effects = rightClick && !slot.rightClick().isEmpty()
@@ -209,9 +182,6 @@ public final class GuiManager implements Listener {
         play(player, template, "open", null);
     }
 
-    /**
-     * Open a data-driven menu through eco, reusing the legacy {@code fillX} builder for its contents.
-     */
     private void openEcoDynamicMenu(Player player, String menuId, MenuTemplate template,
                                     String title, String context) {
         Menu menu = ecoMenus.buildDynamic(template, title,
@@ -225,29 +195,21 @@ public final class GuiManager implements Listener {
                     }
                     com.mystipixel.royalskyblock.libreforge.MenuChains.run(menuId, slot, rightClick, viewer);
                 },
-                // Mirrors the legacy dynamic branch exactly: always sound, and defer the action off
-                // the click event. Running it inline opens the next menu from inside
-                // InventoryClickEvent, which Bukkit does not support cleanly — the menu opens mid-event
-                // and its open sound lands on top of the click, which is heard as a double click.
+                // Always sound, and defer the action off the click event: opening the next menu inside
+                // InventoryClickEvent isn't supported cleanly and doubles the click sound.
                 (viewer, action, rightClick, configured) -> {
                     playDynamicSound(viewer, template, configured);
                     runNextTick(() -> action.accept(viewer, rightClick));
                 });
-        // Track AFTER opening, not before. openInventory closes whatever the player had open and fires
-        // InventoryCloseEvent synchronously, so registering first means navigating menu-to-menu has the
-        // outgoing menu's close wipe the entry for the menu just opened.
+        // Track after opening: openInventory fires InventoryCloseEvent for the outgoing menu synchronously,
+        // which would wipe an entry registered first.
         menu.open(player);
         openEcoMenus.put(player.getUniqueId(), new OpenEcoMenu(menuId, menu));
         play(player, template, "open", null);
     }
 
-    /**
-     * Paint one render of a data-driven menu: filler, configured buttons, then the menu's generated
-     * content on top.
-     *
-     * <p>Configured slots are painted first because several builders deliberately overwrite them —
-     * pinning an upgrade to a named slot, greying out a button the viewer cannot use.
-     */
+    // Filler, configured buttons, then generated content on top: several builders deliberately overwrite
+    // configured slots (pinning an upgrade, greying out a button).
     private MenuCanvas renderDynamic(String menuId, Player player, MenuTemplate template, String context) {
         MenuCanvas canvas = new MenuCanvas(menuId, context, template.size());
 
@@ -268,7 +230,6 @@ public final class GuiManager implements Listener {
         return canvas;
     }
 
-    /** Fill data-driven menus (profile list, settings toggles) into their mask content slots. */
     private void fillDynamic(String menuId, Player player, MenuTemplate template, MenuCanvas canvas) {
         if (menuId.equals(SETTINGS)) {
             fillSettings(player, template, canvas);
@@ -390,16 +351,9 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /**
-     * The island {@code viewer} manages right now, re-resolved at click time, or null (menu closed,
-     * viewer told) if they no longer do.
-     *
-     * <p>Settings and upgrade menus are drawn with the island and the viewer's rights of that moment,
-     * and stay open while those change: the island deleted by its owner, the viewer kicked, demoted or
-     * switched to another profile. The settings toggle then saved the captured island, and because the
-     * save is an upsert, clicking it after a delete wrote the deleted island's row back. {@code drawn},
-     * when given, must also still be the island the menu was built for.
-     */
+    // The island viewer manages right now, re-resolved at click time, or null (menu closed, viewer told)
+    // if they no longer do. A menu can stay open across a delete, kick, demotion or profile switch, and a
+    // stale save would upsert a deleted island back. drawn, when given, must still be the menu's island.
     private @Nullable Island managedIsland(Player viewer, @Nullable Island drawn) {
         UUID activeId = plugin.profiles().getActiveProfileId(viewer.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
@@ -416,21 +370,17 @@ public final class GuiManager implements Listener {
         return island;
     }
 
-    /**
-     * Tick live upgrade countdowns. Guarded so it does nothing unless something is actually cooking,
-     * and even then only re-draws the specific timer icons for players currently viewing the menu.
-     */
+    /** Tick live upgrade countdowns: does nothing unless something is cooking, then only refreshes viewers. */
     public void tickOpenMenus() {
         if (!plugin.upgrades().hasAnyPending()) {
-            return; // nothing cooking anywhere — zero work
+            return; // nothing cooking anywhere
         }
         MenuTemplate template = byId.get(UPGRADES);
         if (template == null) {
             return;
         }
         for (Player player : Bukkit.getOnlinePlayers()) {
-            // refresh() re-runs the render snapshot, which rebuilds the upgrade icons and so re-derives
-            // the countdown, without reopening the menu under the player.
+            // refresh() re-runs the render snapshot, re-deriving the countdown without reopening the menu
             OpenEcoMenu open = openEcoMenus.get(player.getUniqueId());
             if (open != null && UPGRADES.equals(open.menuId())) {
                 open.menu().refresh(player);
@@ -438,7 +388,6 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /** Forget a player's eco menu once it closes, so the tick loop stops refreshing a dead menu. */
     @EventHandler
     public void onEcoMenuClose(InventoryCloseEvent event) {
         if (event.getPlayer() instanceof Player player) {
@@ -447,7 +396,7 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /** Drop tracked menus on quit — a player who logs out never fires a close for the open inventory. */
+    // a player who logs out never fires a close for the open inventory
     @EventHandler
     public void onQuit(PlayerQuitEvent event) {
         openEcoMenus.remove(event.getPlayer().getUniqueId());
@@ -534,8 +483,8 @@ public final class GuiManager implements Listener {
             lore.add(noItalic("&7" + def.description()));
             lore.add(noItalic(""));
             if (pending != null) {
-                lore.add(noItalic("&e⏳ Upgrading to tier " + pending.targetTier()
-                        + " &7— " + formatDuration(pending.secondsLeft(System.currentTimeMillis())) + " left"));
+                lore.add(noItalic("&eUpgrading to tier " + pending.targetTier()
+                        + " &7- " + formatDuration(pending.secondsLeft(System.currentTimeMillis())) + " left"));
                 var t = def.tier(pending.targetTier());
                 if (t != null && !t.skipCost().isFree()) {
                     lore.add(noItalic("&7Skip now: &e" + plugin.currency().format(t.skipCost())));
@@ -545,7 +494,7 @@ public final class GuiManager implements Listener {
             } else {
                 var next = def.nextTier(current);
                 if (next == null) {
-                    lore.add(noItalic("&a✔ Maxed out."));
+                    lore.add(noItalic("&aMaxed out."));
                 } else {
                     String label = effectLabel(def.effect(), next.value());
                     lore.add(noItalic("&7Next: tier " + next.tier()
@@ -569,16 +518,16 @@ public final class GuiManager implements Listener {
         return v == Math.floor(v) ? String.valueOf((long) v) : String.valueOf(v);
     }
 
-    /** Human label for an upgrade tier's effect value, e.g. a radius shows as its NxN island size. */
+    // a radius shows as its NxN island size
     private static String effectLabel(com.mystipixel.royalskyblock.upgrade.UpgradeEffect effect, double value) {
         int v = (int) value;
         return switch (effect) {
-            case RADIUS -> (v * 2 + 1) + "x" + (v * 2 + 1); // border half-size -> full NxN (incl. centre)
+            case RADIUS -> (v * 2 + 1) + "x" + (v * 2 + 1); // border half-size to full NxN (incl. centre)
             case GUEST_SLOTS -> "+" + v + " guest" + (v == 1 ? "" : "s");
             case COOP_SLOTS -> "+" + v + " coop slot" + (v == 1 ? "" : "s");
             case GENERATOR -> "Tier " + v + " ores";
             case MINIONS -> "+" + v + " minion slot" + (v == 1 ? "" : "s");
-            // A chain-only track has no meaningful value to advertise; the caller drops the label.
+            // a chain-only track has no value to advertise; the caller drops the label
             case NONE -> "";
         };
     }
@@ -616,7 +565,6 @@ public final class GuiManager implements Listener {
         return item;
     }
 
-    /** One resolved browser/leaderboard row, gathered off-thread and rendered on the main thread. */
     private record BrowseRow(Island island, Profile profile, String ownerName) {
     }
 
@@ -629,10 +577,8 @@ public final class GuiManager implements Listener {
         List<Integer> slots = template.contentSlots();
         java.util.UUID viewerId = player.getUniqueId();
 
-        // Gathered off-thread: getAllIslands() is a full table read, each profile can miss the cache
-        // and hit the DB, and each owner name touches the user cache. Doing that inline stalled the
-        // server for the whole scan every time anyone opened the browser, and the cost grew with the
-        // number of islands ever created rather than with players online.
+        // Gathered off-thread: getAllIslands() is a full table read, and profiles and owner names can miss
+        // their caches.
         List<BrowseRow> rows = browseRowsOrFetch(player, VISIT, () -> {
             List<BrowseRow> found = new ArrayList<>();
             for (Island island : plugin.storage().getAllIslands()) {
@@ -664,13 +610,8 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /**
-     * The rows for an async-filled menu, or null while they are still being fetched.
-     *
-     * <p>The fill runs inside eco's render and must return synchronously, so rows that arrive later
-     * cannot be painted into it directly. Instead they are parked here and the open menu is refreshed,
-     * which re-runs the render and finds them ready.
-     */
+    // The rows for an async-filled menu, or null while still being fetched. The fill runs inside eco's
+    // render and must return synchronously, so late rows are parked here and the menu refreshed.
     private @Nullable List<BrowseRow> browseRowsOrFetch(Player player, String menuId,
                                                         java.util.function.Supplier<List<BrowseRow>> gather) {
         UUID viewer = player.getUniqueId();
@@ -729,7 +670,7 @@ public final class GuiManager implements Listener {
             try {
                 skull.setOwningPlayer(Bukkit.getOfflinePlayer(prof.owner()));
             } catch (Throwable ignored) {
-                // head lookup failed — leave default
+                // head lookup failed, leave default
             }
         }
         if (meta != null) {
@@ -751,9 +692,7 @@ public final class GuiManager implements Listener {
         return name != null ? name : prof.name();
     }
 
-    // ── coop management ──────────────────────────────────────────────────────────
-
-    /** Fill the coop roster: owner first, then co-owners/members. Owner/co-owner click a member to kick. */
+    // owner first, then co-owners/members; owner/co-owner click a member to manage them
     private void fillCoop(Player player, MenuTemplate template, MenuCanvas canvas) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
@@ -772,7 +711,6 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < members.size() && i < slots.size(); i++) {
             com.mystipixel.royalskyblock.profile.ProfileMember member = members.get(i);
             int slot = slots.get(i);
-            // Owner/co-owner can manage anyone but themselves and the owner; clicking opens the member menu.
             boolean manageable = canManage
                     && member.role() != IslandRole.OWNER
                     && !member.uuid().equals(player.getUniqueId());
@@ -783,7 +721,7 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /** Per-member management: promote/demote, transfer ownership, kick. Target name is the canvas context. */
+    // per-member management: promote/demote, transfer ownership, kick; target name is the canvas context
     private void fillCoopMember(Player player, MenuTemplate template, MenuCanvas canvas) {
         String targetName = canvas.context();
         Profile active = plugin.profiles().getActiveProfile(player);
@@ -819,7 +757,7 @@ public final class GuiManager implements Listener {
                     plugin.profiles().demote(viewer, target.name()), "coop.demoted", target.name(), "coop.you-demoted"));
         }
 
-        // transfer ownership (owner only) — right-click to confirm
+        // transfer ownership (owner only), right-click to confirm
         if (isOwner) {
             canvas.setItem(actionRow + 4, infoIcon(Material.GOLDEN_HELMET, "&6&lTransfer Ownership",
                     List.of("&7Make " + target.name() + " the owner.",
@@ -835,7 +773,6 @@ public final class GuiManager implements Listener {
             });
         }
 
-        // kick
         canvas.setItem(actionRow + 6, infoIcon(Material.BARRIER, "&c&lRemove from Island",
                 List.of("&7Kick " + target.name() + " from", "&7the coop.", "", "&eClick to remove!")));
         canvas.putAction(actionRow + 6, (viewer, right) -> {
@@ -854,8 +791,6 @@ public final class GuiManager implements Listener {
         });
     }
 
-    // ── bank (native; personal + coop share this engine) ──────────────────────────
-
     private void fillBank(Player player, MenuTemplate template, MenuCanvas canvas, boolean coop) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         if (profile == null) {
@@ -870,7 +805,7 @@ public final class GuiManager implements Listener {
 
         canvas.setItem(4, bankHeaderIcon(bank, acct, level, coop ? "&6&l" + profile.name() + " Coop Bank" : "&6&lPersonal Bank"));
         if (!bank.available()) {
-            return; // no economy / no levels — header explains, no buttons
+            return; // no economy or no levels: the header explains, no buttons
         }
 
         boolean canWithdraw = mayWithdraw(profile, player, coop);
@@ -884,11 +819,11 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < depositCols.length && i < amounts.size(); i++) {
             long amount = amounts.get(i);
             canvas.setItem(depositCols[i], infoIcon(Material.LIME_DYE, "&a&lDeposit " + fmtCoins(amount),
-                    List.of("&7From your purse → bank.", "", "&eClick to deposit!")));
+                    List.of("&7From your purse to bank.", "", "&eClick to deposit!")));
             canvas.putAction(depositCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, true));
             if (canWithdraw) {
                 canvas.setItem(withdrawCols[i], infoIcon(Material.GOLD_NUGGET, "&6&lWithdraw " + fmtCoins(amount),
-                        List.of("&7From bank → your purse.", "", "&eClick to withdraw!")));
+                        List.of("&7From bank to your purse.", "", "&eClick to withdraw!")));
                 canvas.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, false));
             }
         }
@@ -974,7 +909,7 @@ public final class GuiManager implements Listener {
             lore.add(noItalic("&7Next interest: &f" + bank.money(bank.calculateInterest(acct.interestBase(), level))));
             if (!bank.available()) {
                 lore.add(noItalic(""));
-                lore.add(noItalic("&cNo economy plugin — banking disabled."));
+                lore.add(noItalic("&cNo economy plugin: banking disabled."));
             }
             meta.lore(lore);
             item.setItemMeta(meta);
@@ -1011,7 +946,7 @@ public final class GuiManager implements Listener {
         String accountId = canvas.context() != null ? canvas.context()
                 : BankService.coopId(profile.id());
         List<Integer> slots = template.contentSlots();
-        // dynamic Back (col 4, row 6) — return to the right bank menu for this account
+        // dynamic Back (col 4, row 6): return to the right bank menu for this account
         String menu = accountId.startsWith("p:") ? BANK_PERSONAL : COOP_BANK;
         canvas.setItem(48, infoIcon(Material.ARROW, "&7« Back", List.of("&7Return to the bank.")));
         canvas.putAction(48, (viewer, right) -> open(viewer, menu));
@@ -1053,7 +988,7 @@ public final class GuiManager implements Listener {
         return infoIcon(material, verb, lore);
     }
 
-    /** Coop banks can require owner/co-owner to withdraw; personal banks always allow it. */
+    // coop banks can require owner/co-owner to withdraw; personal banks always allow it
     private boolean mayWithdraw(Profile profile, Player player, boolean coop) {
         if (!coop || !plugin.conf().getBoolean("coop.bank.withdraw-requires-manager", false)) {
             return true;
@@ -1062,13 +997,8 @@ public final class GuiManager implements Listener {
         return role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
     }
 
-    /**
-     * Re-checks, at click time, that {@code viewer} may still act on {@code accountId}. The account id
-     * and withdraw right are captured when the menu is drawn, but a menu can stay open across a kick,
-     * a leave, a demotion or a profile switch, and BankService itself does no membership check. Without
-     * this a kicked member could keep the coop bank open and click Withdraw All. On refusal the menu
-     * is closed so the stale buttons go away.
-     */
+    // Re-checked at click time: a menu can stay open across a kick, leave, demotion or profile switch,
+    // and BankService does no membership check. On refusal the menu is closed.
     private boolean bankAccess(Player viewer, String accountId, boolean withdraw) {
         Profile profile = plugin.profiles().getActiveProfile(viewer);
         boolean coop = accountId.startsWith("c:");
@@ -1102,7 +1032,6 @@ public final class GuiManager implements Listener {
         return String.format(Locale.US, "%,.0f", value);
     }
 
-    /** Run a role change, message actor + (online) target, and re-open the right menu. */
     private void runRoleAction(Player viewer, String error, String successKey, String targetName, String targetKey) {
         if (error != null) {
             plugin.messages().send(viewer, "coop.role-error", "error", error);
@@ -1117,7 +1046,7 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /** Fill the invite picker: every online player not already on the roster; click to invite. */
+    // every online player not already on the roster; click to invite
     private void fillCoopInvite(Player player, MenuTemplate template, MenuCanvas canvas) {
         Profile profile = plugin.profiles().getActiveProfile(player);
         List<Integer> slots = template.contentSlots();
@@ -1150,7 +1079,7 @@ public final class GuiManager implements Listener {
         }
     }
 
-    /** OWNER first, then CO_OWNER, then MEMBER, then anything else — for a tidy roster order. */
+    // OWNER, CO_OWNER, MEMBER, then anything else
     private static int roleRank(IslandRole role) {
         return switch (role) {
             case OWNER -> 0;
@@ -1189,7 +1118,7 @@ public final class GuiManager implements Listener {
             try {
                 skull.setOwningPlayer(Bukkit.getOfflinePlayer(member.uuid()));
             } catch (Throwable ignored) {
-                // head lookup failed — leave default
+                // head lookup failed, leave default
             }
         }
         if (meta != null) {
@@ -1215,7 +1144,7 @@ public final class GuiManager implements Listener {
             try {
                 skull.setOwningPlayer(target);
             } catch (Throwable ignored) {
-                // head lookup failed — leave default
+                // head lookup failed, leave default
             }
         }
         if (meta != null) {
@@ -1230,11 +1159,8 @@ public final class GuiManager implements Listener {
         return item;
     }
 
-    // ── island levels ────────────────────────────────────────────────────────────
-
-    /** Fill the level menu with the biggest point contributors from the island's last scan. */
     private void fillLevel(Player player, MenuTemplate template, MenuCanvas canvas) {
-        // Perks entry point (row 5, col 5) — only when the optional perks system is enabled.
+        // perks entry point (row 5, col 5), only when the optional perks system is enabled
         if (plugin.perks().enabled()) {
             canvas.setItem(40, infoIcon(Material.NETHER_STAR, "&d&lPerks",
                     List.of("&7Perks that unlock as your", "&7island levels up.", "", "&eClick to view!")));
@@ -1280,11 +1206,11 @@ public final class GuiManager implements Listener {
         return item;
     }
 
-    /** Fill the leaderboard with islands ranked by stored level (never scans live). */
+    // islands ranked by stored level (never scans live)
     private void fillTop(Player player, MenuTemplate template, MenuCanvas canvas) {
         List<Integer> slots = template.contentSlots();
 
-        // Same reasoning as fillVisit: read and rank off-thread, paint on the refresh.
+        // same as fillVisit: read and rank off-thread, paint on the refresh
         List<BrowseRow> rows = browseRowsOrFetch(player, TOP, () -> {
             List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
             all.sort((a, b) -> Double.compare(b.level(), a.level()));
@@ -1318,7 +1244,7 @@ public final class GuiManager implements Listener {
             try {
                 skull.setOwningPlayer(Bukkit.getOfflinePlayer(prof.owner()));
             } catch (Throwable ignored) {
-                // head lookup failed — leave default
+                // head lookup failed, leave default
             }
         }
         if (meta != null) {
@@ -1348,7 +1274,6 @@ public final class GuiManager implements Listener {
         return item;
     }
 
-    /** "DIAMOND_BLOCK" -> "Diamond Block". */
     private void fillPerks(Player player, MenuTemplate template, MenuCanvas canvas) {
         List<Integer> slots = template.contentSlots();
         if (slots.isEmpty()) {
@@ -1378,14 +1303,14 @@ public final class GuiManager implements Listener {
         ItemStack item = new ItemStack(unlocked ? perk.icon() : Material.GRAY_DYE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(noItalic(perk.name() + (unlocked ? " &a✔" : " &8(locked)")));
+            meta.displayName(noItalic(perk.name() + (unlocked ? " &a(unlocked)" : " &8(locked)")));
             List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
             for (String line : perk.description()) {
                 lore.add(noItalic(line));
             }
             lore.add(noItalic(""));
             lore.add(noItalic("&7Requires island level &f" + perk.requiredLevel()));
-            lore.add(noItalic(unlocked ? "&a✔ Unlocked" : "&c✘ Locked — reach level " + perk.requiredLevel()));
+            lore.add(noItalic(unlocked ? "&aUnlocked" : "&cLocked: reach level " + perk.requiredLevel()));
             meta.lore(lore);
             item.setItemMeta(meta);
         }
@@ -1411,7 +1336,6 @@ public final class GuiManager implements Listener {
         return Text.color(legacy).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false);
     }
 
-    /** Placeholders available to every menu. Extended as systems come online (level, profile, ...). */
     private Map<String, String> placeholders(Player player) {
         Map<String, String> map = new LinkedHashMap<>();
         map.put("player", player.getName());
@@ -1422,10 +1346,7 @@ public final class GuiManager implements Listener {
         return map;
     }
 
-    // ── click handling ───────────────────────────────────────────────────────────
-    //
-    // There is no InventoryClickEvent listener here any more. Every menu is an eco Menu and eco owns
-    // its clicks, dispatching them to the per-slot handlers built in EcoMenuFactory.
+    // Every menu is an eco Menu, so eco owns clicks and dispatches them to the slot handlers built in EcoMenuFactory.
 
     private void execute(Player player, MenuEffect effect) {
         switch (effect.id().toLowerCase(Locale.ROOT)) {
@@ -1448,12 +1369,11 @@ public final class GuiManager implements Listener {
                     player.playSound(player.getLocation(), sound,
                             (float) doubleArg(effect, "volume", 0.6), (float) doubleArg(effect, "pitch", 1.2));
                 } catch (Throwable ignored) {
-                    // bad sound key — ignore
+                    // bad sound key, ignore
                 }
             }
-            // Anything else is a libreforge effect, compiled and run by MenuChains. libreforge
-            // reports its own violation at compile time if the id is genuinely unknown, which is a
-            // better diagnostic than a warning on every click.
+            // Anything else is a libreforge effect run by MenuChains; libreforge reports unknown ids at
+            // compile time.
             default -> { }
         }
     }
@@ -1462,18 +1382,9 @@ public final class GuiManager implements Listener {
         Bukkit.getScheduler().runTask(plugin, runnable);
     }
 
-    /**
-     * The sound a generated button makes.
-     *
-     * <p>Content filled into a mask slot has no config entry of its own to carry a {@code sound:},
-     * so its sound comes from the menu's {@code sounds.content}. A slot that WAS pinned in config
-     * still wins, so an admin can give one generated entry its own sound.
-     *
-     * <p>Most menus deliberately leave {@code content} unset: their generated buttons reopen a menu
-     * when clicked, and that menu's own open sound already covers the click. Only the ones that close
-     * the inventory instead — the profile list and the visit browser — have nothing else to speak for
-     * them.
-     */
+    // Generated content has no config entry for a sound:, so it uses the menu's sounds.content; a slot
+    // pinned in config still wins. Most menus leave content unset because the menu they reopen plays its
+    // own open sound.
     private void playDynamicSound(Player player, MenuTemplate template, MenuSlot configured) {
         if (configured != null && configured.sound() != null) {
             play(player, null, null, configured.sound());
@@ -1482,13 +1393,8 @@ public final class GuiManager implements Listener {
         play(player, template, "content", null);
     }
 
-    /**
-     * Play a slot's own click sound, if it declares one.
-     *
-     * <p>The only thing that makes a click audible. There is no menu-wide click sound and no built-in
-     * fallback, so a button is silent unless its config asks otherwise — which is what stops a
-     * navigation button doubling with the sound of the menu it opens.
-     */
+    // The only thing that makes a click audible: no menu-wide default, so a navigation button doesn't
+    // double with the sound of the menu it opens.
     private void playSlotSound(Player player, MenuSlot slot) {
         if (slot == null || slot.sound() == null) {
             return;
@@ -1496,7 +1402,6 @@ public final class GuiManager implements Listener {
         play(player, null, null, slot.sound());
     }
 
-    /** Play a menu's configured sound for {@code key}, or {@code fallback} when it defines none. */
     private void play(Player player, MenuTemplate template, String key, MenuTemplate.SoundSpec fallback) {
         MenuTemplate.SoundSpec spec = template == null ? null : template.sound(key);
         if (spec == null) {
@@ -1508,7 +1413,7 @@ public final class GuiManager implements Listener {
         try {
             player.playSound(player.getLocation(), spec.name(), spec.volume(), spec.pitch());
         } catch (Throwable ignored) {
-            // bad sound key or unavailable — never let it break a click
+            // bad sound key or unavailable: never let it break a click
         }
     }
 

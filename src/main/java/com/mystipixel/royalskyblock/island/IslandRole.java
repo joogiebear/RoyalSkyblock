@@ -15,7 +15,7 @@ public enum IslandRole {
     /** A regular member. May build on the island. */
     MEMBER(50),
 
-    /** Explicitly trusted visitor — can build but is not a roster member (coop). */
+    /** Explicitly trusted visitor: can build but is not a roster member (coop). */
     COOP(25),
 
     /** Anyone else currently on the island. Cannot build by default. */

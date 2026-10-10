@@ -24,9 +24,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Loads {@code upgrades.yml} and applies upgrade effects to islands. Per-island tiers live on the
- * {@link Island} model (persisted). Purchasing/timers are handled separately; this manager owns the
- * definitions, the current-tier lookups, and turning a tier into a concrete effect.
+ * Loads upgrade tracks and applies upgrade effects to islands. Per-island tiers live on the
+ * {@link Island} model; this manager owns the definitions, purchases and timers, and turning a tier into
+ * a concrete effect.
  */
 public final class UpgradeManager {
 
@@ -35,7 +35,7 @@ public final class UpgradeManager {
 
     private final RoyalSkyblockPlugin plugin;
     private final Map<String, UpgradeDef> upgrades = new LinkedHashMap<>();
-    private final Map<String, PendingUpgrade> pending = new ConcurrentHashMap<>(); // islandId:key -> pending
+    private final Map<String, PendingUpgrade> pending = new ConcurrentHashMap<>(); // islandId:key to pending
 
     public UpgradeManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -58,12 +58,10 @@ public final class UpgradeManager {
         return pending.get(pkey(island.id(), def.key()));
     }
 
-    /** Whether anything is cooking anywhere — a cheap guard so idle ticks do no work. */
+    /** Whether anything is cooking anywhere: a cheap guard so idle ticks do no work. */
     public boolean hasAnyPending() {
         return !pending.isEmpty();
     }
-
-    // ── purchasing (pay cost + wait, or pay skip cost to finish now) ────────────────
 
     /** Start the next tier: charge the base cost and begin the timer (or finish instantly). */
     public PurchaseResult start(Player player, Island island, UpgradeDef def) {
@@ -83,8 +81,8 @@ public final class UpgradeManager {
         }
         if (next.isInstant()) {
             setTier(island, def, current + 1);
-            // Fired on purchase, not on completion: a timed upgrade finishes on a task tick with
-            // nobody necessarily online, and a libreforge trigger needs a player to dispatch to.
+            // fired on purchase, not completion: a timed upgrade can finish with nobody online, and a trigger
+            // needs a player
             com.mystipixel.royalskyblock.libreforge.IslandTriggers.upgradePurchased(
                     player, def.key(), current + 1);
             return PurchaseResult.COMPLETED;
@@ -135,8 +133,7 @@ public final class UpgradeManager {
             try {
                 island = plugin.islands().getIsland(pu.islandId());
             } catch (StorageException e) {
-                // The store can't answer right now. Keep the upgrade (the player has paid for it) and
-                // try again next tick; dropping it here is what a null used to do.
+                // the store can't answer right now; keep the paid upgrade and retry next tick
                 plugin.getLogger().warning("Deferring finished upgrades: " + e.getMessage());
                 return;
             }
@@ -163,22 +160,13 @@ public final class UpgradeManager {
     }
 
     /**
-     * Load every upgrade track, from {@code upgrades/*.yml} and from a legacy {@code upgrades.yml}.
-     *
-     * <p>One file per track is the layout every eco plugin uses — enchants, talismans, jobs — so
-     * someone arriving from EcoItems can drop in {@code upgrades/mythic.yml} and have it load without
-     * being told anything. The track's id is the file's name.
-     *
-     * <p><b>Both sources are read, deliberately.</b> A server that already has a commented
-     * {@code upgrades.yml} keeps working untouched: nothing is auto-split, because rewriting YAML
-     * through Bukkit would strip every comment in it. New tracks go in the folder, old ones stay put,
-     * and an admin can move them across whenever they feel like it. A folder file wins if both define
-     * the same id.
+     * Load every upgrade track from {@code upgrades/*.yml} (file name is the id) and from a legacy
+     * {@code upgrades.yml}, which is never auto-split. A folder file wins if both define the same id.
      */
     public void reload() {
         upgrades.clear();
 
-        // Legacy monolith first, so folder files take precedence over the same id.
+        // legacy monolith first, so folder files take precedence over the same id
         File legacy = new File(plugin.getDataFolder(), "upgrades.yml");
         if (legacy.isFile()) {
             YamlConfiguration cfg = YamlConfiguration.loadConfiguration(legacy);
@@ -189,7 +177,7 @@ public final class UpgradeManager {
 
         File dir = new File(plugin.getDataFolder(), "upgrades");
         if (!dir.isDirectory() && !legacy.isFile()) {
-            // Fresh install: ship the folder, not the monolith.
+            // fresh install: ship the folder, not the monolith
             for (String name : DEFAULT_TRACKS) {
                 plugin.saveResource("upgrades/" + name + ".yml", false);
             }
@@ -203,14 +191,11 @@ public final class UpgradeManager {
         }
     }
 
-    /** The tracks shipped in the jar, written out on a fresh install. */
+    // the tracks shipped in the jar, written on a fresh install
     private static final String[] DEFAULT_TRACKS =
             {"size", "guest-limit", "coop-slots", "generator", "minions", "sanctuary"};
 
-    /**
-     * Read one track. {@code sec} is the file itself for a folder track, or the named section of the
-     * legacy monolith — both are {@link ConfigurationSection}, so one reader serves both layouts.
-     */
+    // sec is the file itself for a folder track, or the named section of the legacy monolith
     private void loadTrack(String key, ConfigurationSection sec) {
         {
             if (sec == null) {
@@ -246,8 +231,6 @@ public final class UpgradeManager {
         return upgrades.values();
     }
 
-    // ── effects ────────────────────────────────────────────────────────────────────
-
     /** Set an island's tier for an upgrade, persist it, and apply the effect. */
     public void setTier(Island island, UpgradeDef def, int tier) {
         island.setUpgradeTier(def.key(), tier);
@@ -258,43 +241,22 @@ public final class UpgradeManager {
                 reapplyBorder(island);
             }
         }
-        // The new tier may carry a libreforge effect chain, and libreforge caches a player's holders —
-        // without this the buff would not appear until they next crossed a world boundary.
+        // the new tier may carry a libreforge effect chain, and libreforge caches a player's holders
         refreshHoldersOnIsland(island);
         runUnlockCommands(island, def, tier);
         plugin.writeAsync(() -> plugin.storage().saveIsland(island));
     }
 
-    /**
-     * Run a tier's {@code unlock-commands}.
-     *
-     * <p>The hook for an upgrade whose effect belongs to another plugin. Nothing in this plugin can
-     * raise an EcoMinions placement limit — it is a per-player permission — so the minion-slot track
-     * had a price, a menu icon and a tier number that changed nothing at all. This is how a track like
-     * that reaches out and makes its own effect real.
-     *
-     * <p>Deliberately in {@link #setTier} rather than at purchase, so every path that applies a tier
-     * runs them: buying, a timer finishing, and an admin setting one directly. An admin who sets tier
-     * 3 should not leave the player on the tier-1 permission. The cost is that reaching a tier twice
-     * runs its commands twice, which is why the shipped ones are all idempotent.
-     */
-    /**
-     * The owner's real player name, or "" if it cannot be resolved.
-     *
-     * <p>Unlike the perk equivalent this never falls back to the profile's name: that name is a label
-     * the player chose ("Apple"), and substituting it into `lp user %owner% ...` would silently target
-     * an account that does not exist. Better to skip and say so.
-     */
+    // The owner's real player name, or "" if unresolved. Never the profile name: that's a label the
+    // player chose, and "lp user %owner% ..." would target a non-existent account.
     private String ownerName(Profile profile) {
         String name = Bukkit.getOfflinePlayer(profile.owner()).getName();
         return name == null ? "" : name;
     }
 
     /**
-     * Re-run the unlock commands of every tier the island has reached, for its current owner. Called
-     * after an ownership transfer: the grants (minion slots and the like) went to the old owner by name,
-     * so the new one had none of what the island paid for. The shipped grants are "set ... true", so a
-     * replay is harmless; nothing here can revoke the old owner's, which configs would have to define.
+     * Re-run the unlock commands of every tier the island has reached, for its current owner, after an
+     * ownership transfer (grants went to the old owner by name). Nothing here revokes the old owner's.
      */
     public void replayUnlockCommands(Island island) {
         for (UpgradeDef def : all()) {
@@ -304,6 +266,8 @@ public final class UpgradeManager {
         }
     }
 
+    // Run a tier's unlock-commands: the hook for an effect that belongs to another plugin. Called from
+    // setTier so every path that applies a tier runs them (purchase, timer, admin), so they must be idempotent.
     private void runUnlockCommands(Island island, UpgradeDef def, int tier) {
         UpgradeTier reached = def.tier(tier);
         if (reached == null || reached.unlockCommands().isEmpty()) {
@@ -320,10 +284,8 @@ public final class UpgradeManager {
             String parsed = command.replace("%owner%", owner)
                     .replace("%tier%", String.valueOf(tier))
                     .replace("%value%", String.valueOf((int) def.valueAt(tier)))
-                    // The island's world, so a grant can be scoped to it. Without this an upgrade that
-                    // reaches into a per-player system leaks across profiles: minion slots bought on one
-                    // profile applied on every other, because the permission belongs to the account and
-                    // profiles are the same account. A world context confines it to the island that paid.
+                    // the island's world, so a per-player grant can be scoped to it and doesn't leak across the owner's
+                    // other profiles
                     .replace("%world%", island.worldName())
                     .replace("%island%", island.id().toString());
             try {
@@ -334,11 +296,11 @@ public final class UpgradeManager {
         }
     }
 
-    /** Re-provide libreforge holders for everyone currently standing on the island. */
+    // re-provide libreforge holders for everyone standing on the island
     private void refreshHoldersOnIsland(Island island) {
         org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
         if (world == null) {
-            return;                              // island not loaded — holders resolve on next join
+            return;                              // island not loaded: holders resolve on next join
         }
         for (org.bukkit.entity.Player player : world.getPlayers()) {
             com.mystipixel.royalskyblock.libreforge.RoyalHolders.refresh(player);
@@ -376,32 +338,16 @@ public final class UpgradeManager {
         if (world == null) {
             return;
         }
-        // Size changed — refresh the per-player borders for everyone on the island (see BorderService).
+        // size changed: refresh the per-player borders for everyone on the island (see BorderService)
         world.getWorldBorder().setSize(59_999_968.0); // Bukkit's max world-border size
         plugin.borders().applyToWorld(world);
     }
 
-    // ── parsing ────────────────────────────────────────────────────────────────────
-
-    /**
-     * Read a tier's cost, in either of two shapes.
-     *
-     * <p>The compact one — {@code cost: 5000 coins} — keeps a tier down to a handful of lines. Written
-     * out as a block, a five-tier track is fifty lines of mostly punctuation, which is hard to scan and
-     * tedious to extend. The block form still works and is the right choice when a value needs a
-     * comment of its own:
-     *
-     * <pre>
-     *   cost: 5000 coins        cost:
-     *                             currency: coins
-     *                             amount: 5000
-     * </pre>
-     *
-     * <p>The amount comes first because that is the part being tuned; the currency is usually the same
-     * across a whole file. {@code 0} on its own means free.
-     */
-    // Static and taking a logger rather than reading plugin state, so both config shapes can be
-    // tested without standing up a plugin instance.
+    // A tier's cost, compact or as a block; 0 alone means free:
+    //   cost: 5000 coins        cost:
+    //                             currency: coins
+    //                             amount: 5000
+    // static and taking a logger so both config shapes can be tested without a plugin instance
     static Cost parseCost(ConfigurationSection tier, String key, java.util.logging.Logger log) {
         ConfigurationSection c = tier.getConfigurationSection(key);
         if (c != null) {
@@ -417,7 +363,7 @@ public final class UpgradeManager {
             amount = Double.parseDouble(parts[0]);
         } catch (NumberFormatException notANumber) {
             log.warning("upgrades.yml: '" + key + ": " + compact
-                    + "' is not a cost — expected e.g. '5000 coins'. Treating as free.");
+                    + "' is not a cost: expected e.g. '5000 coins'. Treating as free.");
             return new Cost("", 0);
         }
         return new Cost(parts.length > 1 ? parts[1].trim() : "coins", amount);

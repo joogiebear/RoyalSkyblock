@@ -18,9 +18,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * A file-backed {@link SlimeLoader} storing each island as a {@code <name>.slime} file under a
- * directory. RoyalSkyblock ships its own loader because the ASP fork exposes the world API but not
- * its loader classes on the plugin classpath.
+ * A file-backed {@link SlimeLoader} storing each island as {@code <name>.slime} under a directory.
+ * Shipped here because the ASP fork doesn't expose its loader classes on the plugin classpath.
  */
 public final class RsbFileLoader implements SlimeLoader {
 
@@ -37,7 +36,7 @@ public final class RsbFileLoader implements SlimeLoader {
         if (!worldDir.exists() && !worldDir.mkdirs()) {
             throw new IllegalStateException("Could not create slime world directory: " + worldDir);
         }
-        // Temp files left by a crash mid-save. The real .slime beside each is the last good copy.
+        // temp files left by a crash mid-save; the real .slime beside each is the last good copy
         File[] stale = worldDir.listFiles((dir, name) -> name.endsWith(TEMP_SUFFIX));
         if (stale != null) {
             for (File file : stale) {
@@ -77,12 +76,8 @@ public final class RsbFileLoader implements SlimeLoader {
         return worlds;
     }
 
-    /**
-     * Write to a temp file beside the real one, flush it to disk, then rename it into place. Writing
-     * straight into the {@code .slime} truncated the only copy first, so a crash mid-write left a
-     * broken island. Each save gets its own temp file, so two saves of one world that overlap each
-     * produce a complete file and the later rename simply wins.
-     */
+    // Write to a temp file, flush, then rename into place, so a crash never truncates the only copy. Each
+    // save gets its own temp file, so overlapping saves each produce a complete file.
     @Override
     public void saveWorld(String worldName, byte[] serializedWorld) throws IOException {
         Path target = fileFor(worldName).toPath();

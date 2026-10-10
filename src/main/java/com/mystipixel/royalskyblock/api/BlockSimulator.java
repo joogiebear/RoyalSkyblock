@@ -6,23 +6,13 @@ import org.jetbrains.annotations.ApiStatus;
 import java.util.Set;
 
 /**
- * Catches one kind of block up on time its island spent unloaded.
+ * Catches one kind of block up on the time its island spent unloaded.
  *
- * <p>An island that nobody is standing on does not tick — no growth, no smelting, no minions. When
- * it loads again, RoyalSkyblock scans it <em>once</em> and hands each block to whichever simulators
- * asked for that material. Implement this to teach it about a block it doesn't know.
+ * <p>When an unloaded island loads again, RoyalSkyblock scans it once and hands each block to the
+ * simulators registered for its material. Removing a simulator turns that behaviour off: with
+ * nothing registered for {@code SUGAR_CANE}, cane doesn't grow while the island is unloaded.
  *
- * <p>The scan is the expensive and error-prone part — snapshotting chunks, staying off the main
- * thread, and remembering that chunk sections are indexed from the world's minimum height and not
- * from y=0. It is done once, here, so that every simulator doesn't repeat it (and repeat its bugs).
- * A simulator only answers "given this block and this much missed time, what should it look like?"
- *
- * <p><b>Removing a simulator is how you turn a behaviour off.</b> Nothing registered for
- * {@code SUGAR_CANE} means cane simply doesn't grow while the island sleeps — no config flag, no
- * special case. That is the intended way to opt out, and the reason this is a registry rather than
- * a fixed list.
- *
- * <p>Example — bone meal that never runs out:
+ * <p>Example, bone meal that never runs out:
  * <pre>{@code
  * public final class MagicSoilSimulator implements BlockSimulator {
  *     public Set<Material> materials() { return Set.of(Material.WHEAT); }
@@ -40,11 +30,10 @@ import java.util.Set;
  *
  * <p><b>Threading.</b> {@link #simulate} runs off the main thread against an immutable snapshot.
  * Read neighbours via {@link SimulationContext}, queue changes with {@link SimulationContext#set},
- * and never touch the live world or entities. Throwing is contained and logged against your
- * simulator rather than killing the whole catch-up — but the block you were handed is then skipped.
+ * and never touch the live world or entities. An exception is logged against your simulator and
+ * the block is skipped.
  *
- * <p>This interface is new and may still change shape while the built-in simulators shake it out.
- * If you build against it, pin your version.
+ * <p>Experimental: this interface may still change. Pin your version if you build against it.
  */
 @ApiStatus.Experimental
 public interface BlockSimulator {
@@ -58,9 +47,6 @@ public interface BlockSimulator {
     /**
      * Decide what this block should look like after {@link SimulationContext#offlineSeconds}.
      * Queue any changes via {@link SimulationContext#set}; do nothing to leave the block alone.
-     *
-     * @param block the block, as the island was found
-     * @param ctx   read the island, queue changes, get randomness
      */
     void simulate(SimBlock block, SimulationContext ctx);
 

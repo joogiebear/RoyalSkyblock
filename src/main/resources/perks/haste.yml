@@ -1,9 +1,6 @@
-# ═══════════════════════════════════════════════════════════════════════════════
 #  RoyalSkyblock  ·  Perk: haste
-# ═══════════════════════════════════════════════════════════════════════════════
-#  One file per perk. The FILE NAME is the perk's id — copy this file to add a
-#  perk, nothing to register. Perks are OFF until you set `enabled: true` in
-#  perks.yml, and each applies only while its owner stands on their OWN island.
+#  One file per perk; the file name is the perk's id. Perks are off until
+#  perks.enabled is true in config.yml, and apply only on the owner's own island.
 #
 #    name            shown in the perks menu (& colour codes)
 #    icon            menu item
@@ -11,17 +8,15 @@
 #    description     lore lines in the menu
 #    effects         what the perk grants. Two forms, mixable in one list:
 #                      "haste:0"                  potion shorthand, 0-based level
-#                      - id: give_money           any of the 275 eco effects,
-#                        args: {amount: 25}       with conditions/chance/triggers
-#    conditions      OPTIONAL libreforge conditions gating the whole perk
-#    unlock-commands console commands run ONCE on unlock (%owner% / %level%)
+#                      - id: give_money           any eco effect, with
+#                        args: {amount: 25}       conditions/chance/triggers
+#    conditions      optional libreforge conditions gating the whole perk
+#    unlock-commands console commands run once on unlock (%owner% / %level%)
 #
-#  A triggered effect only fires if its trigger supplies what it needs — pairing
-#  multiply_drops with mine_block silently never runs, because mining carries no
-#  drop data. Drop effects want block_item_drop / entity_item_drop / catch_fish.
-# ═══════════════════════════════════════════════════════════════════════════════
+#  A triggered effect needs a trigger that supplies its data: drop effects such as
+#  multiply_drops want block_item_drop / entity_item_drop / catch_fish, not mine_block.
 
-# ── Early game ────────────────────────────────────────────────────────────────
+# Early game
 name: "&e&lMiner's Haste"
 icon: golden_pickaxe
 required-level: 5

@@ -4,10 +4,9 @@ import org.bukkit.Location;
 import org.bukkit.entity.Entity;
 
 /**
- * A pluggable backend that spawns a configured mob by id at a location. The island spawn service speaks
- * only to this interface, so a new mob plugin (LevelledMobs, MythicMobs) is added by writing one
- * implementation — no island-spawn logic changes. Each implementation references its own plugin's types
- * and is only instantiated when that plugin is present, so RoyalSkyblock loads fine without any of them.
+ * A backend that spawns a configured mob by id at a location; a new mob plugin is supported by one
+ * implementation. Implementations reference their own plugin's types and are only instantiated when
+ * that plugin is present.
  */
 public interface IslandMobProvider {
 

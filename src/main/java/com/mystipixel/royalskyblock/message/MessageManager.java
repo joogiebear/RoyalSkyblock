@@ -13,24 +13,16 @@ import java.io.File;
 import java.io.IOException;
 
 /**
- * Loads every player-facing string from eco's {@code lang.yml} so text lives in one place instead of
- * being scattered through the code. Placeholders use the eco-style {@code %token%} form.
- *
- * <p>All keys sit under the {@code messages:} root that eco's lang file expects, so a caller asking
- * for {@code island.created} reads {@code messages.island.created}. Callers pass the short key and
- * never see the prefix.
- *
- * <p><b>Why not messages.yml.</b> {@code EcoPlugin} requires a {@code lang.yml} — it loads one in its
- * constructor and refuses to start without it — so keeping a second text file alongside it meant two
- * places to look for a string and a duplicated {@code prefix}. The old file is migrated on first
- * start; see {@link #migrateLegacyMessages()}.
+ * Loads every player-facing string from eco's {@code lang.yml}, with {@code %token%} placeholders.
+ * Keys sit under {@code messages:}; callers pass the short key ({@code island.created}). A legacy
+ * messages.yml is migrated on first start ({@link #migrateLegacyMessages()}).
  *
  * <p>{@link #send} prepends the configured prefix (chat feedback); {@link #sendPlain} does not
  * (headers, multi-line help, warnings).
  */
 public final class MessageManager {
 
-    /** Root key of eco's lang file — every RoyalSkyblock string is nested under it. */
+    // every RoyalSkyblock string is nested under this root of eco's lang file
     private static final String ROOT = "messages.";
 
     private static final String LEGACY_FILE = "messages.yml";
@@ -42,20 +34,12 @@ public final class MessageManager {
         migrateLegacyMessages();
     }
 
-    /**
-     * eco owns lang.yml's lifecycle and reloads it itself, so there is nothing to re-read here. Kept
-     * because the plugin's reload path calls it and a future backing store may need it.
-     */
+    /** No-op: eco reloads lang.yml itself before handleReload() runs. */
     public void reload() {
-        // no-op: plugin.getLangYml() is reloaded by eco before handleReload() runs.
     }
 
-    /**
-     * One-time migration for servers upgrading from the messages.yml era. Every value in the old file
-     * is copied into lang.yml under {@code messages.}, overwriting the shipped defaults so customised
-     * text survives, and the old file is renamed to {@code messages.yml.migrated} rather than deleted
-     * — a silent cutover would quietly discard every string an admin had rewritten.
-     */
+    // One-time migration from messages.yml: copies every value into lang.yml under messages. (keeping
+    // customised text) and renames the old file to messages.yml.migrated.
     private void migrateLegacyMessages() {
         File legacy = new File(plugin.getDataFolder(), LEGACY_FILE);
         if (!legacy.isFile()) {
@@ -82,7 +66,7 @@ public final class MessageManager {
         File migrated = new File(plugin.getDataFolder(), LEGACY_FILE + ".migrated");
         if (!legacy.renameTo(migrated)) {
             plugin.getLogger().warning("Migrated messages.yml into lang.yml but could not rename the old "
-                    + "file — delete " + LEGACY_FILE + " by hand or it will migrate again next start.");
+                    + "file; delete " + LEGACY_FILE + " by hand or it will migrate again next start.");
             return;
         }
         plugin.getLogger().info("Migrated " + moved + " message(s) from messages.yml into lang.yml. "
@@ -105,14 +89,14 @@ public final class MessageManager {
         sender.sendMessage(Text.color(prefix() + raw(key, placeholders)));
     }
 
-    /** Send without the prefix — for headers, help lines, and multi-line blocks. */
+    /** Send without the prefix: for headers, help lines, and multi-line blocks. */
     public void sendPlain(CommandSender sender, String key, String... placeholders) {
         sender.sendMessage(Text.color(raw(key, placeholders)));
     }
 
     /**
-     * Send a coop invite with clickable {@code [Accept]}/{@code [Deny]} buttons appended, so the target
-     * never has to type a command. Button labels come from {@code coop.invite-accept-button} / {@code -deny-button}.
+     * Send a coop invite with clickable {@code [Accept]}/{@code [Deny]} buttons, labelled from
+     * {@code coop.invite-accept-button} / {@code -deny-button}.
      */
     public void sendInvite(Player target, String inviterName) {
         Component base = Text.color(prefix() + raw("coop.invite-received", "player", inviterName));

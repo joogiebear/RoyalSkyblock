@@ -27,39 +27,18 @@ import java.util.UUID;
 
 /**
  * Moves an existing {@code islands.db} into {@link EcoStorage}, once, on the boot that switches
- * {@code storage.type} to {@code eco}.
+ * {@code storage.type} to {@code eco}. After that, eco's own {@code perform-data-migration} handles
+ * moves between its handlers.
  *
- * <p>This is the only migration this plugin should ever need to write. eco's own
- * {@code perform-data-migration} moves data between <em>its</em> handlers, so once a server is on the
- * eco layer, going from yaml to MySQL to MongoDB is a config edit eco performs itself. This one exists
- * because the data starts outside eco entirely.
- *
- * <h2>What makes it safe to run on a live server</h2>
- *
- * <p><b>It reads the source directly rather than through {@link SqlStorage}.</b> The interface has no
- * way to enumerate profiles, saved states or bank accounts — it never needed one — so a migration
- * built on it would silently carry across only the rows it could reach. A migration is about the
- * source's concrete shape, so it owns its SQL.
- *
- * <p><b>It writes through {@link EcoStorage}'s normal methods</b>, so the island index, the
- * owner/member lookups and the profile→island pointer are all maintained by the code that owns them
- * rather than reproduced here and left to drift.
- *
- * <p><b>It is idempotent.</b> Every id is carried across unchanged and every key is derived from an
- * id, so re-running overwrites rather than duplicates. That matters because the failure it has to
- * survive is dying half-way: the source is still intact, and the next boot simply finishes the job.
- *
- * <p><b>It verifies by reading back, not by counting what it wrote.</b> Every row is read out of eco
- * afterwards and compared to the source. A count of successful writes only proves the writes did not
- * throw; reading back proves the data is there and says the same thing.
- *
- * <p><b>It never deletes the source.</b> {@code islands.db} is renamed only after verification
- * passes, and if anything fails the file is left exactly where it was and the plugin refuses to start
- * rather than come up on a half-populated store.
+ * <p>Reads the source with its own SQL (the {@link Storage} interface can't enumerate every row) and
+ * writes through {@link EcoStorage}'s normal methods so its indexes stay right. Ids carry across
+ * unchanged, so a re-run after a crash overwrites rather than duplicates. Every row is read back and
+ * compared to the source, and the source is renamed (never deleted) only after that passes; on any
+ * failure the plugin refuses to start.
  */
 public final class SqliteMigration {
 
-    /** Written to eco once a migration completes, so a retry can tell "mine" from "someone else's". */
+    // written to eco once a migration completes, so a retry can tell "mine" from "someone else's"
     static final String MARKER_KEY = "migrated_from_sqlite";
 
     /** What a run did. Empty {@link #problems()} means every row was written and read back intact. */
@@ -89,12 +68,7 @@ public final class SqliteMigration {
         this.target = target;
     }
 
-    /**
-     * Copy everything across and verify it.
-     *
-     * <p>Does not rename the source — {@link #retireSource()} does that, and only the caller knows
-     * whether it is willing to commit.
-     */
+    /** Copy everything across and verify it. Does not rename the source: that's {@link #retireSource()}. */
     public Report run() {
         int islands = 0;
         int profiles = 0;
@@ -136,8 +110,6 @@ public final class SqliteMigration {
                 List.copyOf(problems));
     }
 
-    // ── islands ────────────────────────────────────────────────────────────────
-
     private int copyIslands(Connection c) throws SQLException {
         Set<String> columns = columnsOf(c, "islands");
         if (columns.isEmpty()) {
@@ -154,8 +126,7 @@ public final class SqliteMigration {
                 island.setLevel(rs.getDouble("level"));
                 island.setHome(rs.getDouble("home_x"), rs.getDouble("home_y"), rs.getDouble("home_z"),
                         rs.getFloat("home_yaw"), rs.getFloat("home_pitch"));
-                // These arrived in later versions. A database that predates one of them simply has no
-                // such column, and asking for it would fail the whole table rather than one field.
+                // columns added in later versions; asking for a missing one would fail the whole table
                 if (columns.contains("settings")) {
                     island.loadSettings(rs.getString("settings"));
                 }
@@ -202,9 +173,7 @@ public final class SqliteMigration {
         }
     }
 
-    // ── profiles + rosters ─────────────────────────────────────────────────────
-
-    /** @return {profiles, members} */
+    // returns {profiles, members}
     private int[] copyProfiles(Connection c) throws SQLException {
         if (columnsOf(c, "profiles").isEmpty()) {
             return new int[]{0, 0};
@@ -283,8 +252,6 @@ public final class SqliteMigration {
         }
     }
 
-    // ── which profile each player is on ────────────────────────────────────────
-
     private int copyActiveProfiles(Connection c) throws SQLException {
         if (columnsOf(c, "player_state").isEmpty()) {
             return 0;
@@ -308,8 +275,6 @@ public final class SqliteMigration {
         }
         return count;
     }
-
-    // ── per-profile saved state ────────────────────────────────────────────────
 
     private int copyProfileData(Connection c) throws SQLException {
         if (columnsOf(c, "profile_data").isEmpty()) {
@@ -339,8 +304,7 @@ public final class SqliteMigration {
             problems.add("saved state " + profileId + "/" + player + " did not read back");
             return;
         }
-        // The inventory is the part worth checking byte for byte — it is the one field a player would
-        // notice losing, and the one that travels as base64 rather than as a number.
+        // the inventory is compared byte for byte: it is what a player would notice losing
         if (!java.util.Arrays.equals(got.inventory(), expected.inventory())
                 || !java.util.Arrays.equals(got.enderChest(), expected.enderChest())
                 || got.expLevel() != expected.expLevel()
@@ -349,8 +313,6 @@ public final class SqliteMigration {
             problems.add("saved state " + profileId + "/" + player + " read back different from the source");
         }
     }
-
-    // ── in-progress upgrades ───────────────────────────────────────────────────
 
     private int copyPending(Connection c) throws SQLException {
         if (columnsOf(c, "pending_upgrades").isEmpty()) {
@@ -384,9 +346,7 @@ public final class SqliteMigration {
         return loaded.size();
     }
 
-    // ── bank ───────────────────────────────────────────────────────────────────
-
-    /** @return {accounts, transactions} */
+    // returns {accounts, transactions}
     private int[] copyBank(Connection c) throws SQLException {
         if (columnsOf(c, "bank_accounts").isEmpty()) {
             return new int[]{0, 0};
@@ -416,7 +376,7 @@ public final class SqliteMigration {
         return new int[]{accounts, txns};
     }
 
-    /** Newest first, which is the order the ledger is stored and read in. */
+    // newest first, the order the ledger is stored and read in
     private List<BankTxn> readLedger(Connection c, String accountId) throws SQLException {
         List<BankTxn> out = new ArrayList<>();
         try (PreparedStatement st = c.prepareStatement(
@@ -459,14 +419,9 @@ public final class SqliteMigration {
         }
     }
 
-    // ── source retirement ──────────────────────────────────────────────────────
-
     /**
-     * Rename the source out of the way so the next boot goes straight to eco.
-     *
-     * <p>Renamed, never deleted: it is the only copy of the data that existed before this ran, and a
-     * migration that verified clean is still a migration someone might want to second-guess. The
-     * numbered suffixes mean an earlier {@code .migrated} is never overwritten either.
+     * Rename the source so the next boot goes straight to eco. Renamed, never deleted, and numbered so an
+     * earlier {@code .migrated} file is never overwritten.
      */
     public boolean retireSource() {
         File target = new File(source.getPath() + ".migrated");
@@ -475,17 +430,17 @@ public final class SqliteMigration {
         }
         if (source.renameTo(target)) {
             plugin.getLogger().info("Renamed " + source.getName() + " to " + target.getName()
-                    + " — it is no longer read, and nothing deletes it.");
+                    + ": it is no longer read, and nothing deletes it.");
             return true;
         }
-        // WAL sidecars keep a handle alive on some platforms; say so rather than leaving a file that
-        // makes every future boot try to migrate again.
+        // WAL sidecars keep a handle alive on some platforms; say so rather than leave a file that makes
+        // every boot try to migrate again.
         plugin.getLogger().severe("Could not rename " + source.getName() + ". Move it aside by hand, "
                 + "or the next boot will try to migrate it again.");
         return false;
     }
 
-    /** The WAL sidecars, which are meaningless once the database itself has been retired. */
+    /** Delete the WAL sidecars once the database has been retired. */
     public void cleanSidecars() {
         for (String suffix : new String[]{"-shm", "-wal"}) {
             File sidecar = new File(source.getPath() + suffix);
@@ -493,13 +448,13 @@ public final class SqliteMigration {
                 try {
                     Files.deleteIfExists(sidecar.toPath());
                 } catch (Exception ignored) {
-                    // Harmless if they stay: SQLite rebuilds them, and nothing reads them now.
+                    // harmless if they stay: SQLite rebuilds them, and nothing reads them now
                 }
             }
         }
     }
 
-    /** Table columns, or empty if the table isn't there at all. */
+    // table columns, or empty if the table isn't there
     private static Set<String> columnsOf(Connection c, String table) throws SQLException {
         Set<String> out = new HashSet<>();
         try (ResultSet rs = c.getMetaData().getColumns(null, null, table, null)) {

@@ -14,18 +14,11 @@ import org.bukkit.event.entity.EntityTargetLivingEntityEvent;
 import org.bukkit.persistence.PersistentDataType;
 
 /**
- * The "targeting bridge" the Intimidation talismans are written against: island mobs at or below a
- * player's Intimidation stat simply ignore them.
+ * Island mobs at or below a player's ignore level don't target them. The Intimidation talismans only
+ * grant the {@code intimidation} stat; this listener is what acts on it.
  *
- * <p>The Talismans configs only <em>grant</em> the {@code intimidation} stat ({@code add_stat}) — the
- * stat itself has no effects, so without this nothing acts on it and mobs target normally. Here we read
- * the tier RoyalSkyblock stamped on each mob when it spawned and cancel the targeting when the mob is
- * weak enough to be cowed.
- *
- * <p>Ignore level is {@code min(combat level, intimidation stat)} by default — the formula written in the
- * talismans' own descriptions — so the cap can't exceed what the player's Combat actually supports.
- * Only mobs RoyalSkyblock spawned are affected (they carry the tier tag); vanilla and other plugins'
- * mobs are untouched, which matches the items' "private-island mobs" wording.
+ * <p>Ignore level is {@code min(combat level, intimidation stat)} by default, the formula in the
+ * talismans' descriptions. Only mobs RoyalSkyblock spawned (they carry the tier tag) are affected.
  */
 public final class IslandMobTargetingBridge implements Listener {
 
@@ -53,7 +46,7 @@ public final class IslandMobTargetingBridge implements Listener {
         Integer mobLevel = event.getEntity().getPersistentDataContainer()
                 .get(levelKey, PersistentDataType.INTEGER);
         if (mobLevel == null) {
-            return;                              // not an island mob we spawned — leave it alone
+            return;                              // not an island mob we spawned
         }
         if (mobLevel <= ignoreLevel(player)) {
             event.setCancelled(true);            // too weak to pick a fight with this player
@@ -61,12 +54,8 @@ public final class IslandMobTargetingBridge implements Listener {
         }
     }
 
-    /**
-     * Second line of defence: an intimidated mob can't damage the player even if it re-acquired a
-     * target through a path that doesn't fire the target event. Witches are the reason this exists —
-     * they're Raiders that re-target aggressively and attack with thrown splash potions, so cancelling
-     * targeting alone doesn't reliably stop them. Projectiles resolve back to whoever fired them.
-     */
+    // Second line of defence for mobs that re-acquire a target without the target event, mainly witches
+    // (Raiders that throw potions). Projectiles resolve back to whoever fired them.
     @EventHandler(priority = EventPriority.HIGH, ignoreCancelled = true)
     public void onDamage(EntityDamageByEntityEvent event) {
         if (!plugin.conf().getBoolean("island-mobs.intimidation.enabled", true)) {
@@ -95,7 +84,7 @@ public final class IslandMobTargetingBridge implements Listener {
         }
     }
 
-    /** {@code min(combat level, intimidation stat)} — or the raw stat when the cap is turned off. */
+    // min(combat level, intimidation stat), or the raw stat when the cap is turned off
     private int ignoreLevel(Player player) {
         int level = intimidation.levelOf(player);
         if (plugin.conf().getBoolean("island-mobs.intimidation.cap-to-combat-level", true)) {

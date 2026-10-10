@@ -5,16 +5,11 @@ import org.bukkit.World;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * The island world backend, abstracted away from any specific implementation.
+ * The island world backend. The rest of the plugin only sees Bukkit {@link World}s and names; the ASP
+ * adapter ({@code world.asp.AspIslandWorldService}) is the only place that knows ASP's API.
  *
- * <p>The rest of the plugin speaks only in Bukkit {@link World}s and world names — it never touches
- * Advanced Slime Paper types. The one adapter that does ({@code world.asp.AspIslandWorldService})
- * is the sole place that knows ASP's API, so a change in ASP (or a future grid backend) is a
- * one-file change.
- *
- * <p>World read/write is inherently async in the slime format, so every operation that hits the
- * data source returns a {@link CompletableFuture}. Futures complete on an unspecified thread;
- * callers that then touch the Bukkit world must hop back onto the main thread themselves.
+ * <p>Operations that hit the data source return a {@link CompletableFuture} that completes on an
+ * unspecified thread; callers touching the Bukkit world must hop back to the main thread themselves.
  */
 public interface IslandWorldService {
 
@@ -37,19 +32,15 @@ public interface IslandWorldService {
     CompletableFuture<World> loadIsland(String worldName);
 
     /**
-     * Persist the currently-loaded island world back to the data source without unloading it. Used
-     * after editing an island's blocks (e.g. pasting the starter schematic) so the change survives a
-     * crash. No-op if the world is not loaded.
+     * Persist the loaded island world without unloading it, e.g. after pasting the starter. No-op if the
+     * world is not loaded.
      */
     CompletableFuture<Void> saveIsland(String worldName);
 
     /**
-     * Save an island world <em>on the calling thread</em>, bypassing the scheduler entirely.
-     *
-     * <p>Only for {@code onDisable}: Bukkit refuses to schedule tasks for a plugin that is shutting
-     * down, so the async {@link #saveIsland} path throws there and the save is silently lost. This
-     * blocks the shutdown briefly, which is the correct trade — losing an island's blocks is worse
-     * than a slower stop. No-op if the world is not loaded.
+     * Save an island world on the calling thread, bypassing the scheduler. Only for {@code onDisable},
+     * where Bukkit refuses to schedule tasks so {@link #saveIsland} would lose the save. No-op if the world
+     * is not loaded.
      */
     void saveIslandNow(String worldName);
 
@@ -59,30 +50,24 @@ public interface IslandWorldService {
      */
     CompletableFuture<Void> unloadIsland(String worldName, boolean save);
 
-    /**
-     * Permanently delete an island world from the data source. Unloads it first if loaded.
-     */
+    /** Permanently delete an island world from the data source. Unloads it first if loaded. */
     CompletableFuture<Void> deleteIsland(String worldName);
 
     /** Whether the named island world is currently loaded on this server. */
     boolean isLoaded(String worldName);
 
-    /**
-     * The raw serialized bytes of a stored world, for archiving (the island trash). Blocking —
-     * call off the main thread.
-     */
+    /** The raw serialized bytes of a stored world, for the island trash. Blocking: call off the main thread. */
     byte[] exportWorld(String worldName) throws Exception;
 
     /**
-     * Write raw serialized world bytes into the store under {@code worldName}, for restoring an
-     * archived island. Blocking — call off the main thread.
+     * Write raw serialized world bytes into the store under {@code worldName}, for restoring an archived
+     * island. Blocking: call off the main thread.
      */
     void importWorld(String worldName, byte[] data) throws Exception;
 
     /**
-     * Every world name in the store — note the store may hold worlds owned by other features
-     * (extensions use it too), so callers must filter by their own prefix. Blocking — call off
-     * the main thread.
+     * Every world name in the store. Other features use the store too, so filter by your own prefix.
+     * Blocking: call off the main thread.
      */
     java.util.List<String> listWorldNames() throws Exception;
 

@@ -1,17 +1,12 @@
-# ═══════════════════════════════════════════════════════════════════════════════
 #  RoyalSkyblock  ·  Island Levels
-# ═══════════════════════════════════════════════════════════════════════════════
 #  Your island's level is its total block points ÷ points-per-level. Only the
-#  blocks listed under `blocks:` count — everything else (dirt, air, cobble) is
+#  blocks listed under `blocks:` count; everything else (dirt, air, cobble) is
 #  free weight. Add or retune values freely; reload with /is reload.
 #
-#  Performance: a scan snapshots the island's chunks a few at a time (spreading the
-#  main-thread cost) and then tallies blocks off the main thread, so even a maxed
-#  island won't lag the server. Tune the `scan:` knobs below if you want it gentler
-#  or faster. Leaderboard (/is top) reads stored levels — it never scans live.
+#  A scan snapshots chunks a few per tick and tallies blocks off the main thread; tune
+#  `scan:` below. The leaderboard (/is top) reads stored levels and never scans live.
 #
-#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
-# ═══════════════════════════════════════════════════════════════════════════════
+#  Part of the RoyalSkyblock config set: see config.yml for the full file map.
 
 # How many block points equal one island level.
 points-per-level: 100
@@ -26,22 +21,19 @@ scan:
   # Minimum seconds between recalculations of the same island (anti-spam / anti-lag).
   recalc-cooldown-seconds: 60
 
-# ── Automatic recalculation ─────────────────────────────────────────────────────
-# Periodically re-scan the islands players are standing on (never empty/unloaded
-# ones) so levels + the leaderboard stay fresh without anyone clicking Recalculate.
+# Automatic recalculation
+# Periodically re-scan islands players are standing on, so levels stay fresh.
 auto-recalc:
   # Minutes between background cycles. 0 = off. (Changing this needs a restart.)
   interval-minutes: 10
-  # How many islands to recalc per cycle — caps the cost on a busy server.
+  # How many islands to recalc per cycle: caps the cost on a busy server.
   max-per-cycle: 3
 
-# ── Level-up rewards ────────────────────────────────────────────────────────────
-# Console commands run ONCE, the first time an island reaches each level. Placeholders:
+# Level-up rewards
+# Console commands run once, the first time an island reaches each level (never twice,
+# even across restarts). Optional; none by default. Placeholders:
 #   %owner%  the island owner's name        %level%  the level reached
-# Each island remembers the highest level it's been paid for, so rewards never double
-# up, even across restarts. Members are already told when the island levels up, so
-# rewards are OPTIONAL and OFF by default (no economy is assumed — nothing errors on a
-# fresh server). Add levels below to enable them. Examples for common setups:
+# Examples:
 #   5:
 #     - "eco give %owner% 1000"                 # eco / most Vault economies
 #     - "ecobits give %owner% 100 gems"         # EcoBits gems
@@ -49,22 +41,19 @@ auto-recalc:
 #   10:
 #     - "eco give %owner% 5000"
 #
-# A reward can also be a libreforge EFFECT rather than a command — the same id:/args:
-# blocks the rest of the eco suite uses, so a reward can carry a chance, a condition or
-# a delay that a console command cannot. Both forms live in the same list:
+# A reward can also be a libreforge effect (id:/args:), with chances, conditions or
+# delays. Both forms can share a list:
 #   25:
 #     - "eco give %owner% 10000"                 # command, as above
-#     - id: give_xp                              # any of the 275 eco effects
+#     - id: give_xp                              # any eco effect
 #       args:
 #         amount: 500
 #
-# Commands run ONCE per level and address the owner by name. Effects run once per level
-# PER ONLINE MEMBER, because an effect targets a player while an island belongs to a
-# profile — so on a coop island every member online earns the reward.
+# Commands run once per level for the owner; effects run once per level per online member.
 rewards: {}
 
-# ── Block values ────────────────────────────────────────────────────────────────
-# One line per block: MATERIAL: points. Grouped only for readability — order and
+# Block values
+# One line per block: MATERIAL: points. Grouped only for readability; order and
 # grouping don't matter to the plugin.
 blocks:
 

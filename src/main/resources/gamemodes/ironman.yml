@@ -1,16 +1,13 @@
-# ═══════════════════════════════════════════════════════════════════════════════
 #  RoyalSkyblock  ·  Gamemode: IRONMAN
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Fully self-sufficient — no trading with other players. `blocked-commands` is how
+#  Fully self-sufficient: no trading with other players. `blocked-commands` is how
 #  that's enforced: match it to whatever your economy plugins register (auction
 #  house, bazaar, /pay, etc.). Players with royalskyblock.gamemode.bypass ignore it.
 #
 #  Fields:
-#    display-name      – shown on the profile icon / button (& colour codes)
-#    description       – lore line under the name
-#    icon              – material for the profile icon
-#    blocked-commands  – command words (no slash) refused on this gamemode; [] = none
-# ═══════════════════════════════════════════════════════════════════════════════
+#    display-name      - shown on the profile icon / button (& colour codes)
+#    description       - lore line under the name
+#    icon              - material for the profile icon
+#    blocked-commands  - command words (no slash) refused on this gamemode; [] = none
 
 display-name: "&f&lIRONMAN"
 description: "&7No auction house, bazaar, or trading. Earn everything yourself."

@@ -13,18 +13,10 @@ import org.bukkit.event.player.PlayerMoveEvent;
 import java.util.Locale;
 
 /**
- * Catches a player who falls off an island before the slow vanilla void-damage ticks kick in.
- *
- * <p>Vanilla void damage is a flat ~4 per half-second, so it drags — and the higher a player's max
- * health climbs (custom stats), the longer it takes. Skyblock servers don't rely on it: they catch
- * the fall below a Y line and act. When a player on an island drops below {@code island.void.below-y}
- * this does what {@code island.void.action} says — teleport them home (default), kill instantly
- * (still respecting keep_inventory), or nothing.
- *
- * <p>The spawn world gets the same catch under {@code spawn.void}, always as a teleport back to spawn.
- *
- * <p>Everything is config-driven; the per-move cost is two config reads plus a cheap Y compare, and
- * the island lookup only runs on the rare tick a player is actually below the line.
+ * Catches a player who falls off an island before slow vanilla void damage kicks in. Below
+ * {@code island.void.below-y} it does what {@code island.void.action} says: teleport home (default),
+ * kill instantly (keep_inventory still applies), or nothing. The spawn world gets the same catch under
+ * {@code spawn.void}, always a teleport to spawn.
  */
 public final class VoidListener implements Listener {
 
@@ -48,11 +40,11 @@ public final class VoidListener implements Listener {
             return;
         }
         if (to.getY() >= plugin.conf().getDouble("island.void.below-y", 0.0)) {
-            return;                              // cheap early-out for the 99.9% of moves above the line
+            return;                              // cheap early-out for almost every move
         }
         Island island = plugin.islands().getIslandByWorld(to.getWorld());
         if (island == null) {
-            return;                              // only islands and the spawn world — others are left alone
+            return;                              // only islands and the spawn world
         }
 
         Player player = event.getPlayer();
@@ -68,11 +60,10 @@ public final class VoidListener implements Listener {
             return;
         }
 
-        // teleport (default): pull them back to the island home. teleport() zeroes fall distance,
-        // so they don't take the accumulated fall as damage on arrival.
+        // teleport (default); teleport() zeroes fall distance, so no fall damage on arrival
         Location home = island.homeLocation();
         if (home == null || home.getWorld() == null) {
-            player.setHealth(0.0);               // no home to catch to — a quick death beats slow ticks
+            player.setHealth(0.0);               // no home to catch to: a quick death beats slow ticks
             return;
         }
         player.teleport(home);
@@ -87,11 +78,7 @@ public final class VoidListener implements Listener {
         }
     }
 
-    /**
-     * The hub is usually protected with no damage at all, so a player who walks off its edge never
-     * dies of the void — they fall forever. Catch them below {@code spawn.void.below-y} and put them
-     * back on the spawn point.
-     */
+    // the hub usually has no damage, so a player who walks off its edge falls forever
     private void onSpawnWorldMove(Player player, Location to) {
         if (!plugin.conf().getBoolean("spawn.void.enabled", true)
                 || to.getY() >= plugin.conf().getDouble("spawn.void.below-y", -70.0)
@@ -109,8 +96,8 @@ public final class VoidListener implements Listener {
         }
     }
 
-    // Admins exploring below the world — flying in creative, watching in spectator, or holding the
-    // bypass — are not falling. With action: kill they would be killed on the spot.
+    // admins below the world (creative flight, spectator, bypass) are not falling; action: kill would
+    // kill them on the spot
     private static boolean isExempt(Player player) {
         GameMode mode = player.getGameMode();
         return mode == GameMode.CREATIVE || mode == GameMode.SPECTATOR || player.hasPermission("royalskyblock.bypass");

@@ -11,11 +11,7 @@ import java.io.FileOutputStream;
 
 /**
  * WorldEdit / FastAsyncWorldEdit implementation of {@link SchematicService}. Only instantiated when
- * WorldEdit is on the classpath (the plugin guards construction with a {@code Class.forName} check),
- * so its {@code com.sk89q.worldedit.*} references never load on a server without WorldEdit.
- *
- * <p>Reads/writes the standard Sponge {@code .schem} format under {@code schematics/}. FAWE, when
- * installed, accelerates the same WorldEdit API automatically.
+ * WorldEdit is on the classpath. Reads/writes {@code .schem} files under {@code schematics/}.
  */
 public final class WorldEditSchematics implements SchematicService {
 
@@ -38,15 +34,8 @@ public final class WorldEditSchematics implements SchematicService {
         return dir;
     }
 
-    /**
-     * The file behind a schematic name, or null if there isn't one.
-     *
-     * <p>Both extensions are accepted. {@code .schem} is what this plugin writes and what modern
-     * WorldEdit produces, but the world is full of {@code .schematic} files from older versions and
-     * from every schematic pack sold before the format changed — and the reader does not care, because
-     * {@code ClipboardFormats.findByFile} identifies the format from the file's contents rather than
-     * its name. Refusing one purely on its extension turned a working schematic into a silent fallback.
-     */
+    // The file behind a schematic name, or null. Accepts .schematic too: ClipboardFormats.findByFile
+    // detects the format from the contents.
     private @Nullable File resolve(String name) {
         for (String extension : new String[]{".schem", ".schematic"}) {
             File candidate = new File(schematicsDir(), name + extension);
@@ -57,7 +46,7 @@ public final class WorldEditSchematics implements SchematicService {
         return null;
     }
 
-    /** Whether a name resolves to a file — used by the config check so a typo surfaces at boot. */
+    /** Whether a name resolves to a file, so the config check can report a typo at boot. */
     public boolean exists(String name) {
         return name != null && !name.isBlank() && resolve(name) != null;
     }
@@ -69,9 +58,8 @@ public final class WorldEditSchematics implements SchematicService {
         }
         File file = resolve(name);
         if (file == null) {
-            // Saying nothing here is how a configured schematic ends up quietly unused: the caller
-            // falls back to the built-in generator, and the island looks generated because it is.
-            plugin.getLogger().warning("Starter schematic '" + name + "' not found — looked for '"
+            // say so: otherwise the caller silently falls back to the built-in generator
+            plugin.getLogger().warning("Starter schematic '" + name + "' not found: looked for '"
                     + name + ".schem' and '" + name + ".schematic' in the schematics folder. Using the "
                     + "built-in generator instead.");
             return false;
@@ -109,7 +97,7 @@ public final class WorldEditSchematics implements SchematicService {
 
     @Override
     public String saveSelection(Player player, String name) {
-        // The name becomes a file path; "../" in it would write outside the schematics folder.
+        // the name becomes a file path; "../" in it would write outside the schematics folder
         if (!name.matches("[A-Za-z0-9_-]{1,64}")) {
             return "Schematic names may only use letters, digits, _ and - (up to 64 characters).";
         }

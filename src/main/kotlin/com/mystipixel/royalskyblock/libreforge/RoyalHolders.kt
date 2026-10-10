@@ -15,31 +15,21 @@ import org.bukkit.entity.Player
 import java.io.File
 
 /**
- * Wires RoyalSkyblock's perks and island upgrades into libreforge as effect holders.
+ * Wires perks and island upgrades into libreforge as effect holders.
  *
- * A perk or a purchased upgrade tier can now carry any libreforge effect chain, so island content is
- * written in the same dialect as the rest of the eco suite instead of being limited to the handful of
- * behaviours this plugin implements natively.
+ * - Upgrades apply to anyone standing on the island, members and visitors alike. Only the current
+ *   tier's chain applies, matching how `value:` is the total at that tier.
+ * - Perks apply only on your own island.
  *
- * ## What is active for whom
- *
- * - **Upgrades** apply to *anyone standing on the island*, members and visitors alike — the island
- *   itself is upgraded, so the buff belongs to the place. Only the **current** tier's chain is
- *   applied, not every tier below it, matching how the existing `value:` field already works ("the
- *   total at that tier", not an increment).
- * - **Perks** apply only on your *own* island, which is the behaviour perks already had.
- *
- * ## Refreshing
- *
- * libreforge caches a dispatcher's holders, so anything that changes the answer has to invalidate
- * them: crossing a world boundary (handled by [RoyalHolderListener]), buying an upgrade, or an island
- * levelling past a perk's requirement. [refresh] is the entry point the Java side calls.
+ * libreforge caches a player's holders, so anything that changes what applies must invalidate them:
+ * a world change ([RoyalHolderListener]), buying an upgrade, or levelling past a perk. [refresh] is the
+ * entry point for the Java side.
  */
 object RoyalHolders {
 
     private var perkHolders: Map<String, RoyalHolder> = emptyMap()
 
-    /** track key -> tier number -> holder. */
+    // track key -> tier number -> holder
     private var upgradeHolders: Map<String, Map<Int, RoyalHolder>> = emptyMap()
 
     /** Register the provider once, during enable. */
@@ -55,15 +45,8 @@ object RoyalHolders {
         refreshAll()
     }
 
-    /**
-     * Every perk's `effects`/`conditions`, from `perks/<id>.yml` and from a legacy `perks.yml`.
-     *
-     * Must read the same two sources as [com.mystipixel.royalskyblock.perk.PerkService], because a
-     * perk is loaded by two things that have to agree: PerkService reads its name, icon and potion
-     * shorthand, this reads its libreforge chain. When only one of them learned about the folder
-     * layout, every folder perk appeared in the menu and reported as loaded while its chain quietly
-     * never compiled — nothing errors, because a perk with no chain is a legal perk.
-     */
+    // Every perk's effects/conditions. Must read the same sources as PerkService (perks/<id>.yml and a
+    // legacy perks.yml), or folder perks load without their chains and nothing errors.
     private fun compilePerks(plugin: RoyalSkyblockPlugin): Map<String, RoyalHolder> {
         val out = mutableMapOf<String, RoyalHolder>()
         for ((key, entry) in sections(plugin, "perks.yml", "perks", "perks")) {
@@ -74,11 +57,7 @@ object RoyalHolders {
         return out
     }
 
-    /**
-     * Upgrades nest one level deeper than perks: the chain lives on an individual tier, so a track can
-     * grant a different effect at each tier. Same two sources as
-     * [com.mystipixel.royalskyblock.upgrade.UpgradeManager].
-     */
+    // The chain lives on an individual tier; same two sources as UpgradeManager.
     private fun compileUpgrades(plugin: RoyalSkyblockPlugin): Map<String, Map<Int, RoyalHolder>> {
         val out = mutableMapOf<String, Map<Int, RoyalHolder>>()
         for ((track, section) in sections(plugin, "upgrades.yml", null, "upgrades")) {
@@ -98,13 +77,9 @@ object RoyalHolders {
         return out
     }
 
-    /**
-     * id -> its config section, gathered from the legacy monolith and then the content folder.
-     *
-     * Mirrors both content loaders exactly: the monolith is read first so a folder file of the same
-     * id replaces it, `_`-prefixed files are examples rather than content, and the file name is the
-     * id. [root] is the section items live under in the monolith, or null when they are at its root.
-     */
+    // id -> config section, from the legacy monolith then the content folder, mirroring the content
+    // loaders: folder files replace monolith entries, _-prefixed files are examples, the file name is the id.
+    // root is the section items live under in the monolith, or null at its root.
     private fun sections(
         plugin: RoyalSkyblockPlugin,
         fileName: String,
@@ -135,7 +110,7 @@ object RoyalHolders {
     }
 
     private fun holdersFor(plugin: RoyalSkyblockPlugin, player: Player): Collection<ProvidedHolder> {
-        // Not on an island at all (hub, a normal world) — nothing applies.
+        // not on an island at all (hub, a normal world): nothing applies
         val island = plugin.islands().getIslandByWorld(player.world) ?: return emptyList()
         val holders = mutableListOf<ProvidedHolder>()
 
@@ -167,7 +142,7 @@ object RoyalHolders {
         return plugin.islands().getIslandByProfile(activeProfile)?.id() == islandId
     }
 
-    /** Invalidate one player's cached holders — call after anything that changes what applies to them. */
+    /** Invalidate one player's cached holders; call after anything that changes what applies to them. */
     @JvmStatic
     fun refresh(player: Player) {
         player.toDispatcher().updateHolders()

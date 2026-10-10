@@ -13,11 +13,9 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Swaps a player's live state in and out per profile: inventory, ender chest, XP and vitals (stored in
- * {@code profile_data}), plus eco progression (via the eco bridge). Item arrays are serialized with
- * Bukkit's object stream so slot positions and empty slots round-trip exactly.
- *
- * <p>All methods touch the live player, so they must run on the server thread.
+ * Swaps a player's live state per profile: inventory, ender chest, XP and vitals (in
+ * {@code profile_data}), plus eco progression via the eco bridge. Item arrays use Bukkit's object
+ * stream so slot positions round-trip exactly. Main thread only.
  */
 public final class PlayerStateService {
 
@@ -27,13 +25,8 @@ public final class PlayerStateService {
     private final RoyalSkyblockPlugin plugin;
     private final Storage storage;
 
-    /**
-     * Players whose most recent load could not deserialize its saved items. While a player is in this
-     * set, {@link #save} refuses to run: the live inventory is the empty one that replaced the
-     * unreadable blob, and persisting it would overwrite the stored row — turning a transient decode
-     * failure (version drift, a foreign item) into permanent loss. The flag clears on the next
-     * successful load.
-     */
+    // Players whose last load couldn't decode their saved items. save() refuses to run for them, so the
+    // empty replacement inventory never overwrites the stored row. Cleared on the next successful load.
     private final java.util.Set<UUID> loadFailed = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public PlayerStateService(RoyalSkyblockPlugin plugin, Storage storage) {
@@ -61,14 +54,12 @@ public final class PlayerStateService {
         byte[] inventory = serialize(contents);
         byte[] enderChest = serialize(player.getEnderChest().getContents());
 
-        // A null blob means serialization failed (an item Bukkit can't write — a foreign plugin item,
-        // version drift). Persisting it would be destructive: load() treats null as "empty profile" and
-        // clears the inventory, so one bad item would silently wipe everything on the next login.
-        // Keep the last good row instead — a stale save is recoverable, a wipe is not.
+        // A null blob means serialization failed (an item Bukkit can't write). load() reads null as an empty
+        // profile, so keep the last good row instead of wiping it.
         if (inventory == null || enderChest == null) {
             plugin.getLogger().severe("Refusing to save profile " + profileId + " for " + player.getName()
                     + ": item serialization failed, so the previous save is being kept. "
-                    + "This session's inventory changes are NOT saved — check the error above for the item.");
+                    + "This session's inventory changes are NOT saved; check the error above for the item.");
             plugin.eco().save(player.getUniqueId(), profileId);   // progression is unaffected, still save it
             return;
         }
@@ -83,7 +74,7 @@ public final class PlayerStateService {
                 player.getSaturation());
         storage.saveProfileData(profileId, player.getUniqueId(), data);
         plugin.eco().save(player.getUniqueId(), profileId);
-        // The native bank is keyed by (profile, player), so it's already per-profile — nothing to swap.
+        // the native bank is keyed by (profile, player), so it is already per-profile
     }
 
     /** Load {@code profileId}'s saved data (or a fresh slate) onto the player, plus its eco shadow. */
@@ -107,9 +98,8 @@ public final class PlayerStateService {
         int size = player.getInventory().getSize();
         ItemStack[] restored = data.inventory() == null ? new ItemStack[size] : deserialize(data.inventory());
         ItemStack[] chest = data.enderChest() == null ? null : deserialize(data.enderChest());
-        // An unreadable blob must not end in a wipe. save() already refuses to persist when items fail
-        // to WRITE; this is the read-side twin: hand the player empty containers for the session (the
-        // stored row still holds their gear), flag them so save() keeps the row intact, and say so.
+        // Read-side twin of the null-blob guard in save(): give empty containers for the session, flag the
+        // player so save() keeps the stored row, and tell them.
         if ((data.inventory() != null && restored == null) || (data.enderChest() != null && chest == null)) {
             loadFailed.add(player.getUniqueId());
             player.getInventory().clear();
@@ -117,12 +107,11 @@ public final class PlayerStateService {
             player.updateInventory();
             plugin.getLogger().severe("Could not deserialize saved items of profile " + profileId + " for "
                     + player.getName() + ". Their inventory is empty for this session and will NOT be saved"
-                    + " over the stored one — the row is intact; check the error above for the cause.");
+                    + " over the stored one: the row is intact; check the error above for the cause.");
             return;
         }
         loadFailed.remove(player.getUniqueId());
-        // Whatever another plugin put in these slots stays put: they were never saved, so restoring
-        // over them would either delete the item or hand back a stale copy alongside a fresh one.
+        // slots another plugin manages were never saved, so restoring over them would delete or duplicate the item
         for (int slot : externallyManagedSlots()) {
             if (slot < restored.length) {
                 restored[slot] = player.getInventory().getItem(slot);
@@ -145,16 +134,8 @@ public final class PlayerStateService {
         player.updateInventory();
     }
 
-    /**
-     * Inventory slots owned by another plugin, excluded from the profile snapshot.
-     *
-     * <p>A per-profile inventory and a plugin that pins an item to a slot are otherwise in direct
-     * conflict: the pinned item gets captured into whichever profile was active, then handed back on a
-     * different one, so it either duplicates or disappears. Naming the slot here settles the ownership
-     * question — RoyalSkyblock saves everything else and leaves that square alone.
-     *
-     * <p>Configured as hotbar positions 1-9, matching how menus and RoyalJoin place things.
-     */
+    // Hotbar slots (1-9) owned by another plugin (e.g. RoyalJoin), left out of the profile snapshot so
+    // a pinned item isn't captured into one profile and handed back on another.
     private int[] externallyManagedSlots() {
         List<Integer> configured = plugin.conf().getIntegerList("profile.externally-managed-hotbar-slots");
         if (configured.isEmpty()) {
@@ -167,9 +148,8 @@ public final class PlayerStateService {
     }
 
     /**
-     * Every item in a saved row — inventory then ender chest, empty slots dropped — for handing over
-     * outside a profile load (a coop payout). Null if the row cannot be decoded, which callers must
-     * treat as "keep the row", never as "nothing there".
+     * Every item in a saved row (inventory then ender chest, empty slots dropped), for a coop payout.
+     * Null if the row can't be decoded, which callers must treat as "keep the row", never "nothing there".
      */
     public List<ItemStack> itemsOf(ProfileData data) {
         List<ItemStack> out = new java.util.ArrayList<>();
@@ -190,13 +170,11 @@ public final class PlayerStateService {
         return out;
     }
 
-    /** A row holding only {@code items} — what is left of a payout that did not fit. Null on failure. */
+    /** A row holding only {@code items}: what is left of a payout that did not fit. Null on failure. */
     public ProfileData leftoverRow(List<ItemStack> items) {
         byte[] blob = serialize(items.toArray(new ItemStack[0]));
         return blob == null ? null : new ProfileData(blob, null, 0, 0f, DEFAULT_MAX_HEALTH, 20, 5f);
     }
-
-    // ── serialization ────────────────────────────────────────────────────────────
 
     private byte[] serialize(ItemStack[] items) {
         try (ByteArrayOutputStream bytes = new ByteArrayOutputStream();
@@ -213,7 +191,7 @@ public final class PlayerStateService {
         }
     }
 
-    /** The stored items, or null when the blob cannot be read — callers must not treat that as empty. */
+    // the stored items, or null when the blob can't be read; callers must not treat that as empty
     private ItemStack[] deserialize(byte[] data) {
         try (BukkitObjectInputStream in = new BukkitObjectInputStream(new ByteArrayInputStream(data))) {
             int length = in.readInt();

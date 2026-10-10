@@ -36,7 +36,7 @@ class SaveTrackingLoaderTest {
         assertNull(loader.outcomeSince("island_a", second), "an older save does not count as a newer one");
     }
 
-    /** RsbFileLoader is final, so the failing case is its own loader. */
+    // RsbFileLoader is final, so the failing case is its own loader
     private static final class FailingLoader implements com.infernalsuite.asp.api.loaders.SlimeLoader {
         private final RsbFileLoader real;
 

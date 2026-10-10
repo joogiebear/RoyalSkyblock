@@ -1,7 +1,5 @@
-# ═══════════════════════════════════════════════════════════════════════════════
 #  RoyalSkyblock  ·  Bank
-# ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalSkyblock's built-in bank — no other bank plugin required. Each profile has
+#  RoyalSkyblock's built-in bank: no other bank plugin required. Each profile has
 #  its own personal bank; coop profiles also share a coop bank. Money is held in your
 #  server's Vault economy (whatever you already run), so the bank is just a savings
 #  layer on top. Reload with /is reload.
@@ -11,8 +9,7 @@
 #  of its tranches, capped at max-interest. Upgrade items use "<namespace>:<id>:<amount>"
 #  (minecraft:… for vanilla, or an EcoItems id).
 #
-#  Part of the RoyalSkyblock config set — see config.yml for the full file map.
-# ═══════════════════════════════════════════════════════════════════════════════
+#  Part of the RoyalSkyblock config set: see config.yml for the full file map.
 
 settings:
   # Symbol shown in front of amounts (display only; the real economy is Vault's).

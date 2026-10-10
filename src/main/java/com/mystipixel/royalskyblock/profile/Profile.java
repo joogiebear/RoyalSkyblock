@@ -8,9 +8,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * A player's profile — effectively a separate Skyblock save. It owns one island, a coop roster, and
- * (via per-profile state) its own inventory, ender chest, and progression. A player may have several
- * (Solo, Coop, Ironman, ...) and switches between them.
+ * A player's profile, effectively a separate Skyblock save: one island, a coop roster, and its own
+ * inventory, ender chest and progression. A player may have several and switch between them.
  */
 public final class Profile {
 
@@ -20,14 +19,10 @@ public final class Profile {
     private Gamemode gamemode;
     private final long createdAt;
 
-    /** The profile's island id, or {@code null} until an island has been created for it. */
+    // the profile's island id, or null until an island has been created for it
     private UUID islandId;
 
-    /**
-     * Highest island level whose rewards this profile has been paid. Kept on the profile, not only the
-     * island, because deleting the island threw the island's marker away: delete, recreate, rebuild
-     * from stored blocks and every reward paid again.
-     */
+    // highest island level whose rewards this profile has been paid; survives the island being deleted
     private int rewardLevel;
 
     private final ConcurrentHashMap<UUID, ProfileMember> members = new ConcurrentHashMap<>();
@@ -88,8 +83,6 @@ public final class Profile {
     public void setIslandId(@Nullable UUID islandId) {
         this.islandId = islandId;
     }
-
-    // ── members (coop roster) ────────────────────────────────────────────────────
 
     public Collection<ProfileMember> members() {
         return members.values();

@@ -15,12 +15,9 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Anti-crash liquid-flow limiter. Counts water/lava flow events per world per second and, once they
- * exceed a configured rate, cancels further flow until the next second — defusing lag machines where
- * someone floods an island with cascading liquid to crash the server.
- *
- * <p>Because every island is its own world, the per-world counter is effectively per-island: one
- * island flooding itself can't starve another's flow budget.
+ * Liquid-flow limiter against lag machines: counts water/lava flow events per world per second and
+ * cancels further flow past the configured rate until the next second. Each island is its own world,
+ * so the budget is effectively per island.
  */
 public final class FlowLimiterListener implements Listener {
 
@@ -33,7 +30,7 @@ public final class FlowLimiterListener implements Listener {
         this.plugin = plugin;
     }
 
-    /** A bypass-permission holder pouring liquid opens a grace window so admin builds aren't throttled. */
+    // a bypass holder pouring liquid opens a grace window so admin builds aren't throttled
     @EventHandler(ignoreCancelled = true)
     public void onBucket(PlayerBucketEmptyEvent event) {
         if (event.getPlayer().hasPermission("royalskyblock.bypass")) {
@@ -49,7 +46,7 @@ public final class FlowLimiterListener implements Listener {
         }
         Material type = event.getBlock().getType();
         if (type != Material.WATER && type != Material.LAVA) {
-            return; // only throttle liquids
+            return;
         }
         World world = event.getBlock().getWorld();
         Long bypass = bypassUntil.get(world.getUID());
@@ -72,21 +69,18 @@ public final class FlowLimiterListener implements Listener {
         }
     }
 
-    /** Log at most once every 10s per world so admins notice throttling without console spam. */
+    // log at most once every 10s per world
     private void warn(World world, int max) {
         long now = System.currentTimeMillis();
         Long last = lastWarn.get(world.getUID());
         if (last == null || now - last > 10_000L) {
             lastWarn.put(world.getUID(), now);
             plugin.getLogger().warning("Flow limiter throttling liquid in world '" + world.getName()
-                    + "' (over " + max + "/s) — possible lag machine.");
+                    + "' (over " + max + "/s): possible lag machine.");
         }
     }
 
-    /**
-     * Forget a world's counters once it unloads. They are keyed by world id and island worlds come and
-     * go all day, so without this each map grew by an entry for every island load until a restart.
-     */
+    // island worlds come and go all day, so drop a world's counters when it unloads
     @EventHandler(priority = EventPriority.MONITOR)
     public void onWorldUnload(WorldUnloadEvent event) {
         UUID world = event.getWorld().getUID();

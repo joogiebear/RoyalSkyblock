@@ -123,7 +123,7 @@ public final class IslandCommand {
             plugin.messages().send(player, "visit.no-target-island", "player", targetName);
             return;
         }
-        // Privacy: a private island only admits its own profile members.
+        // a private island only admits its own profile members
         if (!island.isEnabled(com.mystipixel.royalskyblock.island.IslandSetting.VISITORS_ALLOWED)
                 && !player.hasPermission("royalskyblock.bypass")) {
             Profile prof = plugin.profiles().getProfile(island.profileId());
@@ -132,7 +132,7 @@ public final class IslandCommand {
                 return;
             }
         }
-        // Guest limit: count non-members already on the island (if its world is loaded).
+        // guest limit: count non-members already on the island (if its world is loaded)
         org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
         if (world != null && !player.hasPermission("royalskyblock.bypass")) {
             Profile prof = plugin.profiles().getProfile(island.profileId());
@@ -156,14 +156,8 @@ public final class IslandCommand {
         }));
     }
 
-    /**
-     * A player by name without touching the network: online, or known to this server's user cache.
-     *
-     * <p>{@code getOfflinePlayer(String)} looks a name it has never seen up with Mojang, blocking the
-     * server thread for the round trip. {@code /is visit} passes it whatever a player typed, so anyone
-     * could stall the server with made-up names. A name this server has never seen cannot have an
-     * island here anyway.
-     */
+    // Online or in this server's user cache only: getOfflinePlayer(String) blocks on a Mojang lookup
+    // for an unknown name, and /is visit passes it whatever a player typed.
     private @org.jetbrains.annotations.Nullable org.bukkit.OfflinePlayer knownPlayer(String name) {
         Player online = plugin.getServer().getPlayerExact(name);
         return online != null ? online : plugin.getServer().getOfflinePlayerIfCached(name);
@@ -180,8 +174,8 @@ public final class IslandCommand {
             plugin.messages().send(player, "home.no-island");
             return;
         }
-        // Owner only, the same rule deleteProfile applies. The island is shared by every coop member,
-        // so a plain member being able to send it to the trash would be a grief tool.
+        // Owner only, like deleteProfile: the island is shared by every coop member, so a member trashing
+        // it would be a grief tool.
         Profile profile = plugin.profiles().getProfile(active);
         if (profile == null || profile.roleOf(player.getUniqueId()) != IslandRole.OWNER) {
             plugin.messages().send(player, "island.no-permission-manage");
@@ -201,8 +195,6 @@ public final class IslandCommand {
             }
         }));
     }
-
-    // ── profiles ──────────────────────────────────────────────────────────────────
 
     void handleProfile(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
@@ -298,15 +290,9 @@ public final class IslandCommand {
         }));
     }
 
-    /**
-     * Find one of the player's profiles by name (case-insensitive) or 1-based list index, telling the
-     * player why when there isn't exactly one. Returns null in that case.
-     *
-     * <p>Names are not unique: a coop keeps its owner's name for it, so joining someone's "Apple" while
-     * owning an "Apple" of your own gives you two. Taking the first match meant owned profiles always
-     * won and the coop could not be reached by name at all — and for {@code delete} the first match is
-     * the one that gets destroyed. So an ambiguous name picks nothing and lists the choices by number.
-     */
+    // Finds a profile by name (case-insensitive) or 1-based index, or tells the player why not and
+    // returns null. Names aren't unique (a coop keeps its owner's name), so an ambiguous name picks
+    // nothing and lists the choices by number; delete must never guess.
     private Profile findProfile(Player player, String query, String action) {
         List<Profile> profiles = plugin.profiles().getProfiles(player.getUniqueId());
         List<Integer> matches = new ArrayList<>();
@@ -343,7 +329,6 @@ public final class IslandCommand {
         return null;
     }
 
-    /** Set the island home ({@code setspawn}/{@code sethome}) or the guest spawn ({@code setguestspawn}). */
     void handleSetSpawn(CommandSender sender, boolean guest) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
@@ -405,7 +390,6 @@ public final class IslandCommand {
         plugin.messages().send(player, "island.kicked-guests", "count", String.valueOf(kicked));
     }
 
-    /** True if the player owns or co-owns the island's profile. */
     private boolean isIslandManager(Player player, Island island) {
         Profile profile = plugin.profiles().getProfile(island.profileId());
         if (profile == null) {
@@ -444,8 +428,6 @@ public final class IslandCommand {
         plugin.gui().open(player, GuiManager.UPGRADES);
     }
 
-    // ── coop invites ──────────────────────────────────────────────────────────────
-
     void handleInvite(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
@@ -480,8 +462,7 @@ public final class IslandCommand {
         }
         var result = plugin.profiles().acceptInvite(player);
         if (result.profile() != null) {
-            // Straight onto the coop. Joining and then having to find it by name was the whole
-            // experience before, and same-named profiles made even that fail.
+            // straight onto the coop
             Profile joined = result.profile();
             plugin.messages().send(player, "coop.accepted-switching", "profile", joined.name());
             plugin.profiles().switchProfile(player, joined.id()).whenComplete((ok, error) -> onMain(() -> {
@@ -570,7 +551,6 @@ public final class IslandCommand {
                 "coop.demoted", "coop.you-demoted");
     }
 
-    /** Shared: report a coop role change to the actor, and notify the online target. */
     private void coopRoleCommand(Player actor, String targetName, String error, String successKey, String targetKey) {
         if (error != null) {
             plugin.messages().send(actor, "coop.role-error", "error", error);
@@ -633,7 +613,6 @@ public final class IslandCommand {
         }
     }
 
-    /** {@code /is level} opens the level menu; {@code /is level recalc} triggers a fresh scan. */
     void handleLevel(CommandSender sender, String[] args) {
         if (!(sender instanceof Player player)) {
             plugin.messages().send(sender, "general.players-only");
@@ -684,8 +663,6 @@ public final class IslandCommand {
         }
         plugin.gui().open(player, GuiManager.PERKS);
     }
-
-    // ── admin / spike diagnostics ────────────────────────────────────────────────
 
     void handleAdmin(CommandSender sender, String[] args) {
         if (!sender.hasPermission("royalskyblock.admin")) {
@@ -741,25 +718,21 @@ public final class IslandCommand {
             handleNpcOpen(sender, args);
             return;
         }
-        sender.sendMessage(Text.color("&8» &e/is admin status &7— dependency & config health"));
-        sender.sendMessage(Text.color("&8» &e/is admin split-content [confirm] &7— upgrades.yml/perks.yml → one file each"));
-        sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7— island mob spawning"));
-        sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7— island border colour"));
-        sender.sendMessage(Text.color("&8» &e/is admin testworld &7— ASP world round-trip diagnostic"));
-        sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7— island load/unload + heap benchmark"));
-        sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7— save your WorldEdit selection"));
-        sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7— set an upgrade tier instantly"));
-        sender.sendMessage(Text.color("&8» &e/is admin trash <list|restore <archive> <player>> &7— deleted-island archives"));
-        sender.sendMessage(Text.color("&8» &e/is admin orphans [purge] &7— worlds no island row references"));
-        sender.sendMessage(Text.color("&8» &e/is admin npc-open <player> <command> &7— run a command for a player (hub NPCs)"));
+        sender.sendMessage(Text.color("&8» &e/is admin status &7- dependency & config health"));
+        sender.sendMessage(Text.color("&8» &e/is admin split-content [confirm] &7- upgrades.yml/perks.yml to one file each"));
+        sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7- island mob spawning"));
+        sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7- island border colour"));
+        sender.sendMessage(Text.color("&8» &e/is admin testworld &7- ASP world round-trip diagnostic"));
+        sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7- island load/unload + heap benchmark"));
+        sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7- save your WorldEdit selection"));
+        sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7- set an upgrade tier instantly"));
+        sender.sendMessage(Text.color("&8» &e/is admin trash <list|restore <archive> <player>> &7- deleted-island archives"));
+        sender.sendMessage(Text.color("&8» &e/is admin orphans [purge] &7- worlds no island row references"));
+        sender.sendMessage(Text.color("&8» &e/is admin npc-open <player> <command> &7- run a command for a player (hub NPCs)"));
     }
 
-    /**
-     * {@code /is admin npc-open <player> <command...>} — how a hub NPC opens an {@code npc-only-commands}
-     * entry. The NPC runs it from the console; the command is then performed as the player, which never
-     * passes the typed-command gate but still asks the gamemode gate, so an Ironman profile can't reach
-     * the Bazaar by clicking its NPC either.
-     */
+    // /is admin npc-open <player> <command...>: how a hub NPC opens an npc-only-commands entry. The
+    // command runs as the player, skipping the typed-command gate but still asking the gamemode gate.
     private void handleNpcOpen(CommandSender sender, String[] args) {
         if (args.length < 4) {
             sender.sendMessage(Text.color("&cUsage: &e/is admin npc-open <player> <command>"));
@@ -771,7 +744,7 @@ public final class IslandCommand {
             return;
         }
         String command = String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length));
-        // Next tick: an NPC click can arrive mid-interaction, and the command may open an inventory.
+        // next tick: an NPC click can arrive mid-interaction, and the command may open an inventory
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (target.isOnline() && !CommandGateListener.refuse(plugin, target, command)) {
                 target.performCommand(command);
@@ -779,11 +752,8 @@ public final class IslandCommand {
         });
     }
 
-    /**
-     * {@code /is admin trash list|restore} — the recovery half of the island trash. Restoring gives
-     * the archived blocks to the player's <em>active profile</em>, which must not already have an
-     * island: two islands per profile is not a state the rest of the plugin can represent.
-     */
+    // /is admin trash list|restore. Restores into the player's active profile, which must not already
+    // have an island: a profile can't hold two.
     void handleTrashAdmin(CommandSender sender, String[] args) {
         com.mystipixel.royalskyblock.world.IslandTrash trash = plugin.islands().trash();
         String sub = args.length >= 3 ? args[2].toLowerCase(Locale.ROOT) : "list";
@@ -794,7 +764,7 @@ public final class IslandCommand {
                 sender.sendMessage(Text.color("&7The island trash is empty."));
                 return;
             }
-            sender.sendMessage(Text.color("&8» &e&lIsland trash &7— " + entries.size()
+            sender.sendMessage(Text.color("&8» &e&lIsland trash &7- " + entries.size()
                     + " archive(s), kept " + trash.retentionDays() + " day(s)"));
             var fmt = java.time.format.DateTimeFormatter.ofPattern("MMM d HH:mm")
                     .withZone(java.time.ZoneId.systemDefault());
@@ -827,7 +797,7 @@ public final class IslandCommand {
                 return;
             }
             if (plugin.islands().getIslandByProfile(profileId) != null) {
-                sender.sendMessage(Text.color("&cTheir active profile already has an island — it must be"
+                sender.sendMessage(Text.color("&cTheir active profile already has an island: it must be"
                         + " deleted (into the trash) before an archive can replace it."));
                 return;
             }
@@ -844,7 +814,7 @@ public final class IslandCommand {
                 } else {
                     sender.sendMessage(Text.color("&aRestored &f" + args[3] + "&a as " + args[4]
                             + "'s island. &7/is home takes them there; upgrades and level start fresh"
-                            + " (they lived in the deleted rows) — the level recalculates on &e/is level recalc&7."));
+                            + " (they lived in the deleted rows): the level recalculates on &e/is level recalc&7."));
                 }
             }));
             return;
@@ -852,12 +822,8 @@ public final class IslandCommand {
         sender.sendMessage(Text.color("&cUsage: &e/is admin trash <list|restore <archive> <player>>"));
     }
 
-    /**
-     * {@code /is admin orphans [purge]} — worlds in the store that no island row references: crash
-     * debris and failed creates. Purge archives each one into the trash (always, even with the trash
-     * switched off — "purge" must never mean hard-delete) and then removes it. Loaded worlds are
-     * skipped: a world mid-creation has no row yet and is not an orphan.
-     */
+    // /is admin orphans [purge]: store worlds no island row references. Purge always archives to the
+    // trash first, even with the trash off. Loaded worlds are skipped: a world mid-creation has no row yet.
     void handleOrphansAdmin(CommandSender sender, String[] args) {
         boolean purge = args.length >= 3 && args[2].equalsIgnoreCase("purge");
         String prefix = plugin.conf().getString("world.world-name-prefix", "island_");
@@ -886,19 +852,19 @@ public final class IslandCommand {
                     }
                 }
             } catch (StorageException e) {
-                // One unanswered lookup makes the whole list untrustworthy; a partial purge on it
-                // would archive live islands. Stop before anything moves.
+                // One unanswered lookup makes the whole list untrustworthy, and a partial purge on it would
+                // archive live islands. Stop before anything moves.
                 onMain(() -> sender.sendMessage(Text.color("&cThe database didn't answer, so nothing was "
                         + "scanned or moved: &f" + e.getMessage())));
                 return;
             }
             if (orphans.isEmpty()) {
-                onMain(() -> sender.sendMessage(Text.color("&aNo orphaned island worlds — the store matches the database.")));
+                onMain(() -> sender.sendMessage(Text.color("&aNo orphaned island worlds: the store matches the database.")));
                 return;
             }
             if (!purge) {
                 onMain(() -> {
-                    sender.sendMessage(Text.color("&8» &e" + orphans.size() + " orphaned world(s) &7— no island row references them:"));
+                    sender.sendMessage(Text.color("&8» &e" + orphans.size() + " orphaned world(s) &7- no island row references them:"));
                     for (int i = 0; i < orphans.size() && i < 15; i++) {
                         sender.sendMessage(Text.color("  &8· &f" + orphans.get(i)));
                     }
@@ -924,22 +890,16 @@ public final class IslandCommand {
             int finalMoved = moved;
             int finalFailed = failed;
             onMain(() -> sender.sendMessage(Text.color("&aPurged &f" + finalMoved + "&a orphaned world(s)"
-                    + " into the trash." + (finalFailed > 0 ? " &c" + finalFailed + " failed — see console." : ""))));
+                    + " into the trash." + (finalFailed > 0 ? " &c" + finalFailed + " failed: see console." : ""))));
         });
     }
 
-    /**
-     * {@code /is admin split-content [confirm]} — convert legacy monoliths to the folder layout.
-     *
-     * <p>Runs as a preview unless {@code confirm} is passed. Nothing about this is urgent — both
-     * layouts load — so it asks first rather than rewriting an admin's config the moment they type
-     * a command they may have been exploring.
-     */
+    // /is admin split-content [confirm]: preview unless confirm is passed
     void handleSplitContent(CommandSender sender, String[] args) {
         boolean apply = args.length >= 3 && args[2].equalsIgnoreCase("confirm");
         ContentSplitter.Result result = new ContentSplitter(plugin).run(apply);
 
-        sender.sendMessage(Text.color("&8» &e&lContent split &7" + (apply ? "— applied" : "— preview")));
+        sender.sendMessage(Text.color("&8» &e&lContent split &7" + (apply ? "- applied" : "- preview")));
         for (String note : result.notes()) {
             sender.sendMessage(Text.color("&8  · &7" + note));
         }
@@ -950,7 +910,7 @@ public final class IslandCommand {
             sender.sendMessage(Text.color("&8  · &e skipped &f" + file));
         }
         if (result.isEmpty()) {
-            sender.sendMessage(Text.color("&7Nothing to do — content is already one file per thing."));
+            sender.sendMessage(Text.color("&7Nothing to do: content is already one file per thing."));
             return;
         }
         if (apply) {
@@ -961,7 +921,6 @@ public final class IslandCommand {
         }
     }
 
-    /** {@code /is admin border <blue|red|green|off>} — set the island border colour live. */
     void handleBorderAdmin(CommandSender sender, String[] args) {
         if (args.length < 3) {
             sender.sendMessage(Text.color("&7Border colour: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
@@ -973,19 +932,18 @@ public final class IslandCommand {
             sender.sendMessage(Text.color("&cUse: blue, red, green, or off."));
             return;
         }
-        // Must go through the plugin, not conf().set() + saveConfig(): conf() hands out a converted
-        // copy of eco's config, so a write there would be dropped on the next read.
+        // Through the plugin, not conf().set() + saveConfig(): conf() is a converted copy of eco's config,
+        // so a write there is dropped on the next read.
         plugin.setConfigValue("island.border.color", choice);
         plugin.borders().reload();
         plugin.borders().refreshAll();
         sender.sendMessage(Text.color("&aIsland border set to &e" + choice + "&a (applied live)."));
     }
 
-    /** In-game version of the boot status panel: which dependencies are active + config health. */
     void handleMobSpawnAdmin(CommandSender sender, String[] args) {
         com.mystipixel.royalskyblock.island.IslandMobSpawnService svc = plugin.mobSpawns();
         if (svc == null) {
-            sender.sendMessage(Text.color("&cIsland mob spawning isn't running — it's disabled, or its "
+            sender.sendMessage(Text.color("&cIsland mob spawning isn't running: it's disabled, or its "
                     + "provider wasn't available at startup. Check the console log at boot."));
             return;
         }
@@ -1010,23 +968,23 @@ public final class IslandCommand {
             sender.sendMessage(Text.color("&7Mob test: &f" + svc.testSpawn(player, args[3], level)));
             return;
         }
-        sender.sendMessage(Text.color("&6Island mobs &7— provider &f" + svc.providerId() + " &7("
+        sender.sendMessage(Text.color("&6Island mobs &7- provider &f" + svc.providerId() + " &7("
                 + (svc.providerAvailable() ? "&aavailable" : "&cunavailable") + "&7), &f"
                 + svc.familyCount() + " &7families, enabled=&f" + svc.enabled()));
         if (sender instanceof Player viewer) {
             sender.sendMessage(Text.color("&7Intimidation: &f" + plugin.intimidationSummary(viewer)));
         }
-        sender.sendMessage(Text.color("&8» &e/is admin mobspawn test <family> [level] &7— force-spawn near you"));
+        sender.sendMessage(Text.color("&8» &e/is admin mobspawn test <family> [level] &7- force-spawn near you"));
     }
 
     void handleAdminStatus(CommandSender sender) {
         String worldSrc = plugin.conf().getString("world.slime-data-source", "file");
         String storage = plugin.conf().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
-        sender.sendMessage(Text.color("&6&l✦ RoyalSkyblock &7— status"));
+        sender.sendMessage(Text.color("&6&lRoyalSkyblock &7- status"));
         sender.sendMessage(Text.color(dep("Islands (ASP)", plugin.isWorldBackendReady(),
                 "source: " + worldSrc, "install Advanced Slime Paper")));
         sender.sendMessage(Text.color(dep("Economy (Vault)", plugin.economyReady(),
-                "", "not found — bank & coin costs off")));
+                "", "not found: bank & coin costs off")));
         sender.sendMessage(Text.color(dep("Bank", plugin.bank().available(),
                 plugin.bank().levels().levelCount() + " levels", "needs Vault + bank.yml levels")));
         sender.sendMessage(Text.color(dep("Schematics", plugin.schematics().isAvailable(),
@@ -1035,30 +993,30 @@ public final class IslandCommand {
                 "per-profile", "not per-profile")));
         sender.sendMessage(Text.color("&7Storage: &f" + storage));
         sender.sendMessage(Text.color("&7Perks: " + (plugin.perks().enabled()
-                ? "&a✔ on &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
+                ? "&aon &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
         sender.sendMessage(Text.color("&7Border: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
                 + " &8(per-player; admins bypass)"));
         sender.sendMessage(Text.color("&7Config health:"));
         String spawnWorld = plugin.conf().getString("spawn.world", "world");
         boolean spawnOk = plugin.getServer().getWorld(spawnWorld) != null;
         sender.sendMessage(Text.color(check(spawnOk, "spawn world '" + spawnWorld + "' loaded",
-                "spawn world '" + spawnWorld + "' NOT found — set spawn.world in config.yml")));
+                "spawn world '" + spawnWorld + "' NOT found: set spawn.world in config.yml")));
         int upTracks = plugin.upgrades().all().size();
         sender.sendMessage(Text.color(check(upTracks > 0, upTracks + " upgrade track(s) loaded",
-                "no upgrades loaded — check upgrades.yml")));
+                "no upgrades loaded: check upgrades.yml")));
         sender.sendMessage(Text.color(check(!plugin.bank().levels().isEmpty(),
-                plugin.bank().levels().levelCount() + " bank level(s) loaded", "no bank levels — check bank.yml")));
+                plugin.bank().levels().levelCount() + " bank level(s) loaded", "no bank levels: check bank.yml")));
     }
 
     private static String dep(String name, boolean ok, String okDetail, String failDetail) {
         if (ok) {
-            return "&7" + name + ": &a✔ ready" + (okDetail.isEmpty() ? "" : " &7(" + okDetail + ")");
+            return "&7" + name + ": &aready" + (okDetail.isEmpty() ? "" : " &7(" + okDetail + ")");
         }
-        return "&7" + name + ": &c✘ " + failDetail;
+        return "&7" + name + ": &c" + failDetail;
     }
 
     private static String check(boolean ok, String okMsg, String failMsg) {
-        return ok ? "  &a✔ &7" + okMsg : "  &c✘ &f" + failMsg;
+        return ok ? "  &aOK &7" + okMsg : "  &cX &f" + failMsg;
     }
 
     void handleSchematic(CommandSender sender, String[] args) {
@@ -1071,7 +1029,7 @@ public final class IslandCommand {
             return;
         }
         if (!plugin.schematics().isAvailable()) {
-            sender.sendMessage(Text.color("&cWorldEdit or FAWE isn't installed — schematics are unavailable."));
+            sender.sendMessage(Text.color("&cWorldEdit or FAWE isn't installed: schematics are unavailable."));
             return;
         }
         String name = args[3];
@@ -1084,8 +1042,7 @@ public final class IslandCommand {
         }
     }
 
-    /** Diagnostic: place a chest with items, save+unload+reload the world, count items each step —
-     *  tells us whether an empty starter chest is a placement bug or an ASP persistence bug. */
+    // diagnostic: does a starter chest lose its items through save/unload/reload (placement vs ASP persistence)
     void handleChestTest(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
             sender.sendMessage(Text.color("&cWorld backend not ready."));
@@ -1107,7 +1064,7 @@ public final class IslandCommand {
                 .thenCompose(v -> plugin.worlds().loadIsland(name))
                 .thenCompose(world -> onMainSupply(() -> {
                     sender.sendMessage(Text.color("&7[chest] after save+reload = &e" + chestCount(world)
-                            + " &7(5 = persists ✔, 0 = ASP drops container contents)"));
+                            + " &7(5 = persists, 0 = ASP drops container contents)"));
                     return world;
                 }))
                 .thenCompose(w -> plugin.worlds().deleteIsland(name))
@@ -1179,30 +1136,18 @@ public final class IslandCommand {
         return active == null ? null : plugin.islands().getIslandByProfile(active);
     }
 
-    /**
-     * {@code /is admin loadtest <count> [holdSeconds]} — the island-machinery load test.
-     *
-     * <p>online-mode blocks real bots, so we can't fake N player connections. What we CAN measure —
-     * and what's actually RoyalSkyblock-specific — is the island lifecycle: create/load N slime worlds
-     * concurrently, hold them, then unload+delete. It reports load time and heap cost per island, so
-     * "cost scales with players not islands" stops being a claim. It does NOT measure the catch-up
-     * scan (the test worlds are empty — that path is proven separately) nor real player presence
-     * (mobs, movement, redstone), which is general Paper perf and needs real players.
-     *
-     * <p>Throwaway worlds are named {@code rsb_loadtest_<n>}, entirely separate from real
-     * {@code island_<uuid>} worlds and the profile/DB system, and every one is deleted at the end even
-     * on partial failure. Capped so a fat-fingered count can't OOM a live server.
-     */
-    /** Load-test output goes to the runner AND the console — the runner is usually a player whose
-     *  chat isn't in the log, and the whole point of the benchmark is the numbers. */
+    // also to the console: the runner is usually a player, and their chat isn't logged
     private void loadTestReport(CommandSender sender, String msg) {
         sender.sendMessage(Text.color("&e[loadtest] &7" + msg));
         plugin.getLogger().info("[loadtest] " + msg);
     }
 
+    // /is admin loadtest <count> [holdSeconds]: creates, holds and deletes N throwaway worlds
+    // (rsb_loadtest_<n>) to measure island load time and heap cost. Doesn't cover the catch-up scan or
+    // player presence. Every world is deleted at the end, even on partial failure.
     void handleLoadTest(CommandSender sender, String[] args) {
         if (!plugin.isWorldBackendReady()) {
-            sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
+            sender.sendMessage(Text.color("&cWorld backend not ready: is the server running Advanced Slime Paper?"));
             return;
         }
         int count;
@@ -1213,7 +1158,7 @@ public final class IslandCommand {
             return;
         }
         if (count < 1 || count > 64) {
-            sender.sendMessage(Text.color("&ccount must be 1–64 (this is a live server — start small)."));
+            sender.sendMessage(Text.color("&ccount must be 1-64 (this is a live server: start small)."));
             return;
         }
         long holdSeconds = 3;
@@ -1283,7 +1228,7 @@ public final class IslandCommand {
                 .whenComplete((ignored, error) -> onMain(() -> {
                     long teardownMs = System.currentTimeMillis() - start;
                     long totalMs = System.currentTimeMillis() - batchStart;
-                    // Confirm nothing leaked — a load test that orphans worlds is worse than none.
+                    // confirm nothing leaked: a load test that orphans worlds is worse than none
                     int leaked = 0;
                     for (String n : names) {
                         if (plugin.worlds().isLoaded(n)) {
@@ -1292,13 +1237,12 @@ public final class IslandCommand {
                     }
                     loadTestReport(sender, "unloaded + deleted " + names.size() + " in " + teardownMs
                             + "ms. Leaked: " + leaked);
-                    loadTestReport(sender, "DONE — " + names.size() + " islands, " + totalMs
+                    loadTestReport(sender, "DONE: " + names.size() + " islands, " + totalMs
                             + "ms total (incl. hold), teardown " + teardownMs + "ms, leaked " + leaked
-                            + (leaked == 0 ? " — clean." : " — CHECK: worlds still loaded!"));
+                            + (leaked == 0 ? ", clean." : ", CHECK: worlds still loaded!"));
                 }));
     }
 
-    /** Bytes → human string, for heap readouts. */
     private static String human(long bytes) {
         if (Math.abs(bytes) < 1024) {
             return bytes + "B";
@@ -1312,7 +1256,7 @@ public final class IslandCommand {
 
     void handleTestWorld(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
-            sender.sendMessage(Text.color("&cWorld backend not ready — is the server running Advanced Slime Paper?"));
+            sender.sendMessage(Text.color("&cWorld backend not ready: is the server running Advanced Slime Paper?"));
             return;
         }
         String name = "rsb_diagnostic";
@@ -1326,12 +1270,10 @@ public final class IslandCommand {
                     if (error != null) {
                         sender.sendMessage(Text.color("&c[diag] FAILED: " + rootMessage(error)));
                     } else {
-                        sender.sendMessage(Text.color("&a[diag] deleted '" + name + "' — ASP round-trip succeeded. ✔"));
+                        sender.sendMessage(Text.color("&a[diag] deleted '" + name + "': ASP round-trip succeeded."));
                     }
                 }));
     }
-
-    // ── help / tab-complete ──────────────────────────────────────────────────────
 
     void sendHelp(CommandSender sender) {
         plugin.messages().sendPlain(sender, "help.header");

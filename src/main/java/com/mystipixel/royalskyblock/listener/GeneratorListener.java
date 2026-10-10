@@ -9,11 +9,8 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockFormEvent;
 
 /**
- * Turns the vanilla cobblestone generator into a tiered ore generator on islands.
- *
- * <p>Only formations on an island world are touched, so a server running other worlds alongside keeps
- * vanilla behaviour there. Runs at LOW priority and respects cancellation, leaving protection plugins
- * the final say on whether the block forms at all.
+ * Turns the vanilla cobblestone generator into a tiered ore generator on island worlds only. LOW
+ * priority and respects cancellation, so protection plugins have the final say.
  */
 public final class GeneratorListener implements Listener {
 
@@ -31,7 +28,7 @@ public final class GeneratorListener implements Listener {
         }
         Island island = plugin.islands().getIslandByWorld(event.getBlock().getWorld());
         if (island == null) {
-            return;                                  // not an island world — leave vanilla alone
+            return;                                  // not an island world, leave vanilla alone
         }
         Material rolled = plugin.generators().roll(island);
         if (rolled != formed) {
