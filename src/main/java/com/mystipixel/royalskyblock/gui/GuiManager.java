@@ -483,7 +483,7 @@ public final class GuiManager implements Listener {
             lore.add(noItalic("&7" + def.description()));
             lore.add(noItalic(""));
             if (pending != null) {
-                lore.add(noItalic("&eUpgrading to tier " + pending.targetTier()
+                lore.add(noItalic("&e⏳ Upgrading to tier " + pending.targetTier()
                         + " &7- " + formatDuration(pending.secondsLeft(System.currentTimeMillis())) + " left"));
                 var t = def.tier(pending.targetTier());
                 if (t != null && !t.skipCost().isFree()) {
@@ -494,7 +494,7 @@ public final class GuiManager implements Listener {
             } else {
                 var next = def.nextTier(current);
                 if (next == null) {
-                    lore.add(noItalic("&aMaxed out."));
+                    lore.add(noItalic("&a✔ Maxed out."));
                 } else {
                     String label = effectLabel(def.effect(), next.value());
                     lore.add(noItalic("&7Next: tier " + next.tier()
@@ -1303,14 +1303,14 @@ public final class GuiManager implements Listener {
         ItemStack item = new ItemStack(unlocked ? perk.icon() : Material.GRAY_DYE);
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
-            meta.displayName(noItalic(perk.name() + (unlocked ? " &a(unlocked)" : " &8(locked)")));
+            meta.displayName(noItalic(perk.name() + (unlocked ? " &a✔" : " &8(locked)")));
             List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
             for (String line : perk.description()) {
                 lore.add(noItalic(line));
             }
             lore.add(noItalic(""));
             lore.add(noItalic("&7Requires island level &f" + perk.requiredLevel()));
-            lore.add(noItalic(unlocked ? "&aUnlocked" : "&cLocked: reach level " + perk.requiredLevel()));
+            lore.add(noItalic(unlocked ? "&a✔ Unlocked" : "&c✘ Locked: reach level " + perk.requiredLevel()));
             meta.lore(lore);
             item.setItemMeta(meta);
         }

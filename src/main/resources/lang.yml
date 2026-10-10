@@ -80,7 +80,7 @@ messages:
     scanning: "&7Scanning your island: this runs in the background."
     done: "&aIsland level recalculated: &e%level%&a."
     cooldown: "&cThat was scanned recently: try again in &e%seconds%s&c."
-    up: "&eYour island reached level &6%level%&e!"
+    up: "&6&l✦ &eYour island reached level &6%level%&e!"
 
   profile:
     header: "&6&lYour Profiles &7(%count%/%max%)"
@@ -111,8 +111,8 @@ messages:
     payout-partial: "&e%count% &eitem stack(s) from &6%profile% &edidn't fit. Free up space; they're delivered next time you log in."
     invite-sent: "&aInvited &e%player% &ato your coop island."
     invite-received: "&e%player% &7invited you to their coop island."
-    invite-accept-button: "&a&l[Accept]"
-    invite-deny-button: "&c&l[Deny]"
+    invite-accept-button: "&a&l[✔ Accept]"
+    invite-deny-button: "&c&l[✘ Deny]"
     invite-expired: "&cThat invite has expired: ask them to invite you again."
     invite-full: "&cThat coop island is full now."
     member-joined: "&a%player% &7joined the island!"
@@ -134,7 +134,7 @@ messages:
     role-error: "&c%error%"
     you-promoted: "&aYou were promoted to &eco-owner&a of the island!"
     you-demoted: "&eYou were set back to a regular member."
-    you-owner: "&eYou are now the &6owner &eof the island!"
+    you-owner: "&6&l✦ &eYou are now the &6owner &eof the island!"
 
   bank:
     deposited: "&aDeposited &e%amount% &ainto the bank."
@@ -150,7 +150,7 @@ messages:
     disabled: "&cLevel-gated perks are disabled on this server."
 
   help:
-    header: "&6&lRoyalSkyblock"
+    header: "&6&l✦ RoyalSkyblock"
     subtitle: "&7Your Skyblock commands:"
     island: "&8» &e/is menu &8· &ecreate &8· &ehome &8· &evisit &7- your island"
     bank: "&8» &e/bank &7- your bank (personal, and coop bank on a coop profile)"

@@ -980,7 +980,7 @@ public final class IslandCommand {
     void handleAdminStatus(CommandSender sender) {
         String worldSrc = plugin.conf().getString("world.slime-data-source", "file");
         String storage = plugin.conf().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
-        sender.sendMessage(Text.color("&6&lRoyalSkyblock &7- status"));
+        sender.sendMessage(Text.color("&6&l✦ RoyalSkyblock &7- status"));
         sender.sendMessage(Text.color(dep("Islands (ASP)", plugin.isWorldBackendReady(),
                 "source: " + worldSrc, "install Advanced Slime Paper")));
         sender.sendMessage(Text.color(dep("Economy (Vault)", plugin.economyReady(),
@@ -993,7 +993,7 @@ public final class IslandCommand {
                 "per-profile", "not per-profile")));
         sender.sendMessage(Text.color("&7Storage: &f" + storage));
         sender.sendMessage(Text.color("&7Perks: " + (plugin.perks().enabled()
-                ? "&aon &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
+                ? "&a✔ on &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
         sender.sendMessage(Text.color("&7Border: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
                 + " &8(per-player; admins bypass)"));
         sender.sendMessage(Text.color("&7Config health:"));
@@ -1010,13 +1010,13 @@ public final class IslandCommand {
 
     private static String dep(String name, boolean ok, String okDetail, String failDetail) {
         if (ok) {
-            return "&7" + name + ": &aready" + (okDetail.isEmpty() ? "" : " &7(" + okDetail + ")");
+            return "&7" + name + ": &a✔ ready" + (okDetail.isEmpty() ? "" : " &7(" + okDetail + ")");
         }
-        return "&7" + name + ": &c" + failDetail;
+        return "&7" + name + ": &c✘ " + failDetail;
     }
 
     private static String check(boolean ok, String okMsg, String failMsg) {
-        return ok ? "  &aOK &7" + okMsg : "  &cX &f" + failMsg;
+        return ok ? "  &a✔ &7" + okMsg : "  &c✘ &f" + failMsg;
     }
 
     void handleSchematic(CommandSender sender, String[] args) {
@@ -1064,7 +1064,7 @@ public final class IslandCommand {
                 .thenCompose(v -> plugin.worlds().loadIsland(name))
                 .thenCompose(world -> onMainSupply(() -> {
                     sender.sendMessage(Text.color("&7[chest] after save+reload = &e" + chestCount(world)
-                            + " &7(5 = persists, 0 = ASP drops container contents)"));
+                            + " &7(5 = persists ✔, 0 = ASP drops container contents)"));
                     return world;
                 }))
                 .thenCompose(w -> plugin.worlds().deleteIsland(name))
@@ -1270,7 +1270,7 @@ public final class IslandCommand {
                     if (error != null) {
                         sender.sendMessage(Text.color("&c[diag] FAILED: " + rootMessage(error)));
                     } else {
-                        sender.sendMessage(Text.color("&a[diag] deleted '" + name + "': ASP round-trip succeeded."));
+                        sender.sendMessage(Text.color("&a[diag] deleted '" + name + "': ASP round-trip succeeded. ✔"));
                     }
                 }));
     }
