@@ -6,15 +6,9 @@ import org.bukkit.OfflinePlayer;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * PlaceholderAPI front end for {@code %royalskyblock_<key>%}, for TAB, scoreboards, chat, holograms
- * and anything else that reads PAPI.
- *
- * <p>Deliberately thin: every placeholder is resolved by {@link IslandPlaceholders}, which knows
- * nothing about PlaceholderAPI. This class extends a PAPI type and so cannot even load without it,
- * which is exactly why the logic lives elsewhere — eco registers the same placeholders from the same
- * resolver, so they work in eco configs on a server with no PlaceholderAPI at all.
- *
- * <p>See {@link IslandPlaceholders} for the full list of keys.
+ * PlaceholderAPI front end for {@code %royalskyblock_<key>%}. Every placeholder is resolved by
+ * {@link IslandPlaceholders}, which has no PAPI dependency so eco can register the same placeholders.
+ * See {@link IslandPlaceholders} for the full list of keys.
  */
 public final class RoyalSkyblockExpansion extends PlaceholderExpansion {
 

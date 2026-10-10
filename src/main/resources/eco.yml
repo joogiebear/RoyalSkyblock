@@ -13,5 +13,5 @@ options:
   # RoyalSkyblockPlugin.getCustomCharts().
   bstats-id: 32733
   color: "&b"
-  # The reflective reload system was removed in eco 6.77.0 — handleReload() does the work instead.
+  # The reflective reload system was removed in eco 6.77.0: handleReload() does the work instead.
   uses-reflective-reload: false

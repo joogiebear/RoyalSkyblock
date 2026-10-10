@@ -23,9 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 /**
- * Manages islands, which now belong to <em>profiles</em> rather than players. Creates the slime world +
- * starter island, teleports players in, and deletes islands. Player-facing flows (whose island, who
- * may build) resolve through {@link com.mystipixel.royalskyblock.profile.ProfileManager}.
+ * Creates islands (slime world plus starter), teleports players in, and deletes them. Islands belong
+ * to profiles; who may build resolves through {@link com.mystipixel.royalskyblock.profile.ProfileManager}.
  */
 public final class IslandManager {
 
@@ -36,7 +35,7 @@ public final class IslandManager {
 
     private final Map<UUID, Island> byId = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> profileToIsland = new ConcurrentHashMap<>();
-    /** In-flight creations, so two rapid ensureIsland calls can't both allocate a world. */
+    // in-flight creations, so two rapid ensureIsland calls can't both allocate a world
     private final Map<UUID, CompletableFuture<Island>> creating = new ConcurrentHashMap<>();
 
     public IslandManager(RoyalSkyblockPlugin plugin, Storage storage, IslandWorldService worlds) {
@@ -46,12 +45,10 @@ public final class IslandManager {
         this.trash = new com.mystipixel.royalskyblock.world.IslandTrash(plugin);
     }
 
-    /** The island trash can — where deleted worlds go instead of oblivion. */
+    /** The island trash, where deleted worlds are archived. */
     public com.mystipixel.royalskyblock.world.IslandTrash trash() {
         return trash;
     }
-
-    // ── lookups ─────────────────────────────────────────────────────────────────
 
     public @Nullable Island getIsland(UUID islandId) {
         Island cached = byId.get(islandId);
@@ -77,10 +74,7 @@ public final class IslandManager {
         return island;
     }
 
-    /**
-     * Resolve which island a world belongs to. Every island is its own world named
-     * {@code <prefix><islandId>}, so this is a direct parse — no region lookup.
-     */
+    /** The island a world belongs to; each island's world is named {@code <prefix><islandId>}. */
     public @Nullable Island getIslandByWorld(World world) {
         if (world == null) {
             return null;
@@ -102,21 +96,16 @@ public final class IslandManager {
         profileToIsland.put(island.profileId(), island.id());
     }
 
-    // ── create ──────────────────────────────────────────────────────────────────
-
     /**
-     * Get the profile's island, creating (world + starter) it if it doesn't exist yet.
-     *
-     * <p>Creation is deduplicated per profile: a second call arriving while the first is still building
-     * (a double-clicked switch button, say) joins the in-flight future instead of allocating a second
-     * world that nothing would ever reference again.
+     * Get the profile's island, creating it (world plus starter) if needed. A second call while the first
+     * is still building joins the in-flight future rather than allocating another world.
      */
     public CompletableFuture<Island> ensureIsland(UUID profileId) {
         Island existing;
         try {
             existing = getIslandByProfile(profileId);
         } catch (StorageException e) {
-            // Unknown is not absent: creating here would give the profile a second island.
+            // unknown is not absent: creating here would give the profile a second island
             return CompletableFuture.failedFuture(e);
         }
         if (existing != null) {
@@ -142,7 +131,7 @@ public final class IslandManager {
 
         return worlds.createIsland(worldName)
                 .thenCompose(world -> onMain(() -> {
-                    // Prefer a WorldEdit/FAWE schematic; fall back to the code-generated starter.
+                    // prefer a WorldEdit/FAWE schematic; fall back to the code-generated starter
                     String schematic = plugin.conf().getString("island.starter.schematic", "default");
                     if (!plugin.schematics().tryPasteSchematic(world, px, py, pz, schematic)) {
                         StarterIslandBuilder.paste(world, px, py, pz, section("island.starter"), plugin.getLogger());
@@ -164,10 +153,8 @@ public final class IslandManager {
                 }))
                 .thenCompose(island -> {
                     worlds.saveIsland(worldName);        // the starter build, now that it is pasted
-                    // The row is awaited, not fire-and-forget: an island that exists only in the cache
-                    // is gone after a restart, and the profile would then be given a second one while
-                    // this world sat unreferenced. On failure the fresh world is removed and the create
-                    // fails, so trying again starts clean.
+                    // Await the row: an island only in the cache is gone after a restart and the profile would get a
+                    // second one. On failure the fresh world is removed so a retry starts clean.
                     return runAsyncFuture(() -> {
                         if (!storage.saveIsland(island)) {
                             throw new IllegalStateException("the new island could not be saved to the database");
@@ -181,13 +168,8 @@ public final class IslandManager {
                 });
     }
 
-    // ── teleport ─────────────────────────────────────────────────────────────────
-
-    /**
-     * Load an island's world and settle the time it spent unloaded. Every path that brings an island
-     * back must go through here, not {@code worlds.loadIsland} directly — an island loaded without
-     * its catch-up silently loses whatever should have happened while it slept.
-     */
+    // Every path that loads an island must go through here, not worlds.loadIsland directly, or the
+    // island loses its offline catch-up.
     private CompletableFuture<World> loadWithCatchup(Island island) {
         return worlds.loadIsland(island.worldName()).thenCompose(world -> onMain(() -> {
             plugin.unloads().forget(island.worldName());
@@ -197,10 +179,7 @@ public final class IslandManager {
         }));
     }
 
-    /**
-     * Fire {@link IslandCatchupEvent} for the offline window, then clear the stamp so a second load
-     * can't pay the same time twice. Main thread.
-     */
+    // fire IslandCatchupEvent, then clear the stamp so a second load can't pay the same time twice; main thread
     private void fireCatchup(Island island, World world) {
         long unloadedAt = island.unloadedAt();
         if (unloadedAt <= 0) {
@@ -279,17 +258,10 @@ public final class IslandManager {
         return base;
     }
 
-    // ── delete ────────────────────────────────────────────────────────────────────
-
     /**
-     * Evacuate anyone on the island, archive its world to the trash, then remove it from the store
-     * and its metadata row.
-     *
-     * <p>The world is saved before archiving so the trash holds its final state, and an archive
-     * failure aborts the whole delete — an island that could not be archived stays an island,
-     * because the alternative is exactly the unrecoverable loss the trash exists to prevent. The
-     * caches are cleared only once everything committed, so an aborted delete leaves a working
-     * island rather than a ghost.
+     * Evacuate the island, archive its world to the trash, then remove it from the store and its row.
+     * An archive failure aborts the whole delete, and caches are cleared only once everything committed,
+     * so a failed delete leaves a working island.
      */
     public CompletableFuture<Void> deleteIsland(UUID islandId) {
         Island island = getIsland(islandId);
@@ -301,23 +273,20 @@ public final class IslandManager {
         return onMain(() -> {
             evacuate(worldName, plugin.messages().raw("delete.evicted"));
             return (Void) null;
-        }).thenCompose(ignored -> worlds.unloadIsland(worldName, true))   // final save → fresh archive
+        }).thenCompose(ignored -> worlds.unloadIsland(worldName, true))   // final save, then a fresh archive
                 .thenCompose(ignored -> runAsyncFuture(() -> {
                     try {
                         trash.archive(worldName, false);
                     } catch (Exception e) {
-                        throw new RuntimeException("Could not archive the island before deleting it — "
+                        throw new RuntimeException("Could not archive the island before deleting it, so "
                                 + "the delete was aborted and the island is untouched: " + e.getMessage(), e);
                     }
                 }))
-                // Row before world. The other way round, a failed row delete left a row pointing at a
-                // deleted world: the owner's home failed forever and they could not create a new
-                // island, because the profile still had one. Now a row failure aborts with the island
-                // intact, and a world failure afterwards only leaves an archived, unreferenced world
-                // file, which /is admin orphans finds.
+                // Row before world: a row failure aborts with the island intact, and a world failure afterwards only
+                // leaves an archived, unreferenced world that /is admin orphans finds.
                 .thenCompose(ignored -> runAsyncFuture(() -> {
                     if (!storage.deleteIsland(islandId)) {
-                        throw new IllegalStateException("its database row could not be removed — the delete was"
+                        throw new IllegalStateException("its database row could not be removed, so the delete was"
                                 + " aborted and the island is untouched");
                     }
                 }))
@@ -334,10 +303,9 @@ public final class IslandManager {
     }
 
     /**
-     * The restore half of the trash: write archived world bytes into the store under a fresh island
-     * id and give the profile a row pointing at it. Home and radius come from config exactly like a
-     * new island's — the upgrades and level history lived in rows that died with the old island, but
-     * the blocks are the part that cannot be re-earned by clicking.
+     * Restore archived world bytes into the store under a fresh island id and give the profile a row
+     * pointing at it. Home and radius come from config like a new island's; upgrades and level history
+     * are not restored.
      */
     public CompletableFuture<Island> restoreIsland(UUID profileId, byte[] worldData) {
         UUID islandId = UUID.randomUUID();
@@ -422,19 +390,16 @@ public final class IslandManager {
     }
 
     private void applyBorder(World world, Island island) {
-        // Borders are enforced per-player (so admins with royalskyblock.bypass can pass through); the
-        // world's own border is kept wide open so it never enforces anyone. See BorderService.
+        // borders are per-player (see BorderService); the world's own border stays wide open
         world.getWorldBorder().setSize(59_999_968.0); // Bukkit's max world-border size
         plugin.borders().applyToWorld(world);
     }
-
-    // ── helpers ────────────────────────────────────────────────────────────────────
 
     private @Nullable ConfigurationSection section(String path) {
         return plugin.conf().getConfigurationSection(path);
     }
 
-    /** A metadata write, on the plugin's storage thread (see RoyalSkyblockPlugin.writeAsync). */
+    // a metadata write, on the plugin's storage thread (see RoyalSkyblockPlugin.writeAsync)
     private void runAsync(Runnable runnable) {
         plugin.writeAsync(runnable);
     }

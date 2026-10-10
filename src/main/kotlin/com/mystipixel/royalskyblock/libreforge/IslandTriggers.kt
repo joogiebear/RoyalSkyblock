@@ -5,22 +5,11 @@ import com.willfp.libreforge.triggers.Triggers
 import org.bukkit.entity.Player
 
 /**
- * Island events, published to libreforge as triggers.
+ * Island events, published to libreforge as triggers. The plugin's own services call [fire] where the
+ * thing happens; there is no Bukkit event behind them.
  *
- * The counterpart to [IslandConditions]: those answer "what is true about this island right now",
- * these fire when it changes. Together they are what makes RoyalSkyblock scriptable from any eco
- * config — a quest that completes when your island hits level 50, a crate reward for your first
- * co-op member, an EcoItem that reacts to buying an upgrade.
- *
- * None of these are Bukkit events, so there is nothing to listen to; the plugin's own services call
- * [fire] at the point the thing happens. That is deliberate — an "island levelled up" event would be
- * a Bukkit API surface RoyalSkyblock would then have to keep stable forever, while a libreforge
- * trigger is already the suite's shared vocabulary for exactly this.
- *
- * Every one is dispatched **per online member**, because a libreforge trigger needs a player to
- * dispatch to and an island is owned by a profile rather than a person. An island that levels up with
- * three members online fires three times, one per player, which is what content wants: each member
- * gets their own reward.
+ * Each is dispatched per online member (a trigger needs a player, and an island belongs to a profile),
+ * so a level-up with three members online fires three times.
  */
 object IslandTriggers {
 

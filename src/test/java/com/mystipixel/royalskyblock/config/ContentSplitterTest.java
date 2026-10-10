@@ -13,13 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * The slicing behind {@code /is admin split-content}.
- *
- * <p>This rewrites configs an admin hand-wrote and cannot easily reconstruct, so the cases that get
- * tested are the ones that would quietly lose something: a banner swallowed by the first item, a
- * comment attached to the wrong side of a boundary, an indent guessed rather than verified.
- */
+// The slicing behind /is admin split-content. Tests the cases that would quietly lose something: a
+// banner swallowed by the first item, a comment on the wrong side of a boundary, a guessed indent.
 class ContentSplitterTest {
 
     private static final List<String> UPGRADES = List.of(
@@ -50,7 +45,7 @@ class ContentSplitterTest {
 
         assertEquals(List.of("size", "sanctuary"), List.copyOf(blocks.keySet()));
         assertTrue(blocks.get("size").comment().isEmpty(),
-                "the banner documents every track — giving it to the first one loses it for the rest");
+                "the banner documents every track; giving it to the first one loses it for the rest");
     }
 
     @Test
@@ -100,8 +95,8 @@ class ContentSplitterTest {
     @Test
     @DisplayName("settings above the container are never mistaken for content")
     void settingsAreNotItems() {
-        // enabled: and effect-refresh-seconds: sit at indent 0 with values, so they must not match —
-        // splitting them out would produce perks named after the plugin's own switches.
+        // enabled: and effect-refresh-seconds: sit at indent 0 with values, so they must not match, or the
+        // split would produce perks named after the plugin's own switches.
         List<String> perks = List.of("enabled: true", "perks:", "  haste:", "    name: x");
 
         assertEquals(List.of("haste"), List.copyOf(ContentSplitter.sliceBlocks(perks, 2, "perks").keySet()));
@@ -147,8 +142,7 @@ class ContentSplitterTest {
     @Test
     @DisplayName("comment alignment survives the shift")
     void commentAlignmentIsPreserved() {
-        // The aligned documentation tables are exactly what a dump-and-reload would destroy, and the
-        // reason this slices text at all — so a split that flattens them has failed at its one job.
+        // aligned documentation tables are what a dump-and-reload would destroy, so a split must keep them
         List<String> perks = List.of(
                 "perks:",
                 "  # name   shown in the menu",

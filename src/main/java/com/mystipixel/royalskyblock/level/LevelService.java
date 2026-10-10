@@ -26,34 +26,25 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Computes island levels by tallying valuable blocks — built to stay off the hot path.
- *
- * <p><b>Performance model.</b> A scan (1) figures out the island's chunk square from its centre +
- * radius, (2) snapshots those chunks a few per tick on the main thread (so there's no single big
- * spike), then (3) tallies block values on a worker thread using the thread-safe {@link ChunkSnapshot}
- * copies. Only the final model write + DB save hop back to the main thread. Per-island cooldown and a
- * de-dupe guard stop scans from stacking up. The leaderboard reads stored levels and never scans live.
+ * Computes island levels by tallying valuable blocks. A scan snapshots the island's chunks a few per
+ * tick on the main thread, tallies the {@link ChunkSnapshot}s on a worker thread, then writes the model
+ * and saves back on the main thread. A per-island cooldown and in-flight guard stop scans stacking up;
+ * the leaderboard only reads stored levels.
  */
 public final class LevelService {
 
-    /** How long a scan may take to gather its chunks before it is abandoned and the island released. */
+    // how long a scan may take to gather its chunks before it is abandoned and the island released
     private static final long SCAN_TIMEOUT_SECONDS = 120;
 
     private final RoyalSkyblockPlugin plugin;
     private final LevelConfig config;
 
-    /** island id → epoch millis of its last completed scan (for the cooldown). */
+    // island id to epoch millis of its last completed scan (for the cooldown)
     private final Map<UUID, Long> lastScan = new ConcurrentHashMap<>();
-    /** island ids with a scan in flight — never run two at once for the same island. */
+    // island ids with a scan in flight; never two at once for the same island
     private final java.util.Set<UUID> scanning = ConcurrentHashMap.newKeySet();
-    /**
-     * island id → the block counts from its last scan (for the level breakdown GUI).
-     *
-     * <p>Least-recently-used and capped: each entry holds a count per material, so keeping one for every
-     * island ever scanned would grow without limit on a busy server. Only the island whose breakdown is
-     * actually being viewed matters, and anything evicted is rebuilt by the next scan, so dropping the
-     * coldest entries costs nothing but a recalculation.
-     */
+    // island id to block counts from its last scan (level breakdown GUI). LRU-capped: evicted entries are
+    // rebuilt by the next scan.
     private final Map<UUID, Map<Material, Long>> breakdowns = Collections.synchronizedMap(
             new LinkedHashMap<>(16, 0.75f, true) {
                 @Override
@@ -62,7 +53,6 @@ public final class LevelService {
                 }
             });
 
-    /** How many islands' block breakdowns to keep. Generous next to how many are viewed at once. */
     private static final int MAX_CACHED_BREAKDOWNS = 200;
 
     public LevelService(RoyalSkyblockPlugin plugin) {
@@ -98,9 +88,8 @@ public final class LevelService {
     }
 
     /**
-     * Recalculate an island's level. Resolves to the new level, or the current stored level if it can't
-     * scan right now (world not loaded, already scanning, or on cooldown) — callers can always show
-     * {@code island.level()} meanwhile.
+     * Recalculate an island's level. Resolves to the new level, or the stored level if it can't scan now
+     * (world not loaded, already scanning, or on cooldown).
      */
     public CompletableFuture<Double> recalc(Island island) {
         if (scanning.contains(island.id()) || cooldownRemaining(island) > 0) {
@@ -120,18 +109,16 @@ public final class LevelService {
 
         CompletableFuture<Double> result = new CompletableFuture<>();
         gatherSnapshots(world, minCX, maxCX, minCZ, maxCZ)
-                // The gather is a per-tick task that /is reload cancels, and a chunk load can simply
-                // never finish (the world unloading mid-scan). Either way the future never completed
-                // and the island stayed in `scanning` until a restart, refusing every recalc. The
-                // timeout routes both through the failure path below, which releases it.
+                // A reload cancels the gather task and a chunk load may never finish (world unloaded mid-scan); the
+                // timeout routes both through the failure path, which releases the island.
                 .orTimeout(SCAN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .thenApplyAsync(snaps -> tally(snaps, cx, cz, r))  // heavy sum off the main thread
-                .thenAccept(totals -> runMain(() -> {             // model write + persist back on main
+                .thenAccept(totals -> runMain(() -> {             // model write and persist back on main
                     double level = config.levelFor(totals.points);
                     island.setLevel(level);
                     breakdowns.put(island.id(), totals.counts);
                     lastScan.put(island.id(), nowMillis());
-                    grantLevelUps(island, level);                 // pay any newly-crossed level rewards
+                    grantLevelUps(island, level);
                     plugin.writeAsync(() -> plugin.storage().saveIsland(island));
                     scanning.remove(island.id());
                     result.complete(level);
@@ -147,16 +134,11 @@ public final class LevelService {
         return result;
     }
 
-    // ── level-up rewards ─────────────────────────────────────────────────────────
-
-    /**
-     * Pay out rewards for every integer level newly crossed since the last payout, then bump the
-     * island's reward marker so nothing is ever paid twice. Runs on the main thread (console commands).
-     */
+    // Pay rewards for every integer level newly crossed, then bump the reward marker so nothing is paid
+    // twice. Main thread (console commands).
     private void grantLevelUps(Island island, double newLevel) {
         Profile profile = plugin.profiles().getProfile(island.profileId());
-        // The profile's marker survives the island being deleted; the island's alone did not, so a
-        // fresh island paid every reward again.
+        // the profile's marker survives the island being deleted, so a fresh island doesn't pay again
         int from = Math.max(island.rewardLevel(), profile == null ? 0 : profile.rewardLevel());
         int to = (int) Math.floor(newLevel);
         if (to <= from) {
@@ -164,8 +146,8 @@ public final class LevelService {
         }
         String owner = profile == null ? "" : ownerName(profile);
         for (int lvl = from + 1; lvl <= to; lvl++) {
-            // Chains run per online member: an effect targets a player, while the commands below are
-            // server-side and address the owner by name, so they stay once-per-level.
+            // chains run per online member (an effect targets a player); the commands below address the owner by
+            // name, so they stay once per level
             if (!com.mystipixel.royalskyblock.libreforge.LevelRewardChains.isEmpty() && profile != null) {
                 for (var member : profile.members()) {
                     Player online = Bukkit.getPlayer(member.uuid());
@@ -203,8 +185,7 @@ public final class LevelService {
             Player online = Bukkit.getPlayer(member.uuid());
             if (online != null) {
                 plugin.messages().send(online, "level.up", "level", String.valueOf(level));
-                // Dispatched per online member: a libreforge trigger needs a player, and an island
-                // belongs to a profile rather than a person.
+                // per online member: a libreforge trigger needs a player
                 com.mystipixel.royalskyblock.libreforge.IslandTriggers.levelUp(online, island, level);
             }
         }
@@ -215,12 +196,9 @@ public final class LevelService {
         return name != null ? name : profile.name();
     }
 
-    // ── auto-recalc ──────────────────────────────────────────────────────────────
-
     /**
-     * Background refresh: recalc the islands players are currently standing on, up to
-     * {@code max-per-cycle}, skipping any on cooldown or already scanning. Islands nobody is on keep
-     * their stored level (recalc on demand via {@code /is level}). Cheap: only cached lookups.
+     * Recalc the islands players are standing on, up to {@code max-per-cycle}, skipping any on cooldown or
+     * already scanning. Other islands keep their stored level.
      */
     public void autoRecalcActiveIslands() {
         int max = config.autoRecalcMaxPerCycle();
@@ -247,8 +225,6 @@ public final class LevelService {
         }
     }
 
-    // ── gathering: snapshot chunks a few per tick on the main thread ─────────────────
-
     private CompletableFuture<List<ChunkSnapshot>> gatherSnapshots(World world, int minCX, int maxCX, int minCZ, int maxCZ) {
         List<int[]> coords = new ArrayList<>();
         for (int x = minCX; x <= maxCX; x++) {
@@ -271,7 +247,7 @@ public final class LevelService {
             public void run() {
                 for (int n = 0; n < perTick && index.get() < coords.size(); n++) {
                     int[] c = coords.get(index.getAndIncrement());
-                    // gen=false: never generate new terrain just to weigh it.
+                    // gen=false: never generate new terrain just to weigh it
                     world.getChunkAtAsync(c[0], c[1], false).thenAccept(chunk -> {
                         try {
                             if (chunk != null) {
@@ -279,7 +255,7 @@ public final class LevelService {
                                 snaps.add(chunk.getChunkSnapshot(true, false, false));
                             }
                         } catch (Throwable ignored) {
-                            // snapshot failed for this chunk — count it as empty
+                            // snapshot failed for this chunk, count it as empty
                         } finally {
                             if (remaining.decrementAndGet() == 0) {
                                 done.complete(snaps);
@@ -300,13 +276,8 @@ public final class LevelService {
         return done;
     }
 
-    // ── tallying: pure block-type reads off the main thread ─────────────────────────
-
-    /**
-     * Sum block values inside the island's square only. The snapshots are whole chunks, and chunk
-     * edges rarely line up with the radius, so without the column check up to 15 blocks beyond the
-     * border on the +X/+Z sides counted towards level — and anything pushed or grown out past it.
-     */
+    // Only blocks inside the island's square count: snapshots are whole chunks, which extend past the
+    // border.
     private ScanTotals tally(List<ChunkSnapshot> snapshots, int cx, int cz, int r) {
         long points = 0;
         Map<Material, Long> counts = new EnumMap<>(Material.class);
@@ -351,12 +322,11 @@ public final class LevelService {
         }
     }
 
-    /** {@code System.currentTimeMillis()} isolated so the scheduling stays testable. */
+    // isolated so the scheduling stays testable
     private long nowMillis() {
         return System.currentTimeMillis();
     }
 
-    /** Raw scan output: total points and per-block counts. */
     private record ScanTotals(long points, Map<Material, Long> counts) {
     }
 }

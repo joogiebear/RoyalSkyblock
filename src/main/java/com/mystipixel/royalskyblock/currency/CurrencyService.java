@@ -11,12 +11,12 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Resolves the config-driven {@code currencies:} section and handles affordability checks + charging.
+ * Resolves the config-driven {@code currencies:} section and handles affordability checks and charging.
  * Two currency kinds:
  * <ul>
- *   <li><b>vault</b> — money via the Vault economy (check + charge natively).</li>
- *   <li><b>command</b> — universal: read the balance from a PlaceholderAPI placeholder for the check,
- *       and run a console command to charge. Works with EcoBits gems or any currency plugin.</li>
+ *   <li><b>vault</b>: money via the Vault economy.</li>
+ *   <li><b>command</b>: read the balance from a PlaceholderAPI placeholder for the check, and run a
+ *       console command to charge. Works with EcoBits gems or any currency plugin.</li>
  * </ul>
  */
 public final class CurrencyService {
@@ -64,16 +64,15 @@ public final class CurrencyService {
         }
         CurrencyDef def = currencies.get(cost.currency().toLowerCase(Locale.ROOT));
         if (def == null) {
-            plugin.getLogger().warning("Unknown currency '" + cost.currency() + "' — treating as unaffordable.");
+            plugin.getLogger().warning("Unknown currency '" + cost.currency() + "': treating as unaffordable.");
             return false;
         }
         if (def.kind() == Kind.VAULT) {
             return vault != null && vault.has(player, cost.amount());
         }
-        // command currency: check via placeholder
         String placeholder = def.balancePlaceholder();
         if (placeholder == null || placeholder.isBlank()) {
-            return true; // no check configured — trust the charge command
+            return true; // no check configured, trust the charge command
         }
         if (!Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI")) {
             plugin.getLogger().warning("Currency '" + cost.currency() + "' needs PlaceholderAPI for its balance check.");
@@ -119,12 +118,10 @@ public final class CurrencyService {
         }
     }
 
-    /** Whether a currency key is defined in the {@code currencies:} section. */
     public boolean isDefined(String currency) {
         return currencies.containsKey(currency.toLowerCase(Locale.ROOT));
     }
 
-    /** Whether a defined currency is a Vault-economy currency. */
     public boolean isVault(String currency) {
         CurrencyDef def = currencies.get(currency.toLowerCase(Locale.ROOT));
         return def != null && def.kind() == Kind.VAULT;
@@ -143,8 +140,6 @@ public final class CurrencyService {
         String name = def != null ? def.displayName() : cost.currency();
         return trimAmount(cost.amount()) + " " + name;
     }
-
-    // ── helpers ──────────────────────────────────────────────────────────────────
 
     private String fill(String command, Player player, double amount) {
         return command.replace("%player%", player.getName()).replace("%amount%", trimAmount(amount));

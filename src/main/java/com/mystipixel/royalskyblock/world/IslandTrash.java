@@ -13,15 +13,10 @@ import java.util.Comparator;
 import java.util.List;
 
 /**
- * The island trash can. Every deleted island's world bytes are archived here before the store
- * forgets them, because {@code /is delete confirm} is two words typed in anger and the island IS
- * the player's progress. Archives are plain {@code .slime} files regardless of which backend the
- * live store uses — the loader API is bytes in, bytes out — pruned after a retention window.
- *
- * <p>Restoring: {@code /is admin trash restore <archive> <player>} writes the bytes back under a
- * fresh island id for the player's active profile. Upgrades and level history lived in database
- * rows that died with the old island; a restore brings back the blocks, which is the part that
- * cannot be re-earned by clicking.
+ * The island trash: every deleted island's world bytes are archived here before the store forgets
+ * them. Archives are plain {@code .slime} files whatever the live backend, pruned after a retention
+ * window. {@code /is admin trash restore <archive> <player>} writes the blocks back under a fresh
+ * island id; upgrades and level history are not restored.
  */
 public final class IslandTrash {
 
@@ -49,9 +44,8 @@ public final class IslandTrash {
     }
 
     /**
-     * Archive a world's stored bytes. Respects the {@code trash.enabled} switch unless {@code force}
-     * — the orphan purge always archives, because "purge" must never mean "hard-delete". Throws on
-     * failure so a delete that could not be archived is aborted rather than made unrecoverable.
+     * Archive a world's stored bytes. Respects {@code trash.enabled} unless {@code force} (the orphan
+     * purge always archives). Throws on failure so a delete that couldn't be archived is aborted.
      */
     public void archive(String worldName, boolean force) throws Exception {
         if (!force && !enabled()) {

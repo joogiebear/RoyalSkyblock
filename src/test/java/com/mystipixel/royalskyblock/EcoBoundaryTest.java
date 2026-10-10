@@ -13,19 +13,13 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Keeps eco and libreforge types confined to the files that already adapt them.
- *
- * <p>eco stays a hard dependency, but every eco release is a chance for a signature to move. The
- * fewer files that touch eco, the smaller an eco bump is to review, and the gameplay code (islands,
- * profiles, bank, upgrades, storage) stays plain Bukkit. A new file that needs eco should normally go
- * through one of these adapters; if it genuinely cannot, add it here deliberately.
- */
+// Keeps eco and libreforge types confined to the files that adapt them, so an eco bump stays small to
+// review. A new file that genuinely needs eco is added to ALLOWED deliberately.
 class EcoBoundaryTest {
 
     private static final Pattern ECO_IMPORT = Pattern.compile("^\\s*import\\s+com\\.willfp\\.", Pattern.MULTILINE);
 
-    /** Paths relative to the package root, i.e. under {@code com/mystipixel/royalskyblock/}. */
+    // paths relative to com/mystipixel/royalskyblock/
     private static final Set<String> ALLOWED = Set.of(
             // Plugin base: extends LibreforgePlugin, owns lifecycle, reload, extensions and bStats.
             "RoyalSkyblockPlugin.kt",
@@ -61,7 +55,7 @@ class EcoBoundaryTest {
         Set<String> unexpected = new TreeSet<>(importing);
         unexpected.removeAll(ALLOWED);
         assertTrue(unexpected.isEmpty(), "eco/libreforge imported outside the adapter files: " + unexpected
-                + " — route it through an existing adapter, or add the file to EcoBoundaryTest.ALLOWED on purpose");
+                + ": route it through an existing adapter, or add the file to EcoBoundaryTest.ALLOWED on purpose");
 
         // A stale entry would let a later file quietly reuse the exemption, so keep the list exact.
         Set<String> stale = new TreeSet<>(ALLOWED);
@@ -84,7 +78,7 @@ class EcoBoundaryTest {
                 }
             }
         }
-        assertTrue(!result.isEmpty(), "found no eco imports at all — is the test running from the module directory?");
+        assertTrue(!result.isEmpty(), "found no eco imports at all; is the test running from the module directory?");
         return result;
     }
 }

@@ -28,17 +28,9 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * The whole metadata store over one HikariCP data source (SQLite default / MySQL for a network) —
- * islands, profiles, coop rosters, each player's active profile, and per-profile saved state. Island
- * blocks live in the ASP slime data-source, not here. Matches the suite's dual-dialect pattern; the
- * JDBC driver + pool come from Paper's library loader.
- */
-/**
- * The SQL-backed {@link Storage}: SQLite by default, MySQL when configured, behind a HikariCP pool.
- *
- * <p>Unchanged from the implementation RoyalSkyblock has always used apart from its name and now
- * declaring the interface. It owns its own database configuration, which is what makes this plugin the
- * odd one out in the eco suite — see {@link Storage} for why that matters and what replaces it.
+ * The SQL-backed {@link Storage}: SQLite by default, MySQL for a network, behind a HikariCP pool.
+ * Holds islands, profiles, coop rosters, active profiles, per-profile saved state and banks; island
+ * blocks live in the ASP slime data source. The JDBC driver and pool come from Paper's library loader.
  */
 public final class SqlStorage implements Storage {
 
@@ -52,8 +44,6 @@ public final class SqlStorage implements Storage {
     public SqlStorage(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
     }
-
-    // ── lifecycle ──────────────────────────────────────────────────────────────
 
     public boolean connect() {
         try {
@@ -95,8 +85,8 @@ public final class SqlStorage implements Storage {
                 hikari.setMaximumPoolSize(SqliteSettings.POOL_SIZE);
                 hikari.setDataSourceProperties(SqliteSettings.properties());
             }
-            // A connection that cannot be had within this long fails the call rather than holding the
-            // server thread: Hikari's 30s default could freeze the server behind one stuck query.
+            // fail the call rather than hold the server thread; Hikari's 30s default could freeze the server
+            // behind one stuck query
             hikari.setConnectionTimeout(10_000);
 
             this.dataSource = new HikariDataSource(hikari);
@@ -156,8 +146,7 @@ public final class SqlStorage implements Storage {
                         + "joined_at " + big + " NOT NULL, PRIMARY KEY (profile_id, uuid))",
                 "CREATE TABLE IF NOT EXISTS player_state ("
                         + "uuid " + txt36 + " PRIMARY KEY, active_profile " + txt36 + ")",
-                // Keyed by (profile, player) so each coop member keeps their own inventory/progression
-                // on a shared-island profile.
+                // keyed by (profile, player) so each coop member keeps their own inventory/progression
                 "CREATE TABLE IF NOT EXISTS pending_upgrades ("
                         + "island_id " + txt36 + " NOT NULL, upgrade_key " + txt32 + " NOT NULL, "
                         + "target_tier " + integer + " NOT NULL, complete_at " + big + " NOT NULL, "
@@ -168,7 +157,6 @@ public final class SqlStorage implements Storage {
                         + "exp_level " + integer + " NOT NULL DEFAULT 0, exp_progress " + flt + " NOT NULL DEFAULT 0, "
                         + "health " + dbl + " NOT NULL DEFAULT 20, food " + integer + " NOT NULL DEFAULT 20, "
                         + "saturation " + flt + " NOT NULL DEFAULT 5, PRIMARY KEY (profile_id, player_uuid))",
-                // Native bank: accounts keyed by an opaque id (personal per-profile or shared coop).
                 "CREATE TABLE IF NOT EXISTS bank_accounts ("
                         + "account_id " + txt + " PRIMARY KEY, balance " + dbl + " NOT NULL DEFAULT 0, "
                         + "level " + integer + " NOT NULL DEFAULT 1, last_interest " + big + " NOT NULL DEFAULT 0)",
@@ -188,9 +176,7 @@ public final class SqlStorage implements Storage {
             createIndexIfMissing(c, "idx_islands_profile", "islands", "profile_id");
             createIndexIfMissing(c, "idx_profiles_owner", "profiles", "owner");
             createIndexIfMissing(c, "idx_profile_members_uuid", "profile_members", "uuid");
-            // Serves getBankTransactions' "WHERE account_id = ? ORDER BY created_at DESC" exactly.
-            // Without it that query is a full scan plus a filesort, and it gets slower forever as the
-            // ledger grows — every bank-history open pays for every transaction ever recorded.
+            // serves getBankTransactions (WHERE account_id = ? ORDER BY created_at DESC) without a full scan
             createIndexIfMissing(c, "idx_bank_txns_account_created", "bank_txns", "account_id, created_at");
         }
         // migrations for tables that predate a column
@@ -211,7 +197,7 @@ public final class SqlStorage implements Storage {
         addColumnIfMissing("profile_data", "bank_bonus", integer + " NOT NULL DEFAULT 0");
     }
 
-    /** Best-effort ADD COLUMN; ignores the "already exists" error so it's safe to run every boot. */
+    // ADD COLUMN unless the metadata says it exists, so it is safe to run every boot
     private void addColumnIfMissing(String table, String column, String definition) {
         try (Connection c = dataSource.getConnection()) {
             try (ResultSet rs = c.getMetaData().getColumns(null, null, table, column)) {
@@ -224,20 +210,14 @@ public final class SqlStorage implements Storage {
                 plugin.getLogger().info("Migrated " + table + ": added column " + column + ".");
             }
         } catch (SQLException e) {
-            // Previously every failure here was swallowed as "column already exists", so a migration
-            // that genuinely failed looked identical to one that wasn't needed. Ask the metadata
-            // first, then let a real failure be loud — a half-migrated schema breaks every read.
+            // a half-migrated schema breaks every read, so fail loudly
             plugin.getLogger().severe("Migration failed: could not add " + table + "." + column
-                    + " — " + e.getMessage());
+                    + " (" + e.getMessage() + ")");
         }
     }
 
-    /**
-     * Creates an index unless the table already carries one by that name. MySQL has no
-     * {@code CREATE INDEX IF NOT EXISTS} — SQLite and MariaDB both do, which is why this went
-     * unnoticed — so the existence check belongs here, the same way {@link #addColumnIfMissing}
-     * asks the metadata before altering. It also retrofits a table created before the index existed.
-     */
+    // MySQL has no CREATE INDEX IF NOT EXISTS, so ask the metadata first. Also retrofits a table created
+    // before the index existed.
     private void createIndexIfMissing(Connection c, String name, String table, String columns)
             throws SQLException {
         try (ResultSet rs = c.getMetaData().getIndexInfo(null, null, table, false, true)) {
@@ -252,8 +232,6 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    // ── islands ────────────────────────────────────────────────────────────────
-
     public @Nullable Island getIsland(UUID id) {
         return queryIsland("WHERE id = ?", id.toString());
     }
@@ -262,12 +240,7 @@ public final class SqlStorage implements Storage {
         return queryIsland("WHERE profile_id = ?", profileId.toString());
     }
 
-    /**
-     * The columns {@link #readIsland} expects, in one place. These used to be spelled out at each
-     * query site, and adding unloaded_at to only some of them produced a schema that had the column
-     * and reads that never asked for it — every island load failed with "Column not found" while the
-     * migration cheerfully reported success. One constant, one place to change.
-     */
+    // the columns readIsland expects, in one place so every query asks for all of them
     private static final String ISLAND_COLUMNS =
             "id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, "
             + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at";
@@ -280,7 +253,7 @@ public final class SqlStorage implements Storage {
                 return rs.next() ? readIsland(rs) : null;
             }
         } catch (SQLException e) {
-            // Not null: null means "no such island", and callers delete things on that answer.
+            // not null: null means "no such island", and callers delete things on that answer
             throw new StorageException("Could not load island (" + where + "): " + e.getMessage(), e);
         }
     }
@@ -302,7 +275,6 @@ public final class SqlStorage implements Storage {
         return island;
     }
 
-    /** All islands (for the visit browser). Filtering happens in the caller. */
     public List<Island> getAllIslands() {
         List<Island> out = new ArrayList<>();
         String sql = "SELECT " + ISLAND_COLUMNS + " FROM islands";
@@ -357,14 +329,11 @@ public final class SqlStorage implements Storage {
         return executeUpdate("DELETE FROM islands WHERE id = ?", id.toString());
     }
 
-    // ── profiles ────────────────────────────────────────────────────────────────
-
     public @Nullable Profile getProfile(UUID id) {
         String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE id = ?";
         Profile profile;
-        // Load the profile + roster on one connection, then release it BEFORE looking up the island —
-        // the island query opens its own connection, and nesting on the single-connection SQLite pool
-        // would deadlock.
+        // Release this connection before looking up the island: that query opens its own, and nesting on
+        // the single-connection SQLite pool would deadlock.
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, id.toString());
             try (ResultSet rs = st.executeQuery()) {
@@ -385,13 +354,7 @@ public final class SqlStorage implements Storage {
         return profile;
     }
 
-    /**
-     * Every profile a player owns, with members and island ids filled in.
-     *
-     * <p>Three queries regardless of how many profiles they have. Loading members and the island one
-     * profile at a time meant a login cost {@code 1 + 2N} round trips, which is slow anywhere and
-     * genuinely painful against a remote database.
-     */
+    /** Every profile a player owns, with members and island ids filled in. Three queries regardless of count. */
     public List<Profile> getProfilesByOwner(UUID owner) {
         List<Profile> out = new ArrayList<>();
         Map<UUID, Profile> byId = new HashMap<>();
@@ -411,14 +374,14 @@ public final class SqlStorage implements Storage {
         } catch (SQLException e) {
             plugin.getLogger().severe("Could not load profiles for " + owner + ": " + e.getMessage());
         }
-        // Island lookup AFTER the connection above is released (see getProfile) to avoid nesting.
+        // island lookup after the connection above is released (see getProfile)
         if (!byId.isEmpty()) {
             attachIslandIds(byId);
         }
         return out;
     }
 
-    /** Members for several profiles in one query, sorted into the profiles they belong to. */
+    // members for several profiles in one query
     private void loadMembersFor(Connection c, Map<UUID, Profile> profiles) throws SQLException {
         String sql = "SELECT profile_id, uuid, name, role, joined_at FROM profile_members WHERE profile_id IN ("
                 + placeholders(profiles.size()) + ")";
@@ -443,10 +406,7 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    /**
-     * Set each profile's island id in one query. Only the two id columns are read — the full island
-     * row is loaded on demand elsewhere, and pulling all of it here just to keep one field was waste.
-     */
+    // set each profile's island id in one query; the full row is loaded on demand elsewhere
     private void attachIslandIds(Map<UUID, Profile> profiles) {
         String sql = "SELECT id, profile_id FROM islands WHERE profile_id IN ("
                 + placeholders(profiles.size()) + ")";
@@ -466,7 +426,6 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    /** {@code "?, ?, ?"} for an IN clause of {@code count} values. */
     private static String placeholders(int count) {
         return String.join(", ", java.util.Collections.nCopies(count, "?"));
     }
@@ -612,8 +571,6 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    // ── pending upgrades (cooking timers) ─────────────────────────────────────────
-
     public List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> getAllPending() {
         List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> out = new ArrayList<>();
         try (Connection c = dataSource.getConnection();
@@ -662,8 +619,6 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    // ── active profile (player_state) ────────────────────────────────────────────
-
     public @Nullable UUID getActiveProfile(UUID player) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement("SELECT active_profile FROM player_state WHERE uuid = ?")) {
@@ -692,8 +647,6 @@ public final class SqlStorage implements Storage {
             plugin.getLogger().severe("Could not set active profile for " + player + ": " + e.getMessage());
         }
     }
-
-    // ── profile data (saved state) ────────────────────────────────────────────────
 
     public @Nullable ProfileData getProfileData(UUID profileId, UUID playerUuid) {
         String sql = "SELECT inventory, ender_chest, exp_level, exp_progress, health, food, saturation "
@@ -741,8 +694,6 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    // ── native bank ────────────────────────────────────────────────────────────────
-
     public com.mystipixel.royalskyblock.bank.@Nullable BankAccount getBankAccount(String accountId) {
         String sql = "SELECT balance, level, last_interest, interest_floor FROM bank_accounts WHERE account_id = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
@@ -758,7 +709,7 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    /** Atomically upsert an account and append its ledger row — balance and ledger never diverge. */
+    /** Upsert an account and append its ledger row in one transaction. */
     public boolean saveBankAccountWithTxn(com.mystipixel.royalskyblock.bank.BankAccount account,
                                           String type, double amount, double balanceAfter, String note) {
         String upsert = mysql()
@@ -824,7 +775,7 @@ public final class SqlStorage implements Storage {
         return out;
     }
 
-    /** Remove a player's saved state for one profile — used when they leave/are kicked from a coop. */
+    /** Record a coop payout owed to a player who left or was kicked; see {@link Storage#addCoopPayout}. */
     public void addCoopPayout(UUID player, UUID fromProfile) {
         String sql = (mysql() ? "INSERT IGNORE" : "INSERT OR IGNORE")
                 + " INTO coop_payouts (player_uuid, profile_id) VALUES (?, ?)";
@@ -879,8 +830,6 @@ public final class SqlStorage implements Storage {
             plugin.getLogger().warning("Could not delete profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
         }
     }
-
-    // ── helpers ────────────────────────────────────────────────────────────────────
 
     private boolean executeUpdate(String sql, String param) {
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {

@@ -9,37 +9,15 @@ import org.bukkit.entity.Player
 import java.util.Locale
 
 /**
- * `/island` on eco's command framework.
+ * `/island` on eco's command framework: eco handles registration, aliases, permission and players-only
+ * gating (with `messages.no-permission` / `messages.not-player` from lang.yml), dispatch and
+ * subcommand completion. This file is the command tree; the behaviour lives in [IslandCommand].
  *
- * Twenty-two of the twenty-three plugins in the suite register their commands this way, and this was
- * the last place RoyalSkyblock still did something of its own. Moving over means eco handles
- * registration, aliases, permission and players-only gating, subcommand dispatch and the tab
- * completion of subcommand names — and it does the gating with the strings in this plugin's own
- * `lang.yml`, under `messages.no-permission` / `messages.not-player`. Those keys have shipped since
- * lang.yml was written, labelled "eco framework strings", and were inert until now.
+ * A subcommand declares its own permission only where the handler enforces one; everything else needs
+ * `royalskyblock.use`. Never pass `""`: eco checks the string as given, and Bukkit treats an unknown
+ * permission as op-only.
  *
- * ## What this file is and is not
- *
- * It is the command *tree*: which subcommands exist, what each needs, and what completes after it.
- * The behaviour still lives in [IslandCommand], which is now a plain holder of handlers rather than a
- * `CommandExecutor`. Keeping the two apart is what made the port safe to do in one pass — nothing
- * inside a handler moved, so nothing inside a handler could break.
- *
- * ## Permissions
- *
- * A subcommand declares a specific permission **only where the handler already enforced one**.
- * Everything else, and `/island` itself, needs `royalskyblock.use` (default true in `plugin.yml`).
- *
- * Never pass `""` here. eco calls `hasPermission` on the string as given, with no special case for
- * empty, and Bukkit treats a permission it has never heard of as op-only — so `""` quietly made every
- * command op-only. Ops never noticed; every other player got "no permission" for all of `/is`.
- *
- * ## `profile` and `admin`
- *
- * Both route their own second level rather than nesting eco subcommands. Their thirteen handlers take
- * an already-resolved [Player] and read a full argument array, so nesting them would mean rewriting
- * every one of those signatures to buy a player exactly nothing: the completion below is the part
- * anyone actually notices, and it is here. That is a deliberate stop, not an unfinished edge.
+ * `profile` and `admin` route their own second level, since their handlers read the full argument array.
  */
 class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
     PluginCommand(plugin, "island", "royalskyblock.use", false) {
@@ -47,7 +25,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
     private val handlers = IslandCommand(plugin)
 
     init {
-        // Plain actions, in the order /is help lists them.
+        // plain actions, in the order /is help lists them
         leaf("menu") { s, _ -> handlers.handleMenu(s) }
         leaf("create", permission = "royalskyblock.create") { s, _ -> handlers.handleCreate(s) }
         leaf("home") { s, _ -> handlers.handleHome(s) }
@@ -72,7 +50,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
         leaf("setguestspawn") { s, _ -> handlers.handleSetSpawn(s, true) }
         leaf("kickall") { s, _ -> handlers.handleKickAll(s) }
 
-        // Actions taking a member of your own island.
+        // actions taking a member of your own island
         leaf("invite", permission = "royalskyblock.invite", complete = ::onlinePlayers) { s, a ->
             handlers.handleInvite(s, a)
         }
@@ -84,7 +62,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
         leaf("level", complete = { _, args -> firstArg(args, listOf("recalc")) }) { s, a ->
             handlers.handleLevel(s, a)
         }
-        // Deleting an island asks for the word rather than a click-through, so it completes it.
+        // deleting an island asks for the word rather than a click-through, so it completes it
         leaf("delete", complete = { _, args -> firstArg(args, listOf("confirm")) }) { s, a ->
             handlers.handleDelete(s, a)
         }
@@ -102,13 +80,8 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
     }
 
     /**
-     * `/is` on its own, and anything eco could not match to a subcommand.
-     *
-     * eco routes an unrecognised subcommand here rather than reporting one, so telling someone they
-     * mistyped has to be done on purpose or `/is hoem` silently prints the help screen as though it
-     * had worked. `help` is matched explicitly because it never was a subcommand — the old dispatcher
-     * answered `/is help` with "Unknown subcommand /is help. Try /is help.", which the help text
-     * itself tells people to run.
+     * `/is` on its own, and anything eco couldn't match to a subcommand. eco routes unknown subcommands
+     * here, so a mistype has to be reported explicitly; `help` is matched explicitly too.
      */
     override fun onExecute(sender: CommandSender, args: List<String>) {
         val first = args.firstOrNull()
@@ -123,14 +96,8 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
 
     override fun getDescription(): String = "RoyalSkyblock island command."
 
-    /**
-     * Register one subcommand.
-     *
-     * The handler is handed the argument array it has always been handed — its own name first, then
-     * the rest — because eco strips the subcommand name and every handler reads `args[1]` onwards.
-     * Rebuilding it here rather than reindexing thirty handlers is the whole reason this port did not
-     * need to touch their bodies.
-     */
+    // Handlers get the argument array they always had (their own name first, then the rest), since eco
+    // strips the subcommand name and every handler reads args[1] onwards.
     private fun leaf(
         name: String,
         permission: String = "royalskyblock.use",
@@ -148,18 +115,16 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
         })
     }
 
-    // ── completion ─────────────────────────────────────────────────────────────
-
     private fun firstArg(args: List<String>, options: List<String>): List<String> =
         if (args.size <= 1) startingWith(options, args.lastOrNull()) else emptyList()
 
-    /** Online players the sender can see — a vanished player must not show up in tab completion. */
+    // online players the sender can see; a vanished player must not show up in tab completion
     private fun onlinePlayers(sender: CommandSender, args: List<String>): List<String> =
         firstArg(args, plugin.server.onlinePlayers
             .filter { sender !is Player || sender.canSee(it) }
             .map { it.name })
 
-    /** Everyone on your island except you — the only people worth kicking or promoting. */
+    // everyone on your island except you
     private fun otherMembers(sender: CommandSender, args: List<String>): List<String> {
         val player = sender as? Player ?: return emptyList()
         val active = plugin.profiles().getActiveProfile(player) ?: return emptyList()

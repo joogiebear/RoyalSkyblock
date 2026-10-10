@@ -14,22 +14,14 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Resolves RoyalSkyblock's placeholders. Knows nothing about PlaceholderAPI or eco.
- *
- * <p>The logic used to live inside the PlaceholderAPI expansion, which meant it could only run when
- * PlaceholderAPI was installed — the expansion extends a PAPI type, so the class cannot even load
- * without it. Every eco plugin registers its placeholders with eco instead, so they resolve inside
- * eco configs whether or not PAPI is present. Keeping the resolution here lets both front ends share
- * one implementation: {@link RoyalSkyblockExpansion} for PAPI consumers like TAB and scoreboards, and
- * eco's own registry for effect chains, menus and item lore.
- *
- * <p>Reads are cheap: island and profile lookups hit RoyalSkyblock's in-memory caches, and the
- * leaderboard rank is precomputed on a background timer so a request never sorts every island inline.
+ * Resolves RoyalSkyblock's placeholders for both front ends: {@link RoyalSkyblockExpansion} for
+ * PlaceholderAPI, and eco's registry for effect chains, menus and item lore (which work without PAPI).
+ * Reads hit in-memory caches; the leaderboard rank is precomputed on a background timer.
  *
  * <table>
- *   <tr><td>{@code has_island}</td><td>true/false — the player owns/belongs to an island</td></tr>
- *   <tr><td>{@code on_island}</td><td>true/false — standing on ANY island world</td></tr>
- *   <tr><td>{@code on_own_island}</td><td>true/false — standing on their OWN island</td></tr>
+ *   <tr><td>{@code has_island}</td><td>true/false: the player owns/belongs to an island</td></tr>
+ *   <tr><td>{@code on_island}</td><td>true/false: standing on ANY island world</td></tr>
+ *   <tr><td>{@code on_own_island}</td><td>true/false: standing on their OWN island</td></tr>
  *   <tr><td>{@code level}</td><td>the player's OWN island level, whole number with grouping</td></tr>
  *   <tr><td>{@code level_raw}</td><td>the player's OWN island level, raw</td></tr>
  *   <tr><td>{@code island_level}</td><td>level of the island the player is IN (0 off-island)</td></tr>
@@ -49,9 +41,8 @@ import java.util.UUID;
 public final class IslandPlaceholders {
 
     /**
-     * Every fixed placeholder id, for front ends that must enumerate rather than pattern-match — eco
-     * registers one object per id. {@code upgrade_<key>} is absent because it is a prefix, not an id;
-     * eco callers use {@link #resolve} directly for those.
+     * Every fixed placeholder id, for front ends that must enumerate (eco registers one object per id).
+     * {@code upgrade_<key>} is a prefix, so eco callers use {@link #resolve} for those.
      */
     public static final List<String> IDS = List.of(
             "has_island", "on_island", "on_own_island",
@@ -62,7 +53,7 @@ public final class IslandPlaceholders {
 
     private final RoyalSkyblockPlugin plugin;
 
-    /** islandId -> 1-based rank by level; replaced wholesale by {@link #refreshLeaderboard()}. */
+    // islandId to 1-based rank by level; replaced wholesale by refreshLeaderboard()
     private volatile Map<UUID, Integer> rankCache = Map.of();
 
     public IslandPlaceholders(RoyalSkyblockPlugin plugin) {
@@ -97,14 +88,12 @@ public final class IslandPlaceholders {
             case "has_island":
                 return String.valueOf(island != null);
             case "on_island": {
-                // Is the player currently standing on ANY island world? (for gating eco effects to islands)
                 if (!player.isOnline()) {
                     return "false";
                 }
                 return String.valueOf(plugin.islands().getIslandByWorld(player.getPlayer().getWorld()) != null);
             }
             case "on_own_island": {
-                // Is the player on THEIR OWN island (their active profile's island)?
                 if (!player.isOnline()) {
                     return "false";
                 }
@@ -114,7 +103,7 @@ public final class IslandPlaceholders {
             case "profile":
                 return profile != null ? profile.name() : "";
             case "profile_id":
-                // Stable per-profile id (used e.g. by RoyalWardrobe to scope wardrobes per profile).
+                // stable per-profile id (RoyalWardrobe scopes wardrobes by it)
                 return profileId != null ? profileId.toString() : "";
             case "gamemode":
                 return profile != null ? title(profile.gamemode().key()) : "";
@@ -126,10 +115,8 @@ public final class IslandPlaceholders {
                 return island != null ? String.valueOf(island.level()) : "0";
             case "island_level":
             case "island_level_raw": {
-                // Level of the island world the player is standing IN, NOT their own profile's island.
-                // 'level' answers "my island's level" (wrong when visiting); this answers "the level of
-                // wherever I am" — which is what mob-spawn / effect scaling on an island actually wants,
-                // since a mob spawns near a player in that world. Returns 0 off any island.
+                // Level of the island the player is standing in, not their own: what mob-spawn and effect scaling
+                // want. 0 off any island.
                 if (!player.isOnline()) {
                     return "0";
                 }
@@ -163,7 +150,7 @@ public final class IslandPlaceholders {
                 if (params.regionMatches(true, 0, "upgrade_", 0, 8) && island != null) {
                     return String.valueOf(island.upgradeTier(params.substring(8)));
                 }
-                return null; // unknown placeholder
+                return null;
         }
     }
 

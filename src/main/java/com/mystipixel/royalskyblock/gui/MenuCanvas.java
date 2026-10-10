@@ -10,13 +10,8 @@ import java.util.function.BiConsumer;
 
 /**
  * One render of a data-driven menu: what each slot shows and what the code-registered slots do when
- * clicked.
- *
- * <p>The {@code fillX} builders in {@link GuiManager} paint into one of these, and eco's render reads it
- * back slot by slot (see {@link EcoMenuFactory#buildDynamic}). It replaces the throwaway Bukkit
- * inventory and fake {@code InventoryHolder} the builders used to fill, which only existed so the old
- * Bukkit-inventory engine's builders could run unchanged under eco. A fresh canvas is made per render,
- * so a refresh redraws from current state and nothing outlives the render that produced it.
+ * clicked. The {@code fillX} builders in {@link GuiManager} paint into a fresh one per render and
+ * eco reads it back slot by slot (see {@link EcoMenuFactory#buildDynamic}).
  */
 public final class MenuCanvas {
 

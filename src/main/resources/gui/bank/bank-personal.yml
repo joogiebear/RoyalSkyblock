@@ -1,30 +1,20 @@
-# ═══════════════════════════════════════════════════════════════════════════════
 #  RoyalSkyblock  ·  Personal Bank
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Your own bank for the active profile (per-profile — a new profile starts fresh).
+#  Your own bank for the active profile (per-profile: a new profile starts fresh).
 #  Balance/level header + Deposit/Withdraw/Interest/Upgrade/Transactions are placed
 #  by code; this is the frame. Levels come from bank.yml.
 #
-#  Rendered through eco's Menu API. The dialect below is RoyalSkyblock's own —
-#  eco draws the menu, this file describes it:
-#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
-#    click ids: open_menu · close · player_command · console_command · message · play_sound
-#    slot options: sound: — the sound clicking this slot makes (name / volume / pitch,
-#      or enabled: false). A slot with no sound: block is SILENT. There is no menu-wide
-#      click sound: a button that opens another menu should stay silent and let the
-#      destination's open sound speak, or the two land together as one doubled click.
-# ═══════════════════════════════════════════════════════════════════════════════
+#  rows: 1-6. mask: 1 = filler pane, 0 = dynamic slot. Slots are placed by row/column.
+#  click ids: open_menu, close, player_command, console_command, message, play_sound
+#  sound: on a slot is its click sound (name / volume / pitch, or enabled: false).
+#  A slot without one is silent; leave buttons that open another menu silent so
+#  the destination's open sound doesn't double up.
 
 title: "&8Skyblock &7» &fPersonal Bank"
 rows: 6
 
-# The sound this menu makes when it opens. Delete it or set enabled: false to silence.
-# Click sounds are NOT here — each slot carries its own sound: block, and a slot without
-# one is silent. See the slot options above.
+# Menu sounds (enabled: false silences one). Click sounds live on each slot.
 #   open     - when the menu is opened
-#   content  - when a GENERATED button is clicked (only on menus whose generated
-#              buttons close the inventory; the rest are covered by the open sound
-#              of whatever menu they reopen)
+#   content  - when a generated button that closes the menu is clicked
 sounds:
   open:
     enabled: true
@@ -59,7 +49,7 @@ slots:
       pitch: 1.2
 
   # Returns to the main menu. player_command closes the inventory itself in
-  # RoyalSkyblock, so this needs no separate close effect — unlike the other
+  # RoyalSkyblock, so this needs no separate close effect: unlike the other
   # menus, which reach main with open_menu.
   - item: arrow name:"&fBack"
     lore:

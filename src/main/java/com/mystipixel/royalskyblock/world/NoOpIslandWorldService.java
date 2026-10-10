@@ -5,14 +5,13 @@ import org.bukkit.World;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Fallback world service used when the server is not running Advanced Slime Paper. Every world
- * operation fails fast with a clear message, so the plugin still enables (metadata, commands, config
- * all work) and island world actions explain exactly what's missing instead of throwing on class-load.
+ * Fallback when the server isn't running Advanced Slime Paper. Every world operation fails fast with a
+ * clear message, so the plugin still enables and island actions explain what's missing.
  */
 public final class NoOpIslandWorldService implements IslandWorldService {
 
     private static final String MESSAGE =
-            "The server is not running Advanced Slime Paper — island worlds are unavailable.";
+            "The server is not running Advanced Slime Paper: island worlds are unavailable.";
 
     private static <T> CompletableFuture<T> unavailable() {
         return CompletableFuture.failedFuture(new IllegalStateException(MESSAGE));

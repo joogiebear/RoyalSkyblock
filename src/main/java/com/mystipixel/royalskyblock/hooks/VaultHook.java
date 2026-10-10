@@ -6,9 +6,8 @@ import org.bukkit.OfflinePlayer;
 import org.bukkit.plugin.RegisteredServiceProvider;
 
 /**
- * Thin wrapper over the Vault economy. Only instantiated when Vault is present (the plugin guards
- * construction with a {@code Class.forName} check), so {@code net.milkbowl.vault.*} is never linked on
- * a server without Vault.
+ * Thin wrapper over the Vault economy. Only instantiated when Vault is present, so
+ * {@code net.milkbowl.vault.*} is never linked on a server without it.
  */
 public final class VaultHook {
 
@@ -35,7 +34,7 @@ public final class VaultHook {
         return economy != null && economy.withdrawPlayer(player, amount).transactionSuccess();
     }
 
-    /** Whether the economy accepted it: one with a balance cap, say, refuses past the cap. */
+    /** Whether the economy accepted it; one with a balance cap refuses past the cap. */
     public boolean deposit(OfflinePlayer player, double amount) {
         return economy != null && economy.depositPlayer(player, amount).transactionSuccess();
     }

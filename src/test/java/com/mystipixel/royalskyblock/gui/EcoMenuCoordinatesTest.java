@@ -5,19 +5,11 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * The menu port's one silent failure mode.
- *
- * <p>{@code MenuSlot} stores a 0-based inventory index; eco's {@code setSlot} takes a 1-based
- * row/column. If the conversion is off by one, nothing throws and no test of "does the menu open"
- * fails — every button simply renders in the wrong place, and on a live server that is a broken UI
- * with no error to search for. So the conversion is asserted against eco's own
- * {@link MenuUtils#rowColumnToSlot} rather than a formula copied into the test, which would just
- * repeat any mistake made in the source.
- */
+// MenuSlot stores a 0-based index and eco's setSlot takes 1-based row/column; an off-by-one throws
+// nothing and just misplaces every button. Asserted against eco's own MenuUtils.rowColumnToSlot.
 class EcoMenuCoordinatesTest {
 
-    /** Every slot of a full six-row menu must survive index -> row/column -> index unchanged. */
+    // every slot of a full six-row menu must survive index -> row/column -> index unchanged
     @Test
     void roundTripsEverySlotOfASixRowMenu() {
         for (int index = 0; index < 6 * 9; index++) {
@@ -27,7 +19,7 @@ class EcoMenuCoordinatesTest {
         }
     }
 
-    /** Pin the corners explicitly, so a failure says which end is wrong rather than just "index 0". */
+    // pin the corners explicitly, so a failure says which end is wrong
     @Test
     void mapsTheCorners() {
         assertEquals(1, EcoMenuFactory.row(0), "first slot is row 1");

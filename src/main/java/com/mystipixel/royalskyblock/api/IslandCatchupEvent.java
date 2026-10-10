@@ -7,14 +7,9 @@ import org.bukkit.event.HandlerList;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Fired on the main thread just after an island world is loaded, when it spent time unloaded.
- * An unloaded world does not tick — no crop growth, no minions, no furnaces — so this event is
- * how that missed time gets paid back.
- *
- * <p>This is RoyalSkyblock's public extension point for offline progression. Anything that would
- * have ticked while the island slept should listen here and fast-forward itself; RoyalSkyblock
- * only simulates crops natively (see {@code simulation.crops} in config.yml). A minion plugin,
- * for instance, would listen and award the output its minions would have produced:
+ * Fired on the main thread just after an island world loads, when it spent time unloaded. An
+ * unloaded world doesn't tick, so anything that would have ticked (minions, furnaces) should listen
+ * here and fast-forward itself. RoyalSkyblock only simulates crops itself.
  *
  * <pre>{@code
  * @EventHandler
@@ -25,14 +20,9 @@ import org.jetbrains.annotations.NotNull;
  * }
  * }</pre>
  *
- * <p>{@link #getOfflineSeconds()} is already clamped to {@code simulation.max-offline-hours}, so with
- * the default a listener can use it directly without worrying that an island left alone for a year
- * mints a year of output. An admin can set that option to {@code 0} for no cap, and then it is the
- * full offline time: a listener paying out per second should apply its own ceiling if unbounded
- * payouts would hurt. It is never negative and never zero — the event does not fire for a trivial gap.
- *
- * <p>The event is not cancellable: the time has already passed. A listener that wants to opt out
- * simply does nothing.
+ * <p>{@link #getOfflineSeconds()} is clamped to {@code simulation.max-offline-hours}. An admin can set
+ * that to {@code 0} for no cap, so a listener paying out per second should apply its own ceiling if
+ * unbounded payouts would hurt. It is never zero or negative. Not cancellable: the time has passed.
  */
 public final class IslandCatchupEvent extends Event {
 
@@ -54,24 +44,22 @@ public final class IslandCatchupEvent extends Event {
         return island;
     }
 
-    /** The freshly-loaded island world. Safe to read and modify — this fires on the main thread. */
+    /** The freshly loaded island world. Safe to read and modify: this fires on the main thread. */
     public World getWorld() {
         return world;
     }
 
     /**
      * Seconds to simulate: real offline time, clamped to {@code simulation.max-offline-hours} unless
-     * that is {@code 0} (no cap).
-     * Use this one.
+     * that is {@code 0} (no cap). Use this one.
      */
     public long getOfflineSeconds() {
         return offlineSeconds;
     }
 
     /**
-     * The unclamped time the island actually spent unloaded. Only differs from
-     * {@link #getOfflineSeconds()} when the cap kicked in — useful for telling a player
-     * "your island was away 9 days, but only 24h were simulated".
+     * The unclamped time the island spent unloaded. Only differs from {@link #getOfflineSeconds()} when
+     * the cap applied, e.g. for "your island was away 9 days, but only 24h were simulated".
      */
     public long getRawOfflineSeconds() {
         return rawOfflineSeconds;

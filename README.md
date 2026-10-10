@@ -1,6 +1,6 @@
 # RoyalSkyblock
 
-Scalable, per-island Skyblock for Paper — profiles, coop, a built-in bank, island levels, and
+Scalable, per-island Skyblock for Paper: profiles, coop, a built-in bank, island levels, and
 upgrades, all driven by clean configurable menus. Part of the Royal plugin suite, but **self-contained**:
 no other Royal plugin is required.
 
@@ -12,9 +12,9 @@ islands without a bloated single world.
 
 | | |
 |---|---|
-| **eco** | **Required** — RoyalSkyblock is an eco plugin and will not load without the platform. Install [eco](https://polymart.org/resource/eco.773) first, and keep it on the same `YEAR.WEEK` version line as the rest of the suite. |
-| **Advanced Slime Paper** | **Required** — the ASP server fork on 26.2 or newer, *not* vanilla Paper. Without it the plugin still enables, but island create/teleport are disabled (everything else works). |
-| **Java 25** | Required — Paper 26.2 and the ASP API both require JVM 25. |
+| **eco** | **Required**: RoyalSkyblock is an eco plugin and will not load without the platform. Install [eco](https://polymart.org/resource/eco.773) first, and keep it on the same `YEAR.WEEK` version line as the rest of the suite. |
+| **Advanced Slime Paper** | **Required**: the ASP server fork on 26.2 or newer, *not* vanilla Paper. Without it the plugin still enables, but island create/teleport are disabled (everything else works). |
+| **Java 25** | Required: Paper 26.2 and the ASP API both require JVM 25. |
 | **Vault + an economy** | Needed for the bank and upgrade/coin costs. Any Vault economy works (EcoBits, Essentials, CMI, …). Without it, the bank and coin costs are disabled. |
 | **EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
 | **PlaceholderAPI** | Optional. Used by command-based currencies (e.g. gems) and placeholders. |
@@ -39,7 +39,7 @@ the build if eco is imported anywhere else, so an eco API change only ever touch
 1. Drop the jar on an **ASP** server that has **Vault + an economy**. Start once to generate the configs.
 2. Open `config.yml` and set **`spawn.world`** to your hub/spawn world (where players go when they leave
    or delete an island).
-3. Check **`currencies:`** in `config.yml` — `coins` is your Vault economy (works out of the box); `gems`
+3. Check **`currencies:`** in `config.yml`: `coins` is your Vault economy (works out of the box); `gems`
    is an example command-based currency (edit or remove it to match your setup).
 4. (Optional) tune `bank.yml` (levels/interest), `upgrades.yml` (island upgrades), `levels.yml` (island
    level block values). Every menu lives in `gui/*.yml`.
@@ -49,7 +49,7 @@ The console prints a status panel on boot showing which dependencies are active 
 
 ## Configuration files
 
-Settings in one place, text and content split out — the same layout across the Royal suite.
+Settings in one place, text and content split out, the same layout across the Royal suite.
 
 | File / folder | Holds |
 |---|---|
@@ -67,7 +67,7 @@ levels, bank, and menus).
 ## Storage
 
 - **Island metadata** (`storage.type`): `sqlite` (default, zero-setup), `mysql` (**use this for a network**),
-  or `eco` (eco's own data layer, like the rest of the suite — **single server only**: eco caches data per
+  or `eco` (eco's own data layer, like the rest of the suite; **single server only**: eco caches data per
   server and has no atomic updates, so servers sharing one eco database overwrite each other's island and
   profile lists; the plugin warns at startup if it sees eco storage on a shared eco handler).
 - **Island worlds** (`world.slime-data-source`): `file` (single server) or `mysql`/`mongo` (shared across a

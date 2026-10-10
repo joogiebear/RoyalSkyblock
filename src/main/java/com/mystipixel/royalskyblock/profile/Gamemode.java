@@ -3,22 +3,21 @@ package com.mystipixel.royalskyblock.profile;
 import java.util.Locale;
 
 /**
- * A profile's game mode. Each maps to a {@code gamemodes/<key>.yml} ruleset that decides which
- * features (auction house, bazaar, trading, ...) are allowed. The set is fixed in code, but their
- * rules are fully config-driven.
+ * A profile's game mode. Each maps to a {@code gamemodes/<key>.yml} ruleset deciding which features
+ * (auction house, bazaar, trading, ...) are allowed.
  */
 public enum Gamemode {
 
-    /** Standard Skyblock — everything enabled. */
+    /** Standard Skyblock: everything enabled. */
     SOLO,
 
     /** Shared island + economy with invited members. */
     COOP,
 
-    /** Self-sufficient — no trading with other players (AH, bazaar, etc. blocked). */
+    /** Self-sufficient: no trading with other players (AH, bazaar, etc. blocked). */
     IRONMAN;
 
-    /** The {@code gamemodes/<key>.yml} file name / config key for this mode. */
+    /** The {@code gamemodes/<key>.yml} file name and config key for this mode. */
     public String key() {
         return name().toLowerCase(Locale.ROOT);
     }

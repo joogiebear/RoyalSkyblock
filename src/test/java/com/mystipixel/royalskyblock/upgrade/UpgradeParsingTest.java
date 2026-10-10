@@ -8,17 +8,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * The two parsers that turn {@code upgrades.yml} text into numbers.
- *
- * <p>Both were reshaped when the file's formatting was unified — costs gained a compact
- * {@code 5000 coins} form beside the block one, and every {@code time:} lost its quotes — and neither
- * had any coverage. A wrong answer here is quiet: a cost that parses to zero makes an upgrade free,
- * and a duration that parses to zero makes a three-day wait instant. Nothing throws either way.
- */
+// The two parsers that turn upgrades.yml text into numbers. A wrong answer is silent: a cost that
+// parses to zero makes an upgrade free, and a zero duration makes a three-day wait instant.
 class UpgradeParsingTest {
-
-    // ── durations ────────────────────────────────────────────────────────────────
 
     @Test
     void parsesEveryDurationUnit() {
@@ -28,7 +20,7 @@ class UpgradeParsingTest {
         assertEquals(2 * 86_400, UpgradeManager.parseTime("2d"), "days");
     }
 
-    /** Both spellings of "no wait" have to land on zero — the config documents {@code 0}. */
+    // both spellings of "no wait" land on zero; the config documents 0
     @Test
     void treatsZeroAndInstantAsNoWait() {
         assertEquals(0, UpgradeManager.parseTime("0"));
@@ -37,23 +29,18 @@ class UpgradeParsingTest {
         assertEquals(0, UpgradeManager.parseTime(null));
     }
 
-    /**
-     * Unquoting the file left YAML free to hand these over as integers rather than strings. Bukkit
-     * coerces via getString, so a bare number must still mean seconds rather than falling through.
-     */
+    // unquoted YAML may hand these over as integers; a bare number must still mean seconds
     @Test
     void readsABareNumberAsSeconds() {
         assertEquals(90, UpgradeManager.parseTime("90"));
     }
 
-    /** Nonsense must not throw inside config loading — a bad duration should read as instant. */
+    // nonsense must not throw inside config loading; a bad duration reads as instant
     @Test
     void survivesNonsense() {
         assertEquals(0, UpgradeManager.parseTime("soon"));
         assertEquals(0, UpgradeManager.parseTime("d"));
     }
-
-    // ── costs ────────────────────────────────────────────────────────────────────
 
     private Cost cost(String yaml) {
         YamlConfiguration cfg = new YamlConfiguration();
@@ -72,7 +59,7 @@ class UpgradeParsingTest {
         assertEquals(5000, c.amount());
     }
 
-    /** The block form has to keep working — it is the documented choice when a value wants a comment. */
+    // the block form must keep working: it is the documented choice when a value wants a comment
     @Test
     void readsTheBlockForm() {
         Cost c = cost("cost:\n  currency: gems\n  amount: 288");
@@ -80,14 +67,14 @@ class UpgradeParsingTest {
         assertEquals(288, c.amount());
     }
 
-    /** An amount with no currency named falls back to coins rather than to nothing. */
+    // an amount with no currency falls back to coins
     @Test
     void defaultsTheCurrencyToCoins() {
         assertEquals("coins", cost("cost: 175").currency());
         assertEquals(175, cost("cost: 175").amount());
     }
 
-    /** A missing cost is free, not an error — plenty of tier-one upgrades have none. */
+    // a missing cost is free, not an error
     @Test
     void treatsAMissingCostAsFree() {
         assertEquals(0, cost("value: 1").amount());

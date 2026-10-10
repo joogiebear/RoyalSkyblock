@@ -15,16 +15,8 @@ import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Every repeating task starts in {@code RoyalSkyblockPlugin.createTasks()}.
- *
- * <p>{@code /is reload} goes through {@code EcoPlugin.reload()}, which cancels every task the plugin
- * owns — including ones scheduled straight through Bukkit — and then calls {@code createTasks()} again.
- * A timer started anywhere else dies on the first reload and never comes back, and nothing reports
- * it: islands simply stop unloading, upgrades stop finishing, perks stop ticking.
- *
- * <p>The exceptions below are deliberate and each explains why it survives a reload.
- */
+// Every repeating task starts in RoyalSkyblockPlugin.createTasks(): EcoPlugin.reload() cancels all the
+// plugin's tasks and only calls createTasks() again. Each exemption below says why it survives a reload.
 class RepeatingTaskPlacementTest {
 
     private static final Pattern REPEATING = Pattern.compile(
@@ -32,7 +24,7 @@ class RepeatingTaskPlacementTest {
 
     private static final String PLUGIN = "RoyalSkyblockPlugin.kt";
 
-    /** Files allowed to start a timer outside createTasks, and why a reload does not break them. */
+    // files allowed to start a timer outside createTasks, and why a reload does not break them
     private static final Map<String, String> EXEMPT = Map.of(
             "island/IslandMobSpawnService.java",
             "start() is what createTasks() calls to bring the spawn timer back after a reload",
@@ -75,7 +67,7 @@ class RepeatingTaskPlacementTest {
                 }
             }
         }
-        assertTrue(seen.contains(PLUGIN), "found no timers in " + PLUGIN + " — is the test reading the sources?");
+        assertTrue(seen.contains(PLUGIN), "found no timers in " + PLUGIN + "; is the test reading the sources?");
         for (String exempt : EXEMPT.keySet()) {
             assertTrue(seen.contains(exempt), exempt + " no longer starts a timer; drop its exemption");
         }
@@ -83,7 +75,7 @@ class RepeatingTaskPlacementTest {
                 + "cancel them for good. Start them from createTasks():\n" + String.join("\n", problems));
     }
 
-    /** Start and end offsets of the brace block following {@code signature}. */
+    // start and end offsets of the brace block following signature
     private static int[] functionBody(String source, String signature) {
         int at = source.indexOf(signature);
         assertTrue(at >= 0, "could not find " + signature + " in " + PLUGIN);

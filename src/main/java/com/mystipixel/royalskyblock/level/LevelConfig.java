@@ -15,14 +15,14 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Loads {@code levels.yml}: the block→points table and the scan tuning knobs. A block absent from the
- * table is worth zero (so the scanner skips it cheaply). Reloaded via {@link #reload()}.
+ * Loads {@code levels.yml}: the block-to-points table and scan tuning. A block absent from the table
+ * is worth zero, so the scanner skips it cheaply.
  */
 public final class LevelConfig {
 
     private final JavaPlugin plugin;
     private final Map<Material, Long> values = new EnumMap<>(Material.class);
-    /** level → console commands run once when an island first reaches it. */
+    // level to console commands run once when an island first reaches it
     private final Map<Integer, List<String>> rewards = new HashMap<>();
 
     private long pointsPerLevel = 100;
@@ -61,8 +61,7 @@ public final class LevelConfig {
         autoRecalcMaxPerCycle = Math.max(1, cfg.getInt("auto-recalc.max-per-cycle", 3));
 
         rewards.clear();
-        // Reward chains are recompiled alongside the command lists, so a broken one is reported while
-        // levels.yml is being read rather than when an island happens to reach that level.
+        // recompile reward chains now, so a broken one is reported while levels.yml is read
         com.mystipixel.royalskyblock.libreforge.LevelRewardChains.invalidate();
         ConfigurationSection rewardSec = cfg.getConfigurationSection("rewards");
         if (rewardSec != null) {
@@ -71,12 +70,11 @@ public final class LevelConfig {
                 try {
                     level = Integer.parseInt(key);
                 } catch (NumberFormatException e) {
-                    plugin.getLogger().warning("levels.yml rewards: '" + key + "' isn't a level number — skipping.");
+                    plugin.getLogger().warning("levels.yml rewards: '" + key + "' isn't a level number: skipping.");
                     continue;
                 }
-                // One list, two forms: getStringList sees only the console commands and getMapList
-                // only the effect blocks, so each side picks up what it understands and neither
-                // existing config nor new one has to be converted.
+                // One list, two forms: getStringList sees only the console commands and getMapList only the effect
+                // blocks, so both formats work without converting.
                 List<String> commands = new ArrayList<>(rewardSec.getStringList(key));
                 if (!commands.isEmpty()) {
                     rewards.put(level, commands);
@@ -92,13 +90,13 @@ public final class LevelConfig {
             for (String key : blocks.getKeys(false)) {
                 long points = blocks.getLong(key, 0);
                 if (points <= 0) {
-                    continue; // zero/negative = don't count it (keeps the scan lookup lean)
+                    continue; // zero/negative means don't count it (keeps the scan lookup lean)
                 }
                 Material material = Material.matchMaterial(key.toUpperCase(Locale.ROOT));
                 if (material != null && material.isBlock()) {
                     values.put(material, points);
                 } else {
-                    plugin.getLogger().warning("levels.yml: '" + key + "' isn't a valid block — skipping.");
+                    plugin.getLogger().warning("levels.yml: '" + key + "' isn't a valid block: skipping.");
                 }
             }
         }

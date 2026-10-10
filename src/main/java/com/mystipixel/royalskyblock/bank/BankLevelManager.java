@@ -17,9 +17,8 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Loads bank levels + settings from {@code bank.yml} (ported from RoyalBank's engine). Each level has a
- * max balance, interest tranches, and an upgrade cost (money + optional items). Reloaded via
- * {@link #reload()}.
+ * Loads bank levels and settings from {@code bank.yml}. Each level has a max balance, interest
+ * tranches, and an upgrade cost (money plus optional items).
  */
 public final class BankLevelManager {
 
@@ -44,7 +43,7 @@ public final class BankLevelManager {
         Map<Integer, BankLevel> newLevels = new LinkedHashMap<>();
         ConfigurationSection section = cfg.getConfigurationSection("levels");
         if (section == null) {
-            plugin.getLogger().warning("bank.yml has no 'levels' section — bank disabled.");
+            plugin.getLogger().warning("bank.yml has no 'levels' section: bank disabled.");
             this.levels = Collections.emptyMap();
             return;
         }

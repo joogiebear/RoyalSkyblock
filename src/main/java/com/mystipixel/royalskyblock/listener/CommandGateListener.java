@@ -17,12 +17,10 @@ import java.util.Set;
 
 /**
  * Enforces gamemode command rules (e.g. Ironman blocking {@code /ah}, {@code /bazaar}) by cancelling
- * blocked commands for the player's active profile. Fully decoupled — the economy plugins need no
- * changes; RoyalSkyblock just intercepts the command.
+ * blocked commands for the player's active profile.
  *
- * <p>Uses a dedicated {@code royalskyblock.gamemode.bypass} node (default false) — NOT the build-
- * protection bypass — so that gamemode rules apply to everyone (ops included) on their own profile
- * unless explicitly granted the bypass.
+ * <p>Uses its own {@code royalskyblock.gamemode.bypass} node (default false), not the build bypass, so
+ * the rules apply to ops too unless explicitly granted.
  */
 public final class CommandGateListener implements Listener {
 
@@ -39,13 +37,9 @@ public final class CommandGateListener implements Listener {
         }
     }
 
-    /**
-     * Refuses a command listed under {@code npc-only-commands} when the player types it. Only typed
-     * commands reach this listener ({@link Player#performCommand} skips the event), so NPCs, menu buttons
-     * and hotbar items still run them; hub NPCs go through {@code /is admin npc-open}, which keeps the
-     * gamemode gate. {@code royalskyblock.npconly.<command>} lets a player type one anyway, which is the
-     * hook for perks that unlock remote access.
-     */
+    // Refuses a typed npc-only-commands entry. Only typed commands reach this listener (performCommand
+    // skips the event), so NPCs, menu buttons and items still work; royalskyblock.npconly.<command> lets a
+    // player type one anyway.
     private boolean refuseTyped(Player player, String commandLine) {
         ConfigurationSection section = plugin.conf().getConfigurationSection("npc-only-commands");
         if (section == null || !section.getBoolean("enabled", false)) {
@@ -60,10 +54,8 @@ public final class CommandGateListener implements Listener {
         return true;
     }
 
-    /**
-     * The configured key {@code word} reaches, or null. Aliases and namespaced labels resolve through the
-     * command map, so listing {@code bazaar} also covers {@code /bz} and {@code /royalbazaar:bazaar}.
-     */
+    // The configured key word reaches, or null. Aliases and namespaced labels resolve through the
+    // command map, so bazaar also covers /bz and /royalbazaar:bazaar.
     private static String npcOnlyKey(ConfigurationSection commands, String word) {
         if (word.isEmpty()) {
             return null;
@@ -85,9 +77,9 @@ public final class CommandGateListener implements Listener {
     }
 
     /**
-     * Whether {@code player}'s active gamemode blocks {@code commandLine}; if so, tells them why.
-     * Public because {@link Player#performCommand} never fires {@link PlayerCommandPreprocessEvent},
-     * so anything that runs a command on a player's behalf (menu buttons) must ask here itself.
+     * Whether {@code player}'s active gamemode blocks {@code commandLine}; if so, tells them why. Anything
+     * running a command on a player's behalf must call this, since {@link Player#performCommand} never
+     * fires {@link PlayerCommandPreprocessEvent}.
      */
     public static boolean refuse(RoyalSkyblockPlugin plugin, Player player, String commandLine) {
         if (player.hasPermission("royalskyblock.gamemode.bypass")) {
@@ -106,7 +98,7 @@ public final class CommandGateListener implements Listener {
         return true;
     }
 
-    /** Extract the bare command word: {@code "/ah sell 10"} → {@code "ah"}. */
+    // "/ah sell 10" to "ah"
     private static String commandWord(String message) {
         String msg = message.strip();
         msg = msg.startsWith("/") ? msg.substring(1) : msg;

@@ -3,8 +3,8 @@ package com.mystipixel.royalskyblock.hooks;
 import org.bukkit.OfflinePlayer;
 
 /**
- * Supplies a player's "combat level" used to pick which mob tier to spawn. Abstracted so the skills
- * backend (EcoSkills today) is swappable and so RoyalSkyblock can fall back cleanly when none is present.
+ * Supplies a player's combat level, used to pick which mob tier to spawn. Backed by a skills plugin
+ * (EcoSkills today), with a fallback when none is present.
  */
 @FunctionalInterface
 public interface CombatLevelSource {

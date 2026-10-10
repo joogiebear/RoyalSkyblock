@@ -17,9 +17,8 @@ import java.util.UUID;
 /**
  * Parses the EcoMenus inline item syntax used across the Royal suite, e.g.
  * <pre>gold_block hide_attributes name:"&6Island Upgrades"</pre>
- * The first token is an item lookup — a vanilla {@link Material}, or an {@code ecoitems:...} id resolved
- * through eco when it's installed. The rest are flags ({@code hide_enchants}, {@code hide_attributes})
- * and {@code key:"value"} modifiers.
+ * The first token is a vanilla {@link Material} or an {@code ecoitems:...} id resolved through eco.
+ * The rest are flags ({@code hide_enchants}, {@code hide_attributes}) and {@code key:"value"} modifiers.
  *
  * <p>Player heads follow the eco convention:
  * <pre>player_head texture:&lt;base64&gt;      # a custom head from a base64 texture value
@@ -110,7 +109,6 @@ public final class ItemSpec {
         return item;
     }
 
-    /** Apply a base64 {@code texture:} or a {@code head:} owner to a player-head, the eco-suite way. */
     private void applyHeadTexture(ItemStack item, ItemMeta meta, Map<String, String> placeholders) {
         if (item.getType() != Material.PLAYER_HEAD || !(meta instanceof SkullMeta skull)) {
             return;
@@ -121,8 +119,8 @@ public final class ItemSpec {
                 profile.setProperty(new com.destroystokyo.paper.profile.ProfileProperty("textures", texture));
                 skull.setPlayerProfile(profile);
             } else if (head != null && !head.isBlank()) {
-                // Never getOfflinePlayer(String): for a name the server has not seen it asks Mojang,
-                // on the server thread, while the menu is being drawn. An unknown name gets a plain head.
+                // Never getOfflinePlayer(String): for an unseen name it asks Mojang on the server thread. An unknown
+                // name gets a plain head.
                 String name = apply(head, placeholders);
                 org.bukkit.OfflinePlayer owner = Bukkit.getPlayerExact(name);
                 if (owner == null) {
@@ -150,7 +148,7 @@ public final class ItemSpec {
         return material == null || material.isAir() ? Material.STONE : material;
     }
 
-    /** Split on spaces but keep quoted segments (so name:"a b c" stays one token). */
+    // split on spaces but keep quoted segments (name:"a b c" stays one token)
     private static List<String> tokenize(String raw) {
         List<String> out = new ArrayList<>();
         StringBuilder cur = new StringBuilder();

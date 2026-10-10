@@ -15,13 +15,12 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Loads the {@code gamemodes/<key>.yml} rulesets — one per {@link Gamemode}. A ruleset currently
- * carries a display name, description, an icon, and the set of commands blocked on that mode (how
- * Ironman disables trading). Fully config-driven so admins can tune what each mode allows.
+ * Loads the {@code gamemodes/<key>.yml} rulesets, one per {@link Gamemode}: display name, description,
+ * icon, and the commands blocked on that mode (how Ironman disables trading).
  */
 public final class GamemodeManager {
 
-    /** One gamemode's rules. Extend as more rule types are added. */
+    /** One gamemode's rules. */
     public record Ruleset(String displayName, String description, String icon, Set<String> blockedCommands) {
     }
 
@@ -63,12 +62,9 @@ public final class GamemodeManager {
     }
 
     /**
-     * Whether {@code command} (the typed word, no slash) is blocked on {@code mode}.
-     *
-     * <p>Matching the typed word alone was trivially bypassed: {@code /royalauctions:ah} or any alias
-     * the config didn't list got straight through. So the word is also checked without its namespace,
-     * and resolved through the server's command map so that a command is blocked when its real name
-     * <em>or any of its aliases</em> is listed — listing {@code ah} covers every spelling of it.
+     * Whether {@code command} (the typed word, no slash) is blocked on {@code mode}. The word is also
+     * checked without its namespace and resolved through the command map, so listing {@code ah} covers
+     * {@code /royalauctions:ah} and every alias.
      */
     public boolean isBlocked(Gamemode mode, String command) {
         Set<String> blocked = ruleset(mode).blockedCommands();

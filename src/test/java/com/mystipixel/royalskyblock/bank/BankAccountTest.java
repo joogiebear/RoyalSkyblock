@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/** Interest is paid on the lowest balance held since the last claim. */
+// interest is paid on the lowest balance held since the last claim
 class BankAccountTest {
 
     @Test

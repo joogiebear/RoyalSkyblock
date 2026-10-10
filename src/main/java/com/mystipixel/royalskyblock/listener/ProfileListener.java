@@ -25,11 +25,7 @@ public final class ProfileListener implements Listener {
         this.plugin = plugin;
     }
 
-    /**
-     * Read the connecting player's profile data while they are still logging in. This event runs off
-     * the server thread, so the database work costs the server nothing; by the time {@link #onJoin}
-     * fires the state is in memory and applying it is instant.
-     */
+    // runs off the server thread while the player connects, so the database read costs the server nothing
     @EventHandler(priority = EventPriority.MONITOR)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
         if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
@@ -37,12 +33,8 @@ public final class ProfileListener implements Listener {
         }
     }
 
-    /**
-     * The connection closed — if that happened before the join (login denied by another plugin, client
-     * dropped during configuration) the preload was never consumed, so drop it. After a normal join
-     * this is a no-op. Deliberately not PlayerLoginEvent: listening to it makes Paper disable the
-     * re-configuration API server-wide.
-     */
+    // The connection closed before the join (login denied, client dropped), so the preload was never
+    // used. Not PlayerLoginEvent: listening to it makes Paper disable the re-configuration API.
     @EventHandler(priority = EventPriority.MONITOR)
     public void onConnectionClose(PlayerConnectionCloseEvent event) {
         plugin.profiles().discardPreload(event.getPlayerUniqueId());
@@ -53,8 +45,8 @@ public final class ProfileListener implements Listener {
         Player player = event.getPlayer();
         plugin.profiles().handleJoin(player);
 
-        // Route players to the configured spawn (hub) on join — but leave anyone who logged out on
-        // their own island where they are. Deferred a tick so it runs after the join teleport settles.
+        // Send players to spawn on join, except anyone who logged out on their own island. Deferred a tick so
+        // it runs after the join teleport settles.
         if (plugin.conf().getBoolean("spawn.teleport-on-join", true)
                 && plugin.islands().getIslandByWorld(player.getWorld()) == null) {
             Bukkit.getScheduler().runTask(plugin, () -> {
@@ -65,10 +57,7 @@ public final class ProfileListener implements Listener {
         }
     }
 
-    /**
-     * Send bedless/anchorless deaths back to the configured spawn (hub) instead of Minecraft's default
-     * respawn point. A player who set a bed or respawn anchor keeps it — those are respected.
-     */
+    // bedless/anchorless deaths respawn at the configured spawn; a bed or anchor is respected
     @EventHandler(priority = EventPriority.HIGH)
     public void onRespawn(PlayerRespawnEvent event) {
         if (!plugin.conf().getBoolean("spawn.teleport-on-join", true)) {

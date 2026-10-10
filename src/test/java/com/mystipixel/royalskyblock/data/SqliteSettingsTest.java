@@ -12,10 +12,7 @@ import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * Checks every setting against the real driver. The old multi-statement init string looked right and
- * applied only its first PRAGMA, which is exactly the kind of thing only a test like this catches.
- */
+// checks every setting against the real driver, since a multi-statement init string applies only its first PRAGMA
 class SqliteSettingsTest {
 
     @TempDir

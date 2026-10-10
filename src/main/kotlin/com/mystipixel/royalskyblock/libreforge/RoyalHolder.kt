@@ -13,33 +13,23 @@ import org.bukkit.NamespacedKey
 import org.bukkit.configuration.ConfigurationSection
 
 /**
- * A libreforge effect holder built from a RoyalSkyblock config block — one perk, or one purchased
- * upgrade tier.
- *
- * Being a [Holder] is what lets RoyalSkyblock content use the whole eco element library: any of
- * libreforge's effects, with its conditions, filters and mutators, rather than the fixed set of
- * behaviours the plugin implements itself. Which holders are live for a given player is decided by
- * [registerRoyalHolderProviders]; libreforge takes it from there, applying permanent effects and
- * dispatching triggered ones.
+ * A libreforge effect holder built from a RoyalSkyblock config block: one perk, or one upgrade tier.
+ * Which holders apply to a player is decided by [registerRoyalHolderProviders].
  */
 class RoyalHolder(
     override val id: NamespacedKey,
     override val effects: EffectList,
     override val conditions: ConditionList
 ) : Holder {
-    /** True when the block compiled to nothing — no point handing libreforge an empty holder. */
+    /** True when the block compiled to nothing. */
     val isEmpty: Boolean
         get() = effects.isEmpty() && conditions.isEmpty()
 }
 
 /**
  * Compile the `effects:`/`conditions:` blocks of a config section into a holder, or null when the
- * section declares neither.
- *
- * Both keys are read with Bukkit's `getMapList`, which quietly ignores non-map entries. That is what
- * makes the legacy shorthand keep working: `effects: ["haste:0"]` yields no maps here and is handled
- * by the caller's own parser, while `effects: [{id: ..., args: {...}}]` compiles as a libreforge
- * chain. A list may mix both forms and each side picks up only what it understands.
+ * section declares neither. Read with `getMapList`, which ignores non-map entries, so the legacy
+ * shorthand (`effects: ["haste:0"]`) is left to the caller's own parser and a list may mix both forms.
  */
 fun compileRoyalHolder(
     plugin: EcoPlugin,
@@ -60,11 +50,7 @@ fun compileRoyalHolder(
     return if (holder.isEmpty) null else holder
 }
 
-/**
- * Bridge Bukkit YAML to eco's config model. RoyalSkyblock still reads its own files with Bukkit
- * YAML — moving them onto eco's config system is a separate pass — so each map entry is wrapped in a
- * [TransientConfig] for libreforge to compile.
- */
+// Bukkit YAML to eco's config model: each map entry is wrapped in a TransientConfig for libreforge
 private fun ConfigurationSection.toConfigList(path: String): List<Config> =
     getMapList(path).map { raw ->
         @Suppress("UNCHECKED_CAST")

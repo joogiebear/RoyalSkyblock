@@ -5,10 +5,8 @@ import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Island schematic pasting/saving, abstracted from WorldEdit so the WE-referencing implementation is
- * only loaded when WorldEdit/FAWE is present. The plugin picks {@code WorldEditSchematics} when WE is
- * on the classpath and {@code NoOpSchematics} otherwise (guarded by a {@code Class.forName} check), so
- * a server without WorldEdit never links {@code com.sk89q.worldedit.*}.
+ * Island schematic pasting/saving behind an interface, so {@code com.sk89q.worldedit.*} is only linked
+ * when WorldEdit/FAWE is present ({@code WorldEditSchematics}); otherwise {@code NoOpSchematics}.
  */
 public interface SchematicService {
 
@@ -16,8 +14,8 @@ public interface SchematicService {
     boolean isAvailable();
 
     /**
-     * Paste the named {@code schematics/<name>.schem} at {@code (x,y,z)}. Returns {@code false} — so the
-     * caller falls back to the code generator — if unavailable, the file is missing, or the paste fails.
+     * Paste {@code schematics/<name>.schem} at {@code (x,y,z)}. Returns {@code false} (the caller then
+     * uses the code generator) if unavailable, the file is missing, or the paste fails.
      */
     boolean tryPasteSchematic(World world, int x, int y, int z, String name);
 

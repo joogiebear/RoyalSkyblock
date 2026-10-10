@@ -4,10 +4,7 @@ import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
-/**
- * A single upgrade track (e.g. island size) — its display, effect, and ordered tiers. Loaded from
- * {@code upgrades.yml}.
- */
+/** A single upgrade track (e.g. island size): its display, effect, and ordered tiers. */
 public final class UpgradeDef {
 
     private final String key;

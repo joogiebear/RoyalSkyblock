@@ -8,27 +8,19 @@ import org.bukkit.Bukkit;
 import java.util.UUID;
 
 /**
- * Bridges RoyalSkyblock profiles to eco's per-player data so that progression (skills, pets,
- * collections, jobs, coins — anything stored via eco) becomes per-profile.
+ * Makes eco-stored progression (skills, pets, collections, coins, anything stored via eco)
+ * per-profile. Each RoyalSkyblock profile is shadowed by an eco profile on its own UUID, and switching
+ * profiles copies every non-local key in {@link PersistentDataKey#values()} between the player's live
+ * eco profile and the shadow, so eco plugins added later are covered automatically.
  *
- * <p>The trick: eco can {@link PlayerProfile#load(UUID) load a data profile for any UUID}, and
- * {@link PersistentDataKey#values()} lists every key the whole eco suite has registered. So each
- * RoyalSkyblock profile is shadowed by an eco profile keyed by the profile's own UUID, and switching
- * profiles just copies every non-local key between the player's live profile and the shadow. This is
- * suite-agnostic: any eco plugin added later is scoped automatically, with no code changes here.
- *
- * <p>Guarded by eco being present; on a server without eco this is a no-op and the class's eco types
- * are never touched (construction is gated by {@link #isPresent()} at the call site).
+ * <p>Only constructed when eco is present ({@link #isPresent()} at the call site).
  */
 public final class EcoProfileBridge {
 
     private final boolean present;
 
-    /**
-     * Set when eco resolves a player's data to their profile itself, which makes copying pointless:
-     * the profile's data is already the data being read. See
-     * {@link com.mystipixel.royalskyblock.hooks.EcoProfileResolver}.
-     */
+    // set when eco resolves a player's data to their profile itself (see EcoProfileResolver), which makes
+    // copying pointless
     private boolean resolverActive;
 
     public EcoProfileBridge() {
@@ -48,10 +40,7 @@ public final class EcoProfileBridge {
         return present;
     }
 
-    /**
-     * A stable shadow-profile UUID for (player, profile-slot). Derived deterministically so the same
-     * slot always maps to the same eco profile across restarts.
-     */
+    /** A stable shadow-profile UUID for (player, profile slot), the same across restarts. */
     public static UUID shadowUuid(UUID player, UUID profileId) {
         return UUID.nameUUIDFromBytes(("rsb-profile:" + player + ":" + profileId).getBytes());
     }
@@ -99,24 +88,21 @@ public final class EcoProfileBridge {
         }
     }
 
-    /** Copy every non-local persistent key's value from {@code src} to {@code dst}. */
     private static void copyAll(Profile src, Profile dst) {
         for (PersistentDataKey<?> key : PersistentDataKey.values()) {
             if (key.isLocal()) {
                 continue; // session-local keys aren't part of saved progression
             }
             if (OWN_NAMESPACE.equals(key.getKey().getNamespace())) {
-                // Our own keys are storage, not progression. On the eco backend they include which
-                // profile the player is on — swapping that during a profile switch would rewrite the
-                // answer to the question being asked. EcoStorage also keeps player-scoped rows off the
-                // player's real UUID, so this is the second of two reasons it can't happen.
+                // our own keys are storage, not progression: on the eco backend they include which profile the
+                // player is on
                 continue;
             }
             copyKey(src, dst, key);
         }
     }
 
-    /** Lower-cased plugin name, which is the namespace of every key this plugin registers. */
+    // the namespace of every key this plugin registers
     private static final String OWN_NAMESPACE = "royalskyblock";
 
     private static <T> void copyKey(Profile src, Profile dst, PersistentDataKey<T> key) {

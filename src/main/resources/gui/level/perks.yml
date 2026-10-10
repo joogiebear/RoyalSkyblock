@@ -1,30 +1,20 @@
-# ═══════════════════════════════════════════════════════════════════════════════
 #  RoyalSkyblock  ·  Island Perks
-# ═══════════════════════════════════════════════════════════════════════════════
-#  The 0 slots fill at runtime with the perks from perks.yml — unlocked ones show
+#  The 0 slots fill at runtime with the perks from perks.yml: unlocked ones show
 #  their icon, locked ones are greyed with the level needed. Perks are OPTIONAL and
 #  off by default; this menu is only reachable when they're enabled.
 #
-#  Rendered through eco's Menu API. The dialect below is RoyalSkyblock's own —
-#  eco draws the menu, this file describes it:
-#    rows 1–6 · mask: 1 = filler pane, 0 = dynamic slot · slots placed by row/column
-#    click ids: open_menu · close · player_command · console_command · message · play_sound
-#    slot options: sound: — the sound clicking this slot makes (name / volume / pitch,
-#      or enabled: false). A slot with no sound: block is SILENT. There is no menu-wide
-#      click sound: a button that opens another menu should stay silent and let the
-#      destination's open sound speak, or the two land together as one doubled click.
-# ═══════════════════════════════════════════════════════════════════════════════
+#  rows: 1-6. mask: 1 = filler pane, 0 = dynamic slot. Slots are placed by row/column.
+#  click ids: open_menu, close, player_command, console_command, message, play_sound
+#  sound: on a slot is its click sound (name / volume / pitch, or enabled: false).
+#  A slot without one is silent; leave buttons that open another menu silent so
+#  the destination's open sound doesn't double up.
 
 title: "&8Skyblock &7» &fPerks"
 rows: 6
 
-# The sound this menu makes when it opens. Delete it or set enabled: false to silence.
-# Click sounds are NOT here — each slot carries its own sound: block, and a slot without
-# one is silent. See the slot options above.
+# Menu sounds (enabled: false silences one). Click sounds live on each slot.
 #   open     - when the menu is opened
-#   content  - when a GENERATED button is clicked (only on menus whose generated
-#              buttons close the inventory; the rest are covered by the open sound
-#              of whatever menu they reopen)
+#   content  - when a generated button that closes the menu is clicked
 sounds:
   open:
     enabled: true
@@ -46,7 +36,7 @@ pages:
         - "111111111"
 
 slots:
-  # ── header ──
+  # header
   - item: nether_star name:"&d&lIsland Perks"
     lore:
       - "&7Perks unlock as your island's"
@@ -55,7 +45,7 @@ slots:
     row: 1
     column: 5
 
-  # ── footer ──
+  # footer
   - item: arrow name:"&7« Back"
     lore:
       - "&7Return to the island level menu."

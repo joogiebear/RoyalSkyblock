@@ -7,26 +7,17 @@ import java.lang.reflect.Proxy
 import java.util.UUID
 
 /**
- * Points eco at the player's active profile, so no data has to be copied on a switch.
- *
- * [EcoProfileBridge] makes profiles work by copying every registered key between the player's live
- * data and a per-profile shadow. It is correct and it does not scale: the copy is every key the whole
- * suite has registered, of which almost none hold a value, and it happens twice per switch.
- *
- * If eco can be told which UUID a player's data belongs to, none of that is necessary — eco reads and
- * writes the profile directly and a profile becomes just another entry in its store. That capability
- * does not exist in released eco, so it is looked up at runtime rather than compiled against: on a
- * server without it [install] reports false and the bridge keeps copying.
- *
- * The resolver is consulted on every data access, so it must stay cheap. Active profile ids are held
- * in memory for online players, which is the only case that matters here.
+ * Points eco at the player's active profile, so no data is copied on a switch (unlike
+ * [EcoProfileBridge], which copies every registered key twice per switch). Released eco lacks this
+ * capability, so it is looked up at runtime: without it [install] returns false and the bridge keeps
+ * copying. Consulted on every data access, so it must stay cheap.
  */
 object EcoProfileResolver {
 
     private const val RESOLVER_CLASS = "com.willfp.eco.core.data.PlayerProfileResolver"
 
     /**
-     * Install the resolver, returning whether eco accepted it.
+     * Install the resolver.
      *
      * @return false if this eco has no resolver support, in which case nothing was changed
      */
@@ -54,16 +45,11 @@ object EcoProfileResolver {
         return runCatching { setter.invoke(eco, resolver) }.isSuccess
     }
 
-    /**
-     * The UUID a player's data belongs to: their active profile's shadow, or their own.
-     *
-     * Falls back to the player's own UUID whenever a profile cannot be determined — before the
-     * profile manager exists during startup, or for someone who has never picked one. Anything else
-     * would send data somewhere it could not be read back from.
-     */
+    // The UUID a player's data belongs to: their active profile's shadow, or their own when no profile
+    // can be determined (startup, or never picked one).
     private fun resolve(plugin: RoyalSkyblockPlugin, player: OfflinePlayer): UUID {
         val profiles = plugin.profilesOrNull() ?: return player.uniqueId
-        // Offline players are looked up without caching: see ProfileManager.peekActiveProfileId.
+        // offline players are looked up without caching: see ProfileManager.peekActiveProfileId
         val active = (if (player.isOnline) profiles.getActiveProfileId(player.uniqueId)
             else profiles.peekActiveProfileId(player.uniqueId)) ?: return player.uniqueId
         return EcoProfileBridge.shadowUuid(player.uniqueId, active)

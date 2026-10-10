@@ -16,15 +16,9 @@ depend:
   - eco
 # ASP provides its world API as part of the server fork, so it is not listed as a (soft)depend.
 # libreforge is only a softdepend because it ships bundled inside this jar.
-# Every plugin any EXTENSION hooks MUST be listed here, even though this plugin no longer hooks one
-# itself. Extensions load inside RoyalSkyblock's own enable and have no plugin.yml of their own, so
-# they cannot declare a dependency — this list is the only lever on load order they have.
-#
-# Bukkit enables softdepends first. A plugin missing from here can enable *after* RoyalSkyblock, so an
-# extension's isPluginEnabled() guard reads false and the integration is skipped silently, with no
-# error to find. That is exactly how the EcoMinions triggers failed to register the first time.
-#
-# So: adding an extension that hooks a new plugin means adding that plugin here.
+# Every plugin an extension hooks must be listed here: extensions have no plugin.yml, so this is
+# their only control over load order. A missing one can enable after RoyalSkyblock, and the
+# extension's integration is then skipped silently.
 softdepend:
   - libreforge
   - Vault
@@ -35,9 +29,7 @@ softdepend:
   - PlaceholderAPI
   - WorldEdit
   - FastAsyncWorldEdit
-# Commands are registered by eco from the command classes themselves (CommandIsland, BankCommand),
-# which is where the rest of the suite declares its name, aliases, description and permission. There
-# is deliberately no `commands:` block here — a second declaration would be a second source of truth.
+# Commands are registered by eco from CommandIsland and BankCommand; no commands: block here.
 
 permissions:
   royalskyblock.use:

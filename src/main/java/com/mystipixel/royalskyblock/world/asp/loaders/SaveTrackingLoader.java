@@ -11,15 +11,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Wraps the real loader and remembers how each world's most recent save went.
- *
- * <p>Needed because ASP hides save failures for loaded worlds. {@code AdvancedSlimePaperAPI.saveWorld}
- * on a loaded world runs {@code SlimeLevelInstance.save()}, whose background task calls
- * {@link SlimeLoader#saveWorld} inside {@code catch (Exception)}, logs "There was an issue saving world
- * {} asynchronously" and completes normally. The API call returns as if the blocks were on disk, so
- * nothing that trusts it can tell a full disk or a dead database from a good save. The loader is the
- * one place that sees the real outcome, so it records it here for {@code AspIslandWorldService} to
- * check once ASP says it is done.
+ * Wraps the real loader and records how each world's most recent save went. ASP's
+ * {@code saveWorld} on a loaded world catches and logs a failed {@link SlimeLoader#saveWorld} and
+ * returns normally, so {@code AspIslandWorldService} checks the outcome here instead.
  */
 public final class SaveTrackingLoader implements SlimeLoader, AutoCloseable {
 

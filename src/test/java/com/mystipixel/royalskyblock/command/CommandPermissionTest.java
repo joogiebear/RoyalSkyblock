@@ -19,21 +19,12 @@ import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-/**
- * Every command in the {@code /is} and {@code /bank} trees has a permission players can actually hold.
- *
- * <p>eco checks a command's permission string as given, and Bukkit treats a permission it has never
- * heard of — the empty string included — as op-only. That is how {@code /is} and {@code /bank} were
- * op-only for every non-op from 2026.36.0 until {@code 0250018}, and ops, who test most things, never
- * see it. So each permission must be non-blank and declared in {@code plugin.yml}, and anything not
- * granted to everyone by default must be one of the deliberately admin-only commands.
- *
- * <p>The real command classes are built against a stubbed eco that just records the tree, so a new
- * subcommand is covered without this test having to list it.
- */
+// Every /is and /bank command has a permission players can hold: non-blank (Bukkit treats an unknown
+// permission, "" included, as op-only), declared in plugin.yml, and default-true unless admin-only.
+// The real command classes are built against a stubbed eco, so new subcommands are covered automatically.
 class CommandPermissionTest {
 
-    /** Subcommands meant for staff only; everything else must be open to all players by default. */
+    // subcommands meant for staff only; everything else must be open to all players by default
     private static final Set<String> ADMIN_ONLY = Set.of("island reload", "island admin");
 
     private static Eco previousEco;
@@ -101,7 +92,7 @@ class CommandPermissionTest {
         }
     }
 
-    /** A command stub that remembers its name, permission and subcommands, which is all this test reads. */
+    // a command stub that remembers its name, permission and subcommands
     private static <T extends CommandBase> T recording(Class<T> type, String name, String permission) {
         List<CommandBase> subs = new ArrayList<>();
         Object[] self = new Object[1];
@@ -128,10 +119,8 @@ class CommandPermissionTest {
                 (proxy, method, args) -> handler.handle(method, args)));
     }
 
-    /**
-     * eco keeps its singleton in {@code Eco.Instance.eco}; returns what was there before. Written through
-     * the field because {@code Instance.set} refuses to replace one that is already set.
-     */
+    // eco keeps its singleton in Eco.Instance.eco; returns the previous one. Written through the field
+    // because Instance.set refuses to replace one that is already set.
     private static Eco setEco(Eco eco) throws Exception {
         java.lang.reflect.Field field = Class.forName("com.willfp.eco.core.Eco$Instance").getDeclaredField("eco");
         field.setAccessible(true);
@@ -140,7 +129,7 @@ class CommandPermissionTest {
         return previous;
     }
 
-    /** An instance with no constructor run, via {@code Unsafe.allocateInstance}. */
+    // an instance with no constructor run, via Unsafe.allocateInstance
     private static <T> T allocate(Class<T> type) {
         try {
             Class<?> unsafeClass = Class.forName("sun.misc.Unsafe");

@@ -19,19 +19,18 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * RoyalSkyblock's native bank. Accounts are keyed by an opaque id (personal per-profile or shared coop),
- * with a {@link Player} as the Vault/inventory counterparty — so the same engine serves both. Money
- * moves through Vault; every mutation persists atomically (balance + ledger row) and compensates
- * (refund / claw-back) if a paired step fails. Ported from the RoyalBank engine. Main-thread only.
+ * RoyalSkyblock's native bank. Accounts are keyed by an opaque id (personal per-profile or shared
+ * coop), with a {@link Player} as the Vault/inventory counterparty. Every mutation persists the
+ * balance and a ledger row together, and refunds or claws back if a paired step fails. Main thread only.
  *
  * <p>{@code deposit}/{@code withdraw}/{@code upgrade}/{@code claimInterest} return {@code null} on
  * success or a colour-coded, player-facing error string.
  */
 public final class BankService {
 
-    /** Short enough that an out-of-band edit surfaces quickly; long enough to absorb per-tick reads. */
+    // short enough that an outside edit shows up quickly, long enough to absorb per-tick reads
     private static final long CACHE_TTL_MILLIS = 5_000L;
-    /** Only bother sweeping expired entries once the map is big enough to be worth walking. */
+    // only sweep expired entries once the map is big enough to be worth walking
     private static final int CACHE_SWEEP_AT = 256;
 
     private record Cached(BankAccount account, long expiresAt) {
@@ -64,16 +63,10 @@ public final class BankService {
         return "c:" + coopProfile;
     }
 
-    // ── reads ─────────────────────────────────────────────────────────────────────
-
     /**
-     * The account, from cache when it is still warm.
-     *
-     * <p>Reads outnumber writes heavily here — the balance placeholder is rendered for every player on
-     * every scoreboard/tab refresh, and the bank menu re-reads on each redraw — so hitting the database
-     * for each one put a blocking query on the server thread many times a second. Every write in this
-     * class refreshes the cached copy (see {@link #persist}), so a cache hit is current, not merely
-     * recent; the short expiry is only a backstop for anything that edits the table from outside.
+     * The account, from cache when still warm. The balance placeholder is read on every scoreboard
+     * refresh, so reads must not hit the database each time. Every write here refreshes the cache, so a
+     * hit is current; the short expiry only catches edits made outside this class.
      */
     public BankAccount account(String id) {
         Cached hit = cache.get(id);
@@ -90,13 +83,10 @@ public final class BankService {
         return result;
     }
 
-    /**
-     * Write an account plus its transaction row, keeping the cache in step. Returns false if the write
-     * failed, in which case callers must undo whatever they already did (refund, claw back).
-     */
+    // Returns false if the write failed; callers must then undo what they already did (refund, claw back).
     private boolean persist(BankAccount account, String type, double amount, double balance, String note) {
         if (!plugin.storage().saveBankAccountWithTxn(account, type, amount, balance, note)) {
-            cache.remove(account.id());   // unknown DB state — force the next read to go to source
+            cache.remove(account.id());   // unknown DB state, force the next read to go to source
             return false;
         }
         cache.put(account.id(), new Cached(account, System.currentTimeMillis() + CACHE_TTL_MILLIS));
@@ -128,8 +118,6 @@ public final class BankService {
         return currencySymbol() + String.format(Locale.US, "%,.2f", amount);
     }
 
-    // ── deposit / withdraw ─────────────────────────────────────────────────────────
-
     public String deposit(Player purse, String id, double amount) {
         if (!available()) {
             return "&cThe bank is unavailable (no economy plugin).";
@@ -158,14 +146,13 @@ public final class BankService {
         }
         BankAccount updated = account.withBalance(principal);
         if (account.lastInterest() <= 0) {
-            // First money in starts the interest clock. Without it a brand-new account could claim at
-            // once, and a new profile is a new account: create, deposit, claim, withdraw, delete, repeat.
-            // The floor starts at this first deposit, so a normal first period still earns.
+            // First money in starts the interest clock, so a new account (or new profile) can't deposit and
+            // claim at once. The floor starts at this deposit so a normal first period still earns.
             updated = updated.withLastInterest(Instant.now().getEpochSecond()).withInterestFloor(principal);
         }
         if (!persist(updated, "DEPOSIT", charge,
                 principal, purse.getName() + " deposited")) {
-            vault.deposit(purse, charge); // refund
+            vault.deposit(purse, charge);
             return "&cDeposit could not be saved; your money was refunded.";
         }
         return null;
@@ -173,8 +160,8 @@ public final class BankService {
 
     /**
      * Empty an account into {@code purse}: the payout a member gets from their personal account on a
-     * coop they left. Returns the amount paid (0 if the account was empty), or -1 if the bank can't
-     * pay right now — no economy, or the ledger write failed — in which case nothing moved.
+     * coop they left. Returns the amount paid (0 if empty), or -1 if the bank can't pay right now (no
+     * economy, or the ledger write failed), in which case nothing moved.
      */
     public double payOutAll(Player purse, String id, String note) {
         BankAccount account = account(id);
@@ -211,21 +198,18 @@ public final class BankService {
         if (account.balance() < amount) {
             return "&cThe bank doesn't have that much money.";
         }
-        // The deposit's result used to be ignored, so an economy that refused it (a purse at its cap)
-        // still had the bank debited and the money vanished.
+        // a refused deposit (purse at its cap) must not leave the bank debited
         if (!vault.deposit(purse, amount)) {
             return "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn.";
         }
         double newBalance = round(account.balance() - amount);
         if (!persist(account.withBalance(newBalance), "WITHDRAW", amount,
                 newBalance, purse.getName() + " withdrew")) {
-            vault.withdraw(purse, amount); // claw back
+            vault.withdraw(purse, amount);
             return "&cWithdrawal could not be saved and was reverted; please try again.";
         }
         return null;
     }
-
-    // ── upgrade ────────────────────────────────────────────────────────────────────
 
     public String upgrade(Player purse, String id) {
         if (!available()) {
@@ -255,14 +239,12 @@ public final class BankService {
         return null;
     }
 
-    // ── interest ───────────────────────────────────────────────────────────────────
-
     public long interestSecondsRemaining(String id) {
         long cooldown = levels.config().getLong("settings.interest-cooldown-hours", 24) * 3600L;
         long lastInterest = account(id).lastInterest();
         if (lastInterest <= 0) {
-            // Clock not started. New accounts start it on their first deposit, so this is only an
-            // account funded before that rule existed: let it claim once, which then starts its clock.
+            // Clock not started: an account funded before first deposits started it. Let it claim once,
+            // which then starts its clock.
             return 0;
         }
         long next = lastInterest + cooldown;
@@ -306,8 +288,6 @@ public final class BankService {
         double cap = level.maxInterest() < 0.0 ? Double.MAX_VALUE : level.maxInterest();
         return Math.min(interest, cap);
     }
-
-    // ── item requirements (ported from RoyalBank) ──────────────────────────────────
 
     private List<String> missingItems(Player player, List<ItemRequirement> requirements) {
         List<String> missing = new ArrayList<>();

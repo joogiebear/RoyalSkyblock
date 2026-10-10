@@ -16,11 +16,8 @@ import java.util.List;
 
 /**
  * A MySQL-backed {@link SlimeLoader} storing each island world as a blob row, so any server on a
- * network can load any island from the shared database. RoyalSkyblock ships its own loader because
- * the ASP fork exposes the world API but not its loader classes on the plugin classpath.
- *
- * <p>Uses its own small HikariCP pool (separate from the island metadata pool) since world blobs are
- * larger and read/written on their own cadence.
+ * network can load any island. Shipped here because the ASP fork doesn't expose its loader classes on
+ * the plugin classpath. Uses its own small HikariCP pool, separate from the metadata pool.
  */
 public final class RsbMysqlLoader implements SlimeLoader, AutoCloseable {
 

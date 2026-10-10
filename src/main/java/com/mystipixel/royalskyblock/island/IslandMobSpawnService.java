@@ -25,17 +25,12 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * Spawns RoyalSkyblock's night mobs on islands by delegating to an {@link IslandMobProvider}.
+ * Spawns RoyalSkyblock's night mobs on islands through an {@link IslandMobProvider}.
  *
- * <p><b>Player-driven, not island-driven.</b> Each pass iterates <em>online players</em> — never a scan
- * of all islands — so the cost is bounded by player count and it only ever touches loaded islands where
- * someone actually is (so it never keeps an island loaded or spawns on an empty one). For each eligible
- * player it makes a few attempts to find a dark, safe, on-island spot near them and spawns
- * {@code <family>_<level>}, where level comes from the reference player's Combat skill (capped).
- *
- * <p>Per-island count is the number of our PDC-tagged mobs alive in that (single-island) world — cheap,
- * because island worlds are tiny — so no counter can drift. Vanilla monster spawning is expected to be
- * off on islands (the {@code spawn_monsters} gamerule in island world-rules), leaving these the only mobs.
+ * <p>Each pass iterates online players, not islands, so cost scales with players and it only touches
+ * loaded islands someone is on. It spawns {@code <family>_<level>} near eligible players, with level
+ * from the reference player's Combat skill (capped). The per-island count is our PDC-tagged mobs in
+ * that world. Vanilla monster spawning is expected to be off on islands ({@code spawn_monsters}).
  */
 public final class IslandMobSpawnService {
 
@@ -143,15 +138,13 @@ public final class IslandMobSpawnService {
         }
     }
 
-    // ── the pass ─────────────────────────────────────────────────────────────────
-
     private void tick() {
         if (!enabled || provider == null || !provider.available() || families.isEmpty()) {
             return;
         }
         long now = System.currentTimeMillis();
 
-        // Group eligible players by island (so we count/cap once per island, not per player).
+        // group eligible players by island, so the cap is counted once per island
         Map<UUID, List<Player>> byIsland = new HashMap<>();
         Map<UUID, Island> islands = new HashMap<>();
         for (Player p : Bukkit.getOnlinePlayers()) {
@@ -204,8 +197,6 @@ public final class IslandMobSpawnService {
         }
     }
 
-    // ── spawn location ─────────────────────────────────────────────────────────────
-
     private Location findSpawnLocation(Player player, Island island) {
         World world = player.getWorld();
         int radius = island.radius();
@@ -243,8 +234,6 @@ public final class IslandMobSpawnService {
         return null;
     }
 
-    // ── helpers ────────────────────────────────────────────────────────────────────
-
     private boolean isNight(World world) {
         long time = world.getTime() % 24000L;
         return time >= 13000L && time <= 23000L;
@@ -260,7 +249,7 @@ public final class IslandMobSpawnService {
         return count;
     }
 
-    /** Mark a spawned mob as ours, with its island and tier. The tier is what the intimidation bridge reads. */
+    // tag a spawned mob with its island and tier; the intimidation bridge reads the tier
     private void tag(Entity entity, UUID islandId, int level) {
         entity.getPersistentDataContainer().set(mobKey, PersistentDataType.BYTE, (byte) 1);
         entity.getPersistentDataContainer().set(islandKey, PersistentDataType.STRING, islandId.toString());
@@ -288,8 +277,6 @@ public final class IslandMobSpawnService {
         }
         return families.get(0).name();
     }
-
-    // ── admin test spawn (used by /is admin mobspawn test) ──────────────────────────
 
     /** Force-spawn a family/level near the player, ignoring night/grace/cap. Returns a status string. */
     public String testSpawn(Player player, String family, int level) {

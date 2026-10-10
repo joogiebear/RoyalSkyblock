@@ -2,28 +2,16 @@ package com.mystipixel.royalskyblock.simulation;
 
 import java.util.function.DoubleSupplier;
 
-/**
- * How much a crop grows over a stretch of unloaded time.
- *
- * <p>Vanilla doesn't grow crops on a timer — each one waits on random ticks, so its real rate is a
- * probability. Dividing elapsed time by a fixed stage duration would advance a whole field in
- * lockstep and read as obviously fake. Instead each stage is drawn from an exponential distribution
- * with mean {@code secondsPerStage}: memoryless, like the random-tick process it stands in for, so a
- * field planted at once still ripens raggedly and a short trip away is usually worth nothing.
- *
- * <p>Pure and side-effect free, with the randomness injected, so the model can be pinned by tests
- * rather than eyeballed on a live server.
- */
+// How much a crop grows over unloaded time. Vanilla growth is random ticks, so each stage is drawn from
+// an exponential distribution with mean secondsPerStage rather than elapsed / duration, which would
+// ripen a field in lockstep. Randomness is injected so tests can pin it.
 final class GrowthModel {
 
     private GrowthModel() {
     }
 
-    /**
-     * Stages a crop advances over {@code offlineSeconds}, never more than {@code stagesRemaining}.
-     *
-     * @param rng supplies uniforms in [0,1) — {@code ThreadLocalRandom.current()::nextDouble} live
-     */
+    // stages a crop advances over offlineSeconds, never more than stagesRemaining;
+    // rng supplies uniforms in [0,1) (ThreadLocalRandom.current()::nextDouble live)
     static int stagesGrown(long offlineSeconds, double secondsPerStage, int stagesRemaining,
                            DoubleSupplier rng) {
         if (offlineSeconds <= 0 || secondsPerStage <= 0 || stagesRemaining <= 0) {
@@ -33,7 +21,7 @@ final class GrowthModel {
         int grown = 0;
         while (grown < stagesRemaining) {
             double u = rng.getAsDouble();
-            // Guard the tail: u == 1 would make log(0) = -infinity and hang the loop on a NaN budget.
+            // guard the tail: u == 1 would make log(0) = -infinity and hang the loop on a NaN budget
             if (u >= 1.0) {
                 u = Math.nextDown(1.0);
             }

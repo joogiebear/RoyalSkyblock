@@ -4,15 +4,9 @@ import com.mystipixel.royalskyblock.hooks.CombatLevelSource;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * A backend that can answer "what level is this player at X?" — skills and stats.
- *
- * <p>A provider rather than a source, because which skill and which stat get read are admin config
- * (<code>island-mobs.combat-skill</code>, <code>island-mobs.intimidation.stat</code>), and the
- * fallback used when the backend can't answer is the caller's decision. RoyalSkyblock asks for the
- * skill it was configured to ask for; the provider says whether it has one by that name.
- *
- * <p>Implementations live in extensions, one per backend — EcoSkills today, anything else later —
- * and are registered with {@link Integrations} from the extension's {@code onEnable}.
+ * A skills/stats backend that answers "what level is this player at X?". Which skill and stat are
+ * read is admin config ({@code island-mobs.combat-skill}, {@code island-mobs.intimidation.stat}).
+ * Implementations live in extensions and register with {@link Integrations} from {@code onEnable}.
  */
 public interface ProgressionProvider {
 
@@ -23,10 +17,8 @@ public interface ProgressionProvider {
     boolean available();
 
     /**
-     * A reader for a named skill, or {@code null} if this backend has no such skill.
-     *
-     * <p>Returning null is how a misconfigured skill id is reported — the caller warns and falls back
-     * rather than every player silently reading as level {@code fallback} forever.
+     * A reader for a named skill, or {@code null} if this backend has no such skill. Returning null lets
+     * the caller warn about a misconfigured skill id and fall back.
      */
     @Nullable CombatLevelSource skill(String skillId, int fallback);
 
