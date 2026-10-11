@@ -197,35 +197,48 @@ messages:
     empty: "&cThe coop bank is empty."
     nothing-to-withdraw: "&cThere's nothing in this bank to withdraw."
     no-access: "&cYou no longer have access to this bank."
-    # Why a bank action didn't go through. Sent with the prefix.
+    # Why a bank action didn't go through. Sent with the prefix. The keys under amount, account,
+    # withdraw, upgrade, interest and format have the same names as in RoyalBank's messages.yml.
+    # Older versions used other names for these (full, insufficient-purse, missing-item, ...); if your
+    # lang.yml still has an old key, its text is used until you edit the new key.
     result:
       unavailable: "&cThe bank is unavailable (no economy plugin)."
       interest-unavailable: "&cThe bank is unavailable."
-      amount-too-small: "&cAmount must be at least %amount%."
-      full: "&cThe bank is full. Upgrade it to store more."
-      insufficient-purse: "&cYou don't have enough money to deposit that."
       deposit-failed: "&cDeposit failed."
-      deposit-not-saved: "&cDeposit could not be saved; your money was refunded."
-      insufficient-bank: "&cThe bank doesn't have that much money."
       purse-full: "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn."
-      withdraw-not-saved: "&cWithdrawal could not be saved and was reverted; please try again."
-      max-level: "&eThe bank is already at the maximum level."
-      upgrade-cost: "&cYou need %cost% to upgrade."
-      # %items% is one missing-item per item, joined by missing-items-separator
-      missing-items: "&cMissing upgrade items: &f%items%"
-      missing-item: "%item% (have %have%)"
-      missing-items-separator: ", "
       upgrade-payment-failed: "&cUpgrade payment failed."
-      upgrade-not-saved: "&cUpgrade could not be saved. Your money was refunded; please try again."
       interest-not-ready: "&eInterest isn't ready yet."
       no-interest: "&eNo interest was earned (empty bank)."
       interest-full: "&eYour bank is full, so no interest could be paid."
-      interest-not-saved: "&cInterest could not be saved; please try again."
+      amount:
+        too-small: "&cAmount must be at least %amount%."
+      account:
+        deposit:
+          bank-full: "&cThe bank is full. Upgrade it to store more."
+          not-enough-money: "&cYou don't have enough money to deposit that."
+          refunded: "&cDeposit could not be saved; your money was refunded."
+        withdraw:
+          not-enough-money: "&cThe bank doesn't have that much money."
+        upgrade:
+          max-level: "&eThe bank is already at the maximum level."
+          not-enough-money: "&cYou need %cost% to upgrade."
+      withdraw:
+        reverted: "&cWithdrawal could not be saved and was reverted; please try again."
+      upgrade:
+        # %items% is one format.item-have per item, joined by format.item-separator
+        missing-items: "&cMissing upgrade items: &f%items%"
+        refunded: "&cUpgrade could not be saved. Your money was refunded; please try again."
+      interest:
+        not-saved: "&cInterest could not be saved; please try again."
+      format:
+        item-have: "%item% (have %have%)"
+        item-separator: ", "
     # The note saved with each entry in the transaction log (shown in its lore). Changing one only
-    # affects new entries.
-    note:
-      deposit: "%player% deposited"
-      withdraw: "%player% withdrew"
+    # affects new entries. Older versions kept these under note: instead of notes:, and deposit and
+    # withdraw were named deposit and withdraw; an old key's text is used until you edit the new one.
+    notes:
+      account-deposit: "%player% deposited"
+      account-withdraw: "%player% withdrew"
       upgrade: "Upgraded to %level%"
       interest: "Interest"
       coop-payout: "%player% left %profile%"

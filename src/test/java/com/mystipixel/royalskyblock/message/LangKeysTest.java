@@ -35,7 +35,7 @@ class LangKeysTest {
             "(?:messages\\(\\)\\s*\\.\\s*(send|sendPlain|sendLines|raw|lines)|\\b(say))\\s*\\(");
     private static final Pattern SELF_CALL = Pattern.compile("(?<![.\\w])(send|sendPlain|sendLines|raw|lines)\\s*\\(");
     private static final Pattern REASON = Pattern.compile("new Reason\\(\\s*\"([a-z0-9.-]+)\"");
-    private static final Pattern BANK_RESULT = Pattern.compile("\\bresult\\(\\s*\"([a-z0-9-]+)\"");
+    private static final Pattern BANK_RESULT = Pattern.compile("\\bresult\\(\\s*\"([a-z0-9.-]+)\"");
     private static final Pattern BANK_NOTE = Pattern.compile("\\bnote\\(\\s*\"([a-z0-9-]+)\"");
     private static final Pattern STATUS_DEP = Pattern.compile("\\bdep\\(sender,\\s*\"([a-z0-9-]+)\"");
     private static final Pattern STATUS_CHECK = Pattern.compile("\\bcheck\\(sender,[^\"]*\"([a-z0-9-]+)\",\\s*\"([a-z0-9-]+)\"");
@@ -71,7 +71,7 @@ class LangKeysTest {
                     add(reads, name, REASON.matcher(source), "", false);
                     if (name.equals("BankService.java")) {
                         add(reads, name, BANK_RESULT.matcher(source), "bank.result.", false);
-                        add(reads, name, BANK_NOTE.matcher(source), "bank.note.", false);
+                        add(reads, name, BANK_NOTE.matcher(source), "bank.notes.", false);
                     }
                     Matcher dep = STATUS_DEP.matcher(source);
                     while (dep.find()) {

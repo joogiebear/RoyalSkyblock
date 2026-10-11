@@ -758,7 +758,7 @@ public final class ProfileManager {
             boolean settled = true;
 
             double paid = plugin.bank().payOutAll(player, BankService.personalId(from, uuid),
-                    plugin.messages().raw("bank.note.coop-payout", "profile", name, "player", player.getName()));
+                    plugin.messages().raw("bank.notes.coop-payout", "profile", name, "player", player.getName()));
             if (paid < 0) {
                 settled = false;
             } else if (paid > 0) {

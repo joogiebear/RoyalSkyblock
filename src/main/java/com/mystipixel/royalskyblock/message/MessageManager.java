@@ -11,6 +11,9 @@ import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -30,6 +33,8 @@ public final class MessageManager {
     private static final String LEGACY_FILE = "messages.yml";
 
     private final RoyalSkyblockPlugin plugin;
+    // the jar's lang.yml, loaded on first use; only read for renamed keys (see RenamedKeys)
+    private volatile YamlConfiguration bundled;
 
     public MessageManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -82,8 +87,22 @@ public final class MessageManager {
 
     /** The raw string for a key (with {@code %token%} substitution), or a visible missing marker. */
     public String raw(String key, String... placeholders) {
-        String value = plugin.getLangYml().getStringOrNull(ROOT + key);
+        String value = RenamedKeys.resolve(key, k -> plugin.getLangYml().getStringOrNull(ROOT + k),
+                k -> bundled().getString(ROOT + k));
         return apply(value != null ? value : "&c<missing:" + key + ">", placeholders);
+    }
+
+    private YamlConfiguration bundled() {
+        YamlConfiguration loaded = bundled;
+        if (loaded == null) {
+            loaded = new YamlConfiguration();
+            InputStream in = plugin.getResource("lang.yml");
+            if (in != null) {
+                loaded = YamlConfiguration.loadConfiguration(new InputStreamReader(in, StandardCharsets.UTF_8));
+            }
+            bundled = loaded;
+        }
+        return loaded;
     }
 
     public String raw(Reason reason) {

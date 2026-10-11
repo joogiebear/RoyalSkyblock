@@ -101,38 +101,38 @@ class LangDefaultsTest {
         Map<String, String> old = new LinkedHashMap<>();
         old.put("unavailable", "&cThe bank is unavailable (no economy plugin).");
         old.put("interest-unavailable", "&cThe bank is unavailable.");
-        old.put("full", "&cThe bank is full. Upgrade it to store more.");
-        old.put("insufficient-purse", "&cYou don't have enough money to deposit that.");
+        old.put("account.deposit.bank-full", "&cThe bank is full. Upgrade it to store more.");
+        old.put("account.deposit.not-enough-money", "&cYou don't have enough money to deposit that.");
         old.put("deposit-failed", "&cDeposit failed.");
-        old.put("deposit-not-saved", "&cDeposit could not be saved; your money was refunded.");
-        old.put("insufficient-bank", "&cThe bank doesn't have that much money.");
+        old.put("account.deposit.refunded", "&cDeposit could not be saved; your money was refunded.");
+        old.put("account.withdraw.not-enough-money", "&cThe bank doesn't have that much money.");
         old.put("purse-full", "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn.");
-        old.put("withdraw-not-saved", "&cWithdrawal could not be saved and was reverted; please try again.");
-        old.put("max-level", "&eThe bank is already at the maximum level.");
+        old.put("withdraw.reverted", "&cWithdrawal could not be saved and was reverted; please try again.");
+        old.put("account.upgrade.max-level", "&eThe bank is already at the maximum level.");
         old.put("upgrade-payment-failed", "&cUpgrade payment failed.");
-        old.put("upgrade-not-saved", "&cUpgrade could not be saved. Your money was refunded; please try again.");
+        old.put("upgrade.refunded", "&cUpgrade could not be saved. Your money was refunded; please try again.");
         old.put("interest-not-ready", "&eInterest isn't ready yet.");
         old.put("no-interest", "&eNo interest was earned (empty bank).");
         old.put("interest-full", "&eYour bank is full, so no interest could be paid.");
-        old.put("interest-not-saved", "&cInterest could not be saved; please try again.");
+        old.put("interest.not-saved", "&cInterest could not be saved; please try again.");
         old.forEach((key, text) -> assertEquals(text, raw("bank.result." + key), key));
 
-        assertEquals("&cAmount must be at least $0.01.", raw("bank.result.amount-too-small", "amount", "$0.01"));
-        assertEquals("&cYou need $500.00 to upgrade.", raw("bank.result.upgrade-cost", "cost", "$500.00"));
-        String items = String.join(raw("bank.result.missing-items-separator"),
-                raw("bank.result.missing-item", "have", "3", "item", "64x Diamond"),
-                raw("bank.result.missing-item", "have", "0", "item", "1x Nether Star"));
+        assertEquals("&cAmount must be at least $0.01.", raw("bank.result.amount.too-small", "amount", "$0.01"));
+        assertEquals("&cYou need $500.00 to upgrade.", raw("bank.result.account.upgrade.not-enough-money", "cost", "$500.00"));
+        String items = String.join(raw("bank.result.format.item-separator"),
+                raw("bank.result.format.item-have", "have", "3", "item", "64x Diamond"),
+                raw("bank.result.format.item-have", "have", "0", "item", "1x Nether Star"));
         assertEquals("&cMissing upgrade items: &f64x Diamond (have 3), 1x Nether Star (have 0)",
-                raw("bank.result.missing-items", "items", items));
+                raw("bank.result.upgrade.missing-items", "items", items));
 
-        assertEquals("Steve deposited", raw("bank.note.deposit", "player", "Steve"));
-        assertEquals("Steve withdrew", raw("bank.note.withdraw", "player", "Steve"));
-        assertEquals("Upgraded to Gold", raw("bank.note.upgrade", "level", "Gold"));
-        assertEquals("Interest", raw("bank.note.interest"));
-        assertEquals("Steve left Apple", raw("bank.note.coop-payout", "profile", "Apple", "player", "Steve"));
-        assertEquals("Steve left Apple (purse refused)", raw("bank.note.purse-refused", "note", "Steve left Apple"));
+        assertEquals("Steve deposited", raw("bank.notes.account-deposit", "player", "Steve"));
+        assertEquals("Steve withdrew", raw("bank.notes.account-withdraw", "player", "Steve"));
+        assertEquals("Upgraded to Gold", raw("bank.notes.upgrade", "level", "Gold"));
+        assertEquals("Interest", raw("bank.notes.interest"));
+        assertEquals("Steve left Apple", raw("bank.notes.coop-payout", "profile", "Apple", "player", "Steve"));
+        assertEquals("Steve left Apple (purse refused)", raw("bank.notes.purse-refused", "note", "Steve left Apple"));
         assertEquals(lang.getString("messages.prefix") + "&cThe bank is full. Upgrade it to store more.",
-                prefixed("bank.result.full"));
+                prefixed("bank.result.account.deposit.bank-full"));
     }
 
     @Test
