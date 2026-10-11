@@ -888,7 +888,7 @@ public final class GuiManager implements Listener {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
-                Reason error = bank.claimInterest(accountId);
+                Reason error = bank.claimInterest(viewer, accountId);
                 if (error != null) {
                     plugin.messages().send(viewer, error);
                 } else {

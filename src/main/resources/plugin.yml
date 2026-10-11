@@ -29,6 +29,7 @@ softdepend:
   - PlaceholderAPI
   - WorldEdit
   - FastAsyncWorldEdit
+  - EconGuard
 # Commands are registered by eco from CommandIsland and BankCommand; no commands: block here.
 
 permissions:

@@ -14,6 +14,7 @@ import com.mystipixel.royalskyblock.data.Storage
 import com.mystipixel.royalskyblock.gui.GuiManager
 import com.mystipixel.royalskyblock.hooks.CombatLevelSource
 import com.mystipixel.royalskyblock.hooks.EcoProfileBridge
+import com.mystipixel.royalskyblock.hooks.EconGuardHook
 import com.mystipixel.royalskyblock.hooks.EcoProfileResolver
 import com.mystipixel.royalskyblock.api.Integrations
 import com.mystipixel.royalskyblock.api.ProgressionProvider
@@ -307,6 +308,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         this.vaultHook = resolveVault()
         this.bankLevels = BankLevelManager(this)
         this.bankService = BankService(this, bankLevels, vaultHook)
+        EconGuardHook.resolve(logger)?.let { bankService!!.setAuditSink(it) }
         this.borderService = BorderService(this)
         this.guiManager = GuiManager(this)
 
