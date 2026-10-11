@@ -26,7 +26,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * balance and a ledger row together, and refunds or claws back if a paired step fails. Main thread only.
  *
  * <p>{@code deposit}/{@code withdraw}/{@code upgrade}/{@code claimInterest} return {@code null} on
- * success or the {@link Reason} it failed ({@code bank.result.*} in lang.yml).
+ * success or the {@link Reason} it failed ({@code bank.result.*} in lang.yml). Completed movements are
+ * reported to the {@link BankAuditSink} (EconGuard when installed).
  */
 public final class BankService {
 
@@ -41,12 +42,18 @@ public final class BankService {
     private final RoyalSkyblockPlugin plugin;
     private final BankLevelManager levels;
     private final Map<String, Cached> cache = new ConcurrentHashMap<>();
+    private final BankAuditReporter audit;
     private VaultHook vault;
 
     public BankService(RoyalSkyblockPlugin plugin, BankLevelManager levels, VaultHook vault) {
         this.plugin = plugin;
         this.levels = levels;
         this.vault = vault;
+        this.audit = new BankAuditReporter(plugin.getLogger());
+    }
+
+    public void setAuditSink(BankAuditSink sink) {
+        audit.setSink(sink);
     }
 
     public boolean available() {
@@ -157,6 +164,7 @@ public final class BankService {
             vault.deposit(purse, charge);
             return result("account.deposit.refunded");
         }
+        audit.deposited(id, purse.getUniqueId(), purse.getName(), charge, principal);
         return null;
     }
 
@@ -185,6 +193,7 @@ public final class BankService {
                     note("purse-refused", "note", note));
             return -1;
         }
+        audit.paidOut(purse.getUniqueId(), purse.getName(), amount);
         return amount;
     }
 
@@ -211,6 +220,7 @@ public final class BankService {
             vault.withdraw(purse, amount);
             return result("withdraw.reverted");
         }
+        audit.withdrew(id, purse.getUniqueId(), purse.getName(), amount, account.balance());
         return null;
     }
 
@@ -257,7 +267,7 @@ public final class BankService {
     }
 
     /** Pay accrued interest into the account (capped at the level max). Returns null on success/no-op. */
-    public @Nullable Reason claimInterest(String id) {
+    public @Nullable Reason claimInterest(Player claimer, String id) {
         if (!available()) {
             return result("interest-unavailable");
         }
@@ -281,6 +291,7 @@ public final class BankService {
         if (!persist(updated, "INTEREST", paid, newBalance, note("interest"))) {
             return result("interest.not-saved");
         }
+        audit.interest(id, claimer.getUniqueId(), claimer.getName(), paid, newBalance);
         return null;
     }
 

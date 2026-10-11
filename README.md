@@ -19,6 +19,7 @@ islands without a bloated single world.
 | **EcoItems** | Optional. Makes skills/jobs/coins *per-profile* (swapped on profile switch) and enables EcoItems in upgrade/bank item costs. |
 | **PlaceholderAPI** | Optional. Used by command-based currencies (e.g. gems) and placeholders. |
 | **WorldEdit / FastAsyncWorldEdit** | Optional. Enables `.schem` starter islands; without it, a built-in generator makes the starter island (grass platform + a cozy oak hut, pond, crop farm, and tree). |
+| **EconGuard** | Optional. If installed, bank deposits, withdrawals, coop bank activity and interest are reported to its shared audit ledger. See [EconGuard integration](#econguard-integration). |
 
 ### Tested eco versions
 
@@ -116,6 +117,24 @@ Aliases for `/island`: `/is`, `/sb`, `/skyblock`.
 | `royalskyblock.bypass` | op | Ignore island build protection / flow limiter |
 | `royalskyblock.gamemode.bypass` | false | Ignore gamemode command rules (e.g. Ironman blocked commands). **Not** given to ops. |
 | `royalskyblock.playmode.bypass` | op | Ignore the per-world gamemode enforcement |
+
+## EconGuard integration
+
+If [EconGuard](https://github.com/joogiebear/EconGuard) is installed, the island bank reports its
+movements to the shared ledger (`bank` source), the same way RoyalBank does, so `/eg history <player>`
+shows them next to the player's other economy activity. There is nothing to enable.
+
+How each movement counts in EconGuard's detection:
+
+- Moving your own money between purse and bank (personal deposit and withdrawal, coop deposit, the
+  personal balance paid out after leaving a coop) is not incoming.
+- A coop bank withdrawal is split by who paid the money in. Your own deposits coming back are not
+  incoming. Money another member deposited is incoming, with that member as counterparty. Money with no
+  known depositor (paid in before the last restart, or coop interest) is incoming with no counterparty.
+- Interest on a personal account is incoming with no counterparty. Coop interest is not reported when
+  it is claimed, because no member has it yet; it counts when someone withdraws it.
+
+A failed report never fails the bank action.
 
 ## Graceful degradation
 
