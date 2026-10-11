@@ -1,8 +1,8 @@
 #  RoyalSkyblock  ·  Coop Bank
-#  A shared balance for the coop. Backed by RoyalBank's shared-account API when
-#  RoyalBank is installed, otherwise a Vault-backed store RoyalSkyblock owns: either
-#  way money moves through Vault. The balance header and Deposit/Withdraw buttons
-#  (amounts from coop.bank.amounts in config.yml) are under header: and buttons: at the end.
+#  A shared balance for the coop, held by RoyalSkyblock's built-in bank: money moves
+#  through Vault and levels come from bank.yml. The balance header and Deposit/Withdraw
+#  buttons (amounts from coop.bank.amounts in config.yml) are under header: and buttons:
+#  at the end.
 #
 #  rows: 1-6. mask: 1 = filler pane, 0 = dynamic slot. Slots are placed by row/column.
 #  click ids: open_menu, close, player_command, console_command, message, play_sound

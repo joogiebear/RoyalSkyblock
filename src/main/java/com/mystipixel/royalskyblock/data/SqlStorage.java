@@ -189,7 +189,7 @@ public final class SqlStorage implements Storage {
         addColumnIfMissing("profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         // -1 = not recorded yet, read as the balance (BankAccount.interestBase).
         addColumnIfMissing("bank_accounts", "interest_floor", dbl + " NOT NULL DEFAULT -1");
-        // Per-profile personal bank snapshot (only used when RoyalBank is the backend).
+        // Unused: left from the RoyalBank-backed personal bank; balances now live in bank_accounts.
         addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
         addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
         addColumnIfMissing("profile_data", "bank_level", integer + " NOT NULL DEFAULT 1");
