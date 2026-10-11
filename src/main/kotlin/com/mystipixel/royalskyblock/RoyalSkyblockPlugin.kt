@@ -49,6 +49,7 @@ import com.mystipixel.royalskyblock.perk.PerkService
 import com.mystipixel.royalskyblock.profile.GamemodeManager
 import com.mystipixel.royalskyblock.profile.PlayerStateService
 import com.mystipixel.royalskyblock.profile.ProfileManager
+import com.mystipixel.royalskyblock.profile.SaveRotation
 import com.mystipixel.royalskyblock.simulation.AgeCropSimulator
 import com.mystipixel.royalskyblock.simulation.IslandScanner
 import com.mystipixel.royalskyblock.simulation.StackingPlantSimulator
@@ -403,6 +404,16 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         server.scheduler.runTaskTimer(this, Runnable { perkService?.tick() }, perkPeriod, perkPeriod)
         // drop empty island worlds
         server.scheduler.runTaskTimer(this, Runnable { unloadService?.tick() }, 200L, 100L)
+        // periodic save of online players' profile state, a few players per tick (0 = off)
+        val autosaveTicks = SaveRotation.intervalTicks(conf().getInt("profiles.autosave-interval-seconds", 300))
+        if (autosaveTicks > 0) {
+            val rotation = SaveRotation(autosaveTicks)
+            server.scheduler.runTaskTimer(this, Runnable {
+                for (uuid in rotation.next { server.onlinePlayers.map { it.uniqueId } }) {
+                    server.getPlayer(uuid)?.let { profileManager?.autosave(it) }
+                }
+            }, 1L, 1L)
+        }
         // trash retention pruning, shortly after startup and daily after
         server.scheduler.runTaskTimerAsynchronously(
             this, Runnable { islandManager?.trash()?.pruneOld() }, 20L * 120L, 20L * 60L * 60L * 24L
@@ -497,7 +508,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         }
         logger.info("Shutdown save: $savedPlayers player(s), $savedIslands island(s).")
 
-        // let queued background writes finish before the pool they write to is closed
+        // Let queued background writes finish before the pool they write to is closed. Queued autosaves taken
+        // before the saves above are skipped, not written over them.
         storageWriter?.let { writer ->
             writer.shutdown()
             if (!writer.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS)) {

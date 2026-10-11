@@ -255,10 +255,22 @@ public final class ProfileManager {
         if (active != null) {
             state.save(player, active);
         }
+        state.rows().forget(player.getUniqueId());
         activeProfile.remove(player.getUniqueId());
         // A second login may have preloaded before this session's save above; applying it on join would hand
         // back items given away since.
         preloaded.remove(player.getUniqueId());
+    }
+
+    /**
+     * Periodic save of an online player's active profile: captured now, written on the storage thread.
+     * Skips a player whose profile isn't loaded yet rather than querying for it. Main thread.
+     */
+    public void autosave(Player player) {
+        UUID active = activeProfile.get(player.getUniqueId());
+        if (active != null) {
+            state.saveInBackground(player, active);
+        }
     }
 
     private Profile createDefaultProfile(Player player) {
@@ -774,11 +786,11 @@ public final class ProfileManager {
                         state.save(player, current);
                     }
                     if (left.isEmpty()) {
-                        storage.deleteProfileData(from, uuid);
+                        state.rows().deleteNow(from, uuid);
                         plugin.messages().send(player, "coop.payout-items", "count", String.valueOf(given), "profile", name);
                     } else {
                         ProfileData rest = state.leftoverRow(left);
-                        if (rest != null && storage.saveProfileData(from, uuid, rest)) {
+                        if (rest != null && state.rows().saveNow(from, uuid, rest)) {
                             plugin.messages().send(player, "coop.payout-partial", "count", String.valueOf(left.size()),
                                     "profile", name);
                         } else {
@@ -788,7 +800,7 @@ public final class ProfileManager {
                         settled = false;
                     }
                 } else {
-                    storage.deleteProfileData(from, uuid);
+                    state.rows().deleteNow(from, uuid);
                 }
             }
             if (settled) {
