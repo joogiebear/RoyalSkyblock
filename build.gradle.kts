@@ -133,7 +133,7 @@ dependencies {
     testImplementation("com.infernalsuite.asp:api:4.1.0") { isTransitive = false }
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
-    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.mockito:mockito-core:5.24.0")
     // Platform version tracks junit-jupiter 5.11.3 (Maven's surefire supplied this implicitly).
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.3")
 }
