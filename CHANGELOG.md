@@ -1,3 +1,8 @@
+## 2026.41.1 - 2026-10-11
+
+### Fixes
+- save online players' profile state periodically (`078f167`)
+
 ## 2026.41.0 - 2026-10-10
 
 ### Refactors
