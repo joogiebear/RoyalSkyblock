@@ -1,3 +1,12 @@
+## 2026.41.0 - 2026-10-10
+
+### Refactors
+- read menu item text and positions from the gui files (`b3beb98`)
+- read chat, coop, bank and admin text from lang.yml (`9dfb014`)
+
+### Documentation
+- add AGENTS.md with the suite's development standards (`246cdb0`)
+
 ## 2026.40.0 — 2026-10-03
 
 ### ✨ Features
