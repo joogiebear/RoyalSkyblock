@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.util.io.BukkitObjectInputStream;
 import org.bukkit.util.io.BukkitObjectOutputStream;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -29,21 +30,54 @@ public final class PlayerStateService {
     // empty replacement inventory never overwrites the stored row. Cleared on the next successful load.
     private final java.util.Set<UUID> loadFailed = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
+    private final ProfileRowWriter rows;
+
     public PlayerStateService(RoyalSkyblockPlugin plugin, Storage storage) {
         this.plugin = plugin;
         this.storage = storage;
+        this.rows = new ProfileRowWriter(storage, plugin::writeAsync);
+    }
+
+    ProfileRowWriter rows() {
+        return rows;
     }
 
     /** Capture the player's current state into {@code profileId}'s saved data + eco shadow. */
     public void save(Player player, UUID profileId) {
+        ProfileData data = capture(player, profileId);
+        if (data != null) {
+            rows.saveNow(profileId, player.getUniqueId(), data);
+            plugin.eco().save(player.getUniqueId(), profileId);
+            // the native bank is keyed by (profile, player), so it is already per-profile
+        }
+    }
+
+    /**
+     * Like {@link #save}, but only the capture runs here; the row is written on the storage thread, and
+     * skipped if a later save of the same row happened first. Main thread.
+     */
+    public void saveInBackground(Player player, UUID profileId) {
+        if (profileId == null || loadFailed.contains(player.getUniqueId())) {
+            return;   // already reported at load; save() reports it again on quit
+        }
+        ProfileData data = capture(player, profileId);
+        if (data != null) {
+            rows.saveLater(profileId, player.getUniqueId(), data);
+            plugin.eco().save(player.getUniqueId(), profileId);
+        }
+    }
+
+    // The row to write, or null when none may be written (nothing to save, load failed, or an item would
+    // not serialize; eco progression is still saved in that last case).
+    private @Nullable ProfileData capture(Player player, UUID profileId) {
         if (profileId == null) {
-            return;
+            return null;
         }
         if (loadFailed.contains(player.getUniqueId())) {
             plugin.getLogger().severe("Refusing to save profile " + profileId + " for " + player.getName()
                     + ": their last profile load failed to deserialize, so what they are carrying is the"
                     + " emptied fallback, not their real inventory. The stored row is being kept.");
-            return;
+            return null;
         }
         ItemStack[] contents = player.getInventory().getContents();
         for (int slot : externallyManagedSlots()) {
@@ -61,10 +95,9 @@ public final class PlayerStateService {
                     + ": item serialization failed, so the previous save is being kept. "
                     + "This session's inventory changes are NOT saved; check the error above for the item.");
             plugin.eco().save(player.getUniqueId(), profileId);   // progression is unaffected, still save it
-            return;
+            return null;
         }
-
-        ProfileData data = new ProfileData(
+        return new ProfileData(
                 inventory,
                 enderChest,
                 player.getLevel(),
@@ -72,9 +105,6 @@ public final class PlayerStateService {
                 player.getHealth(),
                 player.getFoodLevel(),
                 player.getSaturation());
-        storage.saveProfileData(profileId, player.getUniqueId(), data);
-        plugin.eco().save(player.getUniqueId(), profileId);
-        // the native bank is keyed by (profile, player), so it is already per-profile
     }
 
     /** Load {@code profileId}'s saved data (or a fresh slate) onto the player, plus its eco shadow. */

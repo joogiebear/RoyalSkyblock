@@ -200,6 +200,12 @@ profiles:
   # How many profiles a player may have.
   max-profiles: 3
 
+  # Seconds between saves of each online player's profile (inventory, ender chest, XP, health,
+  # hunger, eco progression), so a crash only rolls players back a few minutes. Saves are spread
+  # over up to a minute so a full server doesn't save everyone in one tick. 0 turns it off (state
+  # is then only saved on quit, profile switch and shutdown). Values below 30 are raised to 30.
+  autosave-interval-seconds: 300
+
   # Let eco read and write the active profile's data directly instead of copying every key
   # on each switch. Needs an eco that supports it; otherwise copying continues. Safe to leave on.
   eco-resolver: true
