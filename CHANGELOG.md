@@ -1,3 +1,14 @@
+## 2026.41.2 - 2026-10-11
+
+### Features
+- let other plugins save a player's profile state right away (`e6d5788`)
+
+### Fixes
+- report island bank movements to EconGuard (`ae838f9`)
+
+### Refactors
+- name bank result and note keys the way RoyalBank does (`ecdd624`)
+
 ## 2026.41.1 - 2026-10-11
 
 ### Fixes
