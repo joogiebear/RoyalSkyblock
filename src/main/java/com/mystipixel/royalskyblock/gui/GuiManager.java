@@ -7,8 +7,10 @@ import com.mystipixel.royalskyblock.bank.BankLevel;
 import com.mystipixel.royalskyblock.bank.BankService;
 import com.mystipixel.royalskyblock.bank.BankTxn;
 import com.mystipixel.royalskyblock.gui.menu.MenuEffect;
+import com.mystipixel.royalskyblock.gui.menu.ItemSpec;
 import com.mystipixel.royalskyblock.gui.menu.MenuSlot;
 import com.mystipixel.royalskyblock.gui.menu.MenuTemplate;
+import com.mystipixel.royalskyblock.gui.menu.MenuText;
 import com.mystipixel.royalskyblock.hooks.EcoHook;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
@@ -21,6 +23,7 @@ import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -31,6 +34,11 @@ import org.bukkit.inventory.meta.ItemMeta;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -40,6 +48,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
+import java.util.function.BiFunction;
 
 /**
  * Loads, renders and drives the {@code gui/*.yml} menus in the shared EcoMenus dialect. Buttons run
@@ -120,7 +129,7 @@ public final class GuiManager implements Listener {
                 plugin.saveResource("gui/" + path + ".yml", false); // saveResource creates parent folders
             }
             String id = path.substring(path.lastIndexOf('/') + 1);
-            byId.put(id, MenuTemplate.load(file, "&6&lSkyblock", 5));
+            byId.put(id, MenuTemplate.load(file, bundled("gui/" + path + ".yml")));
         }
         // compile every menu's effect chains now, so a broken one is reported with its file and slot
         com.mystipixel.royalskyblock.libreforge.MenuChains.invalidate();
@@ -133,6 +142,19 @@ public final class GuiManager implements Listener {
                 plugin.getLogger().severe("Menu '" + id + "' is loaded but not registered as static or "
                         + "dynamic: it will not open. Add it to ECO_RENDERED or ECO_DYNAMIC.");
             }
+        }
+    }
+
+    private @Nullable YamlConfiguration bundled(String resource) {
+        InputStream in = plugin.getResource(resource);
+        if (in == null) {
+            return null;
+        }
+        try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+            return YamlConfiguration.loadConfiguration(reader);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Could not read the bundled " + resource + ": " + e.getMessage());
+            return null;
         }
     }
 
@@ -289,7 +311,7 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < profiles.size() && i < slots.size(); i++) {
             Profile profile = profiles.get(i);
             int slot = slots.get(i);
-            canvas.setItem(slot, profileIcon(profile, active));
+            canvas.setItem(slot, profileIcon(profile, active, template.text()));
             canvas.putAction(slot, (viewer, right) -> {
                 viewer.closeInventory();
                 plugin.profiles().switchProfile(viewer, profile.id());
@@ -297,7 +319,7 @@ public final class GuiManager implements Listener {
         }
     }
 
-    private ItemStack profileIcon(Profile profile, UUID active) {
+    private ItemStack profileIcon(Profile profile, UUID active, MenuText text) {
         var ruleset = plugin.gamemodes().ruleset(profile.gamemode());
         Material material = Material.matchMaterial(ruleset.icon().toUpperCase(Locale.ROOT));
         if (material == null || !material.isItem()) {
@@ -306,20 +328,14 @@ public final class GuiManager implements Listener {
         boolean isActive = profile.id().equals(active);
         boolean hasIsland = plugin.islands().getIslandByProfile(profile.id()) != null;
 
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            String title = "&e&l" + profile.name() + " &r" + ruleset.displayName() + (isActive ? " &a(active)" : "");
-            meta.displayName(noItalic(title));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic(ruleset.description()));
-            lore.add(noItalic("&7Island: " + (hasIsland ? "&ayes" : "&cno")));
-            lore.add(noItalic(""));
-            lore.add(noItalic(isActive ? "&8You're on this profile." : "&eClick to switch!"));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+        Map<String, String> ph = ph(
+                "name", profile.name(),
+                "gamemode_name", ruleset.displayName(),
+                "gamemode_description", ruleset.description(),
+                "active", isActive ? text.text("entry.active-tag") : "",
+                "island", text.text(hasIsland ? "entry.island-yes" : "entry.island-no"),
+                "action", text.text(isActive ? "entry.action-active" : "entry.action-switch"));
+        return dress(new ItemStack(material), text, "entry.name", "entry.lore", ph);
     }
 
     private void fillSettings(Player player, MenuTemplate template, MenuCanvas canvas) {
@@ -337,7 +353,7 @@ public final class GuiManager implements Listener {
         for (int i = 0; i < all.length && i < slots.size(); i++) {
             IslandSetting setting = all[i];
             int slot = slots.get(i);
-            canvas.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit));
+            canvas.setItem(slot, settingIcon(setting, island.isEnabled(setting), canEdit, template.text()));
             if (canEdit) {
                 canvas.putAction(slot, (viewer, right) -> {
                     Island current = managedIsland(viewer, island);
@@ -430,7 +446,7 @@ public final class GuiManager implements Listener {
                 }
                 slot = auto.get(autoIndex++);
             }
-            canvas.setItem(slot, upgradeIcon(def, island));
+            canvas.setItem(slot, upgradeIcon(def, island, template.text()));
             if (canEdit) {
                 canvas.putAction(slot, (viewer, right) -> {
                     handleUpgradeClick(viewer, def, right);
@@ -451,7 +467,8 @@ public final class GuiManager implements Listener {
             case STARTED -> {
                 var next = def.tier(island.upgradeTier(def.key()) + 1);
                 plugin.messages().send(viewer, "upgrade.started", "upgrade", def.displayName(),
-                        "time", next != null ? formatDuration(next.timeSeconds()) : "?");
+                        "time", next != null ? formatDuration(next.timeSeconds())
+                                : plugin.messages().raw("format.duration.unknown"));
             }
             case COMPLETED -> plugin.messages().send(viewer, skip ? "upgrade.skipped" : "upgrade.completed",
                     "upgrade", def.displayName(), "tier", String.valueOf(island.upgradeTier(def.key())));
@@ -465,10 +482,11 @@ public final class GuiManager implements Listener {
 
     private String pendingTimeLeft(Island island, com.mystipixel.royalskyblock.upgrade.UpgradeDef def) {
         var pending = plugin.upgrades().pendingFor(island, def);
-        return pending == null ? "0s" : formatDuration(pending.secondsLeft(System.currentTimeMillis()));
+        return pending == null ? plugin.messages().raw("format.duration.seconds", "value", "0")
+                : formatDuration(pending.secondsLeft(System.currentTimeMillis()));
     }
 
-    private ItemStack upgradeIcon(com.mystipixel.royalskyblock.upgrade.UpgradeDef def, Island island) {
+    private ItemStack upgradeIcon(com.mystipixel.royalskyblock.upgrade.UpgradeDef def, Island island, MenuText text) {
         Material material = Material.matchMaterial(def.icon().toUpperCase(Locale.ROOT));
         if (material == null || !material.isItem()) {
             material = Material.ANVIL;
@@ -476,43 +494,40 @@ public final class GuiManager implements Listener {
         int current = island.upgradeTier(def.key());
         var pending = plugin.upgrades().pendingFor(island, def);
 
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(noItalic(def.displayName() + " &7(Tier " + current + "/" + def.maxTier() + ")"));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7" + def.description()));
-            lore.add(noItalic(""));
-            if (pending != null) {
-                lore.add(noItalic("&e⏳ Upgrading to tier " + pending.targetTier()
-                        + " &7- " + formatDuration(pending.secondsLeft(System.currentTimeMillis())) + " left"));
-                var t = def.tier(pending.targetTier());
-                if (t != null && !t.skipCost().isFree()) {
-                    lore.add(noItalic("&7Skip now: &e" + plugin.currency().format(t.skipCost())));
-                    lore.add(noItalic(""));
-                    lore.add(noItalic("&eRight-click to skip the wait."));
-                }
+        Map<String, String> ph = ph(
+                "name", def.displayName(),
+                "description", def.description(),
+                "tier", String.valueOf(current),
+                "max_tier", String.valueOf(def.maxTier()));
+        String lore;
+        if (pending != null) {
+            ph.put("target_tier", String.valueOf(pending.targetTier()));
+            ph.put("time_left", formatDuration(pending.secondsLeft(System.currentTimeMillis())));
+            var t = def.tier(pending.targetTier());
+            lore = "entry.lore-upgrading";
+            if (t != null && !t.skipCost().isFree()) {
+                ph.put("skip_cost", plugin.currency().format(t.skipCost()));
+                lore = "entry.lore-upgrading-skippable";
+            }
+        } else {
+            var next = def.nextTier(current);
+            if (next == null) {
+                lore = "entry.lore-maxed";
             } else {
-                var next = def.nextTier(current);
-                if (next == null) {
-                    lore.add(noItalic("&a✔ Maxed out."));
-                } else {
-                    String label = effectLabel(def.effect(), next.value());
-                    lore.add(noItalic("&7Next: tier " + next.tier()
-                            + (label.isEmpty() ? "" : " &8(" + label + ")")));
-                    lore.add(noItalic("&7Cost: &e" + plugin.currency().format(next.cost())
-                            + (next.isInstant() ? "" : " &7+ " + formatDuration(next.timeSeconds()) + " wait")));
-                    if (!next.skipCost().isFree()) {
-                        lore.add(noItalic("&7Skip cost: &e" + plugin.currency().format(next.skipCost())));
-                    }
-                    lore.add(noItalic(""));
-                    lore.add(noItalic("&eClick to upgrade" + (next.skipCost().isFree() ? "" : " &7(right-click after to skip)")));
+                String label = effectLabel(text, def.effect(), next.value());
+                ph.put("next_tier", String.valueOf(next.tier()));
+                ph.put("effect", label.isEmpty() ? "" : MenuText.fill(text.text("entry.effect"), ph("label", label)));
+                ph.put("cost", plugin.currency().format(next.cost()));
+                ph.put("wait", next.isInstant() ? ""
+                        : MenuText.fill(text.text("entry.wait"), ph("time", formatDuration(next.timeSeconds()))));
+                lore = "entry.lore";
+                if (!next.skipCost().isFree()) {
+                    ph.put("skip_cost", plugin.currency().format(next.skipCost()));
+                    lore = "entry.lore-skippable";
                 }
             }
-            meta.lore(lore);
-            item.setItemMeta(meta);
         }
-        return item;
+        return dress(new ItemStack(material), text, "entry.name", lore, ph);
     }
 
     private static String fmt(double v) {
@@ -520,50 +535,61 @@ public final class GuiManager implements Listener {
     }
 
     // a radius shows as its NxN island size
-    private static String effectLabel(com.mystipixel.royalskyblock.upgrade.UpgradeEffect effect, double value) {
+    private static String effectLabel(MenuText text, com.mystipixel.royalskyblock.upgrade.UpgradeEffect effect,
+                                      double value) {
         int v = (int) value;
-        return switch (effect) {
-            case RADIUS -> (v * 2 + 1) + "x" + (v * 2 + 1); // border half-size to full NxN (incl. centre)
-            case GUEST_SLOTS -> "+" + v + " guest" + (v == 1 ? "" : "s");
-            case COOP_SLOTS -> "+" + v + " coop slot" + (v == 1 ? "" : "s");
-            case GENERATOR -> "Tier " + v + " ores";
-            case MINIONS -> "+" + v + " minion slot" + (v == 1 ? "" : "s");
+        String key = switch (effect) {
+            case RADIUS -> "radius";
+            case GUEST_SLOTS -> "guest-slots";
+            case COOP_SLOTS -> "coop-slots";
+            case GENERATOR -> "generator";
+            case MINIONS -> "minions";
             // a chain-only track has no value to advertise; the caller drops the label
-            case NONE -> "";
+            case NONE -> null;
         };
+        if (key == null) {
+            return "";
+        }
+        boolean plural = v != 1 && effect != com.mystipixel.royalskyblock.upgrade.UpgradeEffect.RADIUS
+                && effect != com.mystipixel.royalskyblock.upgrade.UpgradeEffect.GENERATOR;
+        // border half-size to full NxN (incl. centre)
+        return MenuText.fill(text.text("effect-labels." + key + (plural ? "-plural" : "")),
+                ph("value", String.valueOf(v), "size", String.valueOf(v * 2 + 1)));
     }
 
-    private static String formatDuration(long seconds) {
+    private String formatDuration(long seconds) {
+        return formatDuration(seconds, (unit, value) ->
+                plugin.messages().raw("format.duration." + unit, "value", String.valueOf(value)));
+    }
+
+    // unit(name, value) renders one part: instant, days, hours, minutes or seconds
+    static String formatDuration(long seconds, BiFunction<String, Long, String> unit) {
         if (seconds <= 0) {
-            return "instant";
+            return unit.apply("instant", 0L);
         }
         long d = seconds / 86_400, h = (seconds % 86_400) / 3_600, m = (seconds % 3_600) / 60, s = seconds % 60;
-        StringBuilder sb = new StringBuilder();
-        if (d > 0) sb.append(d).append("d ");
-        if (h > 0) sb.append(h).append("h ");
-        if (m > 0) sb.append(m).append("m ");
-        if (s > 0 && d == 0) sb.append(s).append("s");
-        return sb.toString().trim();
+        List<String> parts = new ArrayList<>(4);
+        if (d > 0) parts.add(unit.apply("days", d));
+        if (h > 0) parts.add(unit.apply("hours", h));
+        if (m > 0) parts.add(unit.apply("minutes", m));
+        if (s > 0 && d == 0) parts.add(unit.apply("seconds", s));
+        return String.join(" ", parts);
     }
 
-    private ItemStack settingIcon(IslandSetting setting, boolean on, boolean canEdit) {
-        Material material = Material.matchMaterial(setting.icon().toUpperCase(Locale.ROOT));
+    private ItemStack settingIcon(IslandSetting setting, boolean on, boolean canEdit, MenuText text) {
+        String path = "settings." + setting.key();
+        Material material = Material.matchMaterial(text.text(path + ".icon").toUpperCase(Locale.ROOT));
         if (material == null || !material.isItem()) {
             material = Material.PAPER;
         }
-        ItemStack item = new ItemStack(material);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(noItalic(setting.displayName() + (on ? " &a&lON" : " &c&lOFF")));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7" + setting.description()));
-            lore.add(noItalic(""));
-            lore.add(noItalic(canEdit ? (on ? "&eClick to disable" : "&eClick to enable")
-                    : "&8Only the owner can change this."));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+        String name = text.has(path + ".name") ? text.text(path + ".name") : setting.niceName();
+        String action = !canEdit ? "entry.action-locked" : on ? "entry.action-disable" : "entry.action-enable";
+        Map<String, String> ph = ph(
+                "name", name,
+                "description", text.text(path + ".description"),
+                "state", text.text(on ? "entry.state-on" : "entry.state-off"),
+                "action", text.text(action));
+        return dress(new ItemStack(material), text, "entry.name", "entry.lore", ph);
     }
 
     private record BrowseRow(Island island, Profile profile, String ownerName) {
@@ -603,7 +629,7 @@ public final class GuiManager implements Listener {
         int i = 0;
         for (BrowseRow row : rows) {
             int slot = slots.get(i++);
-            canvas.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName()));
+            canvas.setItem(slot, islandBrowserIcon(row.island(), row.profile(), row.ownerName(), template.text()));
             canvas.putAction(slot, (v, right) -> {
                 v.closeInventory();
                 visitFromBrowser(v, row.island(), row.profile(), row.ownerName());
@@ -664,25 +690,25 @@ public final class GuiManager implements Listener {
                 }));
     }
 
-    private ItemStack islandBrowserIcon(Island island, Profile prof, String ownerName) {
+    private ItemStack islandBrowserIcon(Island island, Profile prof, String ownerName, MenuText text) {
+        Map<String, String> ph = ph(
+                "owner", ownerName,
+                "gamemode", prof.gamemode().name().toLowerCase(Locale.ROOT),
+                "level", String.valueOf((int) island.level()),
+                "members", String.valueOf(prof.memberCount()));
+        return dress(head(Bukkit.getOfflinePlayer(prof.owner())), text, "entry.name", "entry.lore", ph);
+    }
+
+    // a player head, or a plain one if the owner lookup fails
+    private static ItemStack head(org.bukkit.OfflinePlayer owner) {
         ItemStack item = new ItemStack(Material.PLAYER_HEAD);
         ItemMeta meta = item.getItemMeta();
         if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
             try {
-                skull.setOwningPlayer(Bukkit.getOfflinePlayer(prof.owner()));
+                skull.setOwningPlayer(owner);
             } catch (Throwable ignored) {
                 // head lookup failed, leave default
             }
-        }
-        if (meta != null) {
-            meta.displayName(noItalic("&a" + ownerName + "&7's Island"));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Gamemode: &f" + prof.gamemode().name().toLowerCase(Locale.ROOT)));
-            lore.add(noItalic("&7Island level: &f" + (int) island.level()));
-            lore.add(noItalic("&7Members: &f" + prof.memberCount()));
-            lore.add(noItalic(""));
-            lore.add(noItalic("&eClick to visit!"));
-            meta.lore(lore);
             item.setItemMeta(meta);
         }
         return item;
@@ -702,8 +728,12 @@ public final class GuiManager implements Listener {
         IslandRole myRole = profile.roleOf(player.getUniqueId());
         boolean canManage = myRole == IslandRole.OWNER || myRole == IslandRole.CO_OWNER;
 
-        int max = coopMax(profile);
-        canvas.setItem(4, coopInfoIcon(profile, max)); // header (row 1, col 5)
+        MenuText text = template.text();
+        place(canvas, text.slot("header"), button(text, "header", "lore", ph(
+                "profile", profile.name(),
+                "owner", ownerName(profile),
+                "members", String.valueOf(profile.memberCount()),
+                "max", String.valueOf(coopMax(profile)))));
 
         List<com.mystipixel.royalskyblock.profile.ProfileMember> members = new ArrayList<>(profile.members());
         members.sort((a, b) -> Integer.compare(roleRank(a.role()), roleRank(b.role())));
@@ -715,7 +745,7 @@ public final class GuiManager implements Listener {
             boolean manageable = canManage
                     && member.role() != IslandRole.OWNER
                     && !member.uuid().equals(player.getUniqueId());
-            canvas.setItem(slot, memberIcon(member, manageable));
+            canvas.setItem(slot, memberIcon(member, text, "entry.name", manageable ? "entry.lore-manageable" : "entry.lore"));
             if (manageable) {
                 canvas.putAction(slot, (viewer, right) -> open(viewer, COOP_MEMBER, member.name()));
             }
@@ -735,36 +765,29 @@ public final class GuiManager implements Listener {
             return; // member left/kicked since the menu was opened
         }
         boolean isOwner = active.roleOf(player.getUniqueId()) == IslandRole.OWNER;
-        int rows = template.size() / 9;
+        MenuText text = template.text();
+        Map<String, String> ph = ph("member", target.name());
 
-        // header: the member's head (row 1, col 5)
-        canvas.setItem(4, memberIcon(target, false));
-
-        // action row (row 2 on a 3-row menu)
-        int actionRow = rows >= 3 ? 9 : 0;
+        int header = text.slot("header");
+        if (header >= 0) {
+            canvas.setItem(header, memberIcon(target, text, "header.name", "header.lore"));
+        }
 
         // promote / demote (owner only)
         if (isOwner && target.role() == IslandRole.MEMBER) {
-            canvas.setItem(actionRow + 2, infoIcon(Material.LIME_DYE, "&a&lPromote to Co-Owner",
-                    List.of("&7Let " + target.name() + " invite, kick,", "&7and manage the island.",
-                            "", "&eClick to promote!")));
-            canvas.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
+            int promote = place(canvas, text.slot("buttons.promote"), button(text, "buttons.promote", "lore", ph));
+            onClick(canvas, promote, (viewer, right) -> runRoleAction(viewer,
                     plugin.profiles().promote(viewer, target.name()), "coop.promoted", target.name(), "coop.you-promoted"));
         } else if (isOwner && target.role() == IslandRole.CO_OWNER) {
-            canvas.setItem(actionRow + 2, infoIcon(Material.GRAY_DYE, "&e&lDemote to Member",
-                    List.of("&7Return " + target.name() + " to a", "&7regular member.",
-                            "", "&eClick to demote!")));
-            canvas.putAction(actionRow + 2, (viewer, right) -> runRoleAction(viewer,
+            int demote = place(canvas, text.slot("buttons.demote"), button(text, "buttons.demote", "lore", ph));
+            onClick(canvas, demote, (viewer, right) -> runRoleAction(viewer,
                     plugin.profiles().demote(viewer, target.name()), "coop.demoted", target.name(), "coop.you-demoted"));
         }
 
         // transfer ownership (owner only), right-click to confirm
         if (isOwner) {
-            canvas.setItem(actionRow + 4, infoIcon(Material.GOLDEN_HELMET, "&6&lTransfer Ownership",
-                    List.of("&7Make " + target.name() + " the owner.",
-                            "&cYou'll become a co-owner.", "",
-                            "&7Left-click: details", "&eRight-click: confirm transfer")));
-            canvas.putAction(actionRow + 4, (viewer, right) -> {
+            int transfer = place(canvas, text.slot("buttons.transfer"), button(text, "buttons.transfer", "lore", ph));
+            onClick(canvas, transfer, (viewer, right) -> {
                 if (!right) {
                     plugin.messages().send(viewer, "coop.transfer-hint", "player", target.name());
                     return;
@@ -774,9 +797,8 @@ public final class GuiManager implements Listener {
             });
         }
 
-        canvas.setItem(actionRow + 6, infoIcon(Material.BARRIER, "&c&lRemove from Island",
-                List.of("&7Kick " + target.name() + " from", "&7the coop.", "", "&eClick to remove!")));
-        canvas.putAction(actionRow + 6, (viewer, right) -> {
+        int kick = place(canvas, text.slot("buttons.kick"), button(text, "buttons.kick", "lore", ph));
+        onClick(canvas, kick, (viewer, right) -> {
             Player online = Bukkit.getPlayerExact(target.name());
             Reason error = plugin.profiles().kick(viewer, target.name());
             if (error != null) {
@@ -804,7 +826,14 @@ public final class GuiManager implements Listener {
         BankAccount acct = bank.account(accountId);
         BankLevel level = bank.levels().effectiveLevel(acct.level());
 
-        canvas.setItem(4, bankHeaderIcon(bank, acct, level, coop ? "&6&l" + profile.name() + " Coop Bank" : "&6&lPersonal Bank"));
+        MenuText text = template.text();
+        place(canvas, text.slot("header"), button(text, "header", bank.available() ? "lore" : "lore-unavailable", ph(
+                "profile", profile.name(),
+                "balance", bank.money(acct.balance()),
+                "level", String.valueOf(level.level()),
+                "level_name", level.name(),
+                "max_balance", bank.money(level.maxBalance()),
+                "next_interest", bank.money(bank.calculateInterest(acct.interestBase(), level)))));
         if (!bank.available()) {
             return; // no economy or no levels: the header explains, no buttons
         }
@@ -815,22 +844,20 @@ public final class GuiManager implements Listener {
         if (amounts.isEmpty()) {
             amounts = List.of(100, 1000, 10000);
         }
-        int[] depositCols = {19, 21, 23};
-        int[] withdrawCols = {28, 30, 32};
-        for (int i = 0; i < depositCols.length && i < amounts.size(); i++) {
+        List<Integer> depositSlots = text.slots("buttons.deposit.positions");
+        List<Integer> withdrawSlots = text.slots("buttons.withdraw.positions");
+        for (int i = 0; i < depositSlots.size() && i < amounts.size(); i++) {
             long amount = amounts.get(i);
-            canvas.setItem(depositCols[i], infoIcon(Material.LIME_DYE, "&a&lDeposit " + fmtCoins(amount),
-                    List.of("&7From your purse to bank.", "", "&eClick to deposit!")));
-            canvas.putAction(depositCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, true));
-            if (canWithdraw) {
-                canvas.setItem(withdrawCols[i], infoIcon(Material.GOLD_NUGGET, "&6&lWithdraw " + fmtCoins(amount),
-                        List.of("&7From bank to your purse.", "", "&eClick to withdraw!")));
-                canvas.putAction(withdrawCols[i], (viewer, right) -> runBank(viewer, accountId, menu, amount, false));
+            Map<String, String> ph = ph("amount", fmtCoins(amount));
+            int deposit = place(canvas, depositSlots.get(i), button(text, "buttons.deposit", "lore", ph));
+            onClick(canvas, deposit, (viewer, right) -> runBank(viewer, accountId, menu, amount, true));
+            if (canWithdraw && i < withdrawSlots.size()) {
+                int withdraw = place(canvas, withdrawSlots.get(i), button(text, "buttons.withdraw", "lore", ph));
+                onClick(canvas, withdraw, (viewer, right) -> runBank(viewer, accountId, menu, amount, false));
             }
         }
-        canvas.setItem(25, infoIcon(Material.LIME_WOOL, "&a&lDeposit All",
-                List.of("&7Deposit your whole purse", "&7(up to the level cap).", "", "&eClick to deposit!")));
-        canvas.putAction(25, (viewer, right) -> {
+        int depositAll = place(canvas, text.slot("buttons.deposit-all"), button(text, "buttons.deposit-all", "lore", ph()));
+        onClick(canvas, depositAll, (viewer, right) -> {
             long amount = (long) Math.floor(plugin.purseBalance(viewer));
             if (amount < 1) {
                 plugin.messages().send(viewer, "bank.empty-purse");
@@ -840,9 +867,9 @@ public final class GuiManager implements Listener {
             runBank(viewer, accountId, menu, amount, true);
         });
         if (canWithdraw) {
-            canvas.setItem(34, infoIcon(Material.GOLD_BLOCK, "&6&lWithdraw All",
-                    List.of("&7Withdraw the whole balance", "&7to your purse.", "", "&eClick to withdraw!")));
-            canvas.putAction(34, (viewer, right) -> {
+            int withdrawAll = place(canvas, text.slot("buttons.withdraw-all"),
+                    button(text, "buttons.withdraw-all", "lore", ph()));
+            onClick(canvas, withdrawAll, (viewer, right) -> {
                 long amount = (long) Math.floor(bank.account(accountId).balance());
                 if (amount < 1) {
                     plugin.messages().send(viewer, "bank.nothing-to-withdraw");
@@ -853,12 +880,11 @@ public final class GuiManager implements Listener {
             });
         }
 
-        // interest (row 5, col 2)
         long remaining = bank.interestSecondsRemaining(accountId);
         if (remaining <= 0) {
-            canvas.setItem(37, infoIcon(Material.EXPERIENCE_BOTTLE, "&a&lClaim Interest",
-                    List.of("&7Interest is ready.", "", "&eClick to claim!")));
-            canvas.putAction(37, (viewer, right) -> {
+            int claim = place(canvas, text.slot("buttons.claim-interest"),
+                    button(text, "buttons.claim-interest", "lore", ph()));
+            onClick(canvas, claim, (viewer, right) -> {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
@@ -871,14 +897,24 @@ public final class GuiManager implements Listener {
                 open(viewer, menu);
             });
         } else {
-            canvas.setItem(37, infoIcon(Material.CLOCK, "&7Interest",
-                    List.of("&7Next interest in &f" + formatDuration(remaining) + "&7.")));
+            place(canvas, text.slot("buttons.interest-waiting"), button(text, "buttons.interest-waiting", "lore",
+                    ph("time", formatDuration(remaining))));
         }
 
-        // upgrade (row 5, col 4)
-        canvas.setItem(39, bankUpgradeIcon(bank, acct));
-        if (bank.levels().getNextLevel(acct.level()).isPresent()) {
-            canvas.putAction(39, (viewer, right) -> {
+        BankLevel next = bank.levels().getNextLevel(acct.level()).orElse(null);
+        if (next == null) {
+            place(canvas, text.slot("buttons.maxed"), button(text, "buttons.maxed", "lore", ph()));
+        } else {
+            String items = next.itemRequirements().stream()
+                    .map(com.mystipixel.royalskyblock.bank.ItemRequirement::displayName)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            int upgrade = place(canvas, text.slot("buttons.upgrade"), button(text, "buttons.upgrade",
+                    items.isEmpty() ? "lore" : "lore-items", ph(
+                            "next_level", next.name(),
+                            "cost", bank.money(next.upgradeMoneyCost()),
+                            "items", items,
+                            "max_balance", bank.money(next.maxBalance()))));
+            onClick(canvas, upgrade, (viewer, right) -> {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
@@ -892,51 +928,9 @@ public final class GuiManager implements Listener {
             });
         }
 
-        // transactions (row 5, col 6)
-        canvas.setItem(41, infoIcon(Material.BOOK, "&e&lTransactions",
-                List.of("&7Recent bank activity.", "", "&eClick to view!")));
-        canvas.putAction(41, (viewer, right) -> open(viewer, COOP_BANK_TXNS, accountId));
-    }
-
-    private ItemStack bankHeaderIcon(BankService bank, BankAccount acct, BankLevel level, String title) {
-        ItemStack item = new ItemStack(Material.GOLD_INGOT);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(noItalic(title));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Balance: &e" + bank.money(acct.balance())));
-            lore.add(noItalic("&7Level: &f" + level.level() + " &8- " + level.name()));
-            lore.add(noItalic("&7Max balance: &f" + bank.money(level.maxBalance())));
-            lore.add(noItalic("&7Next interest: &f" + bank.money(bank.calculateInterest(acct.interestBase(), level))));
-            if (!bank.available()) {
-                lore.add(noItalic(""));
-                lore.add(noItalic("&cNo economy plugin: banking disabled."));
-            }
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
-
-    private ItemStack bankUpgradeIcon(BankService bank, BankAccount acct) {
-        BankLevel next = bank.levels().getNextLevel(acct.level()).orElse(null);
-        if (next == null) {
-            return infoIcon(Material.NETHER_STAR, "&a&lBank Maxed",
-                    List.of("&7This bank is at the highest level."));
-        }
-        List<String> lore = new ArrayList<>();
-        lore.add("&7Next: &f" + next.name());
-        lore.add("&7Cost: &e" + bank.money(next.upgradeMoneyCost()));
-        String items = next.itemRequirements().stream()
-                .map(com.mystipixel.royalskyblock.bank.ItemRequirement::displayName)
-                .collect(java.util.stream.Collectors.joining(", "));
-        if (!items.isEmpty()) {
-            lore.add("&7Items: &f" + items);
-        }
-        lore.add("&7New max balance: &f" + bank.money(next.maxBalance()));
-        lore.add("");
-        lore.add("&eClick to upgrade!");
-        return infoIcon(Material.ANVIL, "&6&lUpgrade Bank", lore);
+        int transactions = place(canvas, text.slot("buttons.transactions"),
+                button(text, "buttons.transactions", "lore", ph()));
+        onClick(canvas, transactions, (viewer, right) -> open(viewer, COOP_BANK_TXNS, accountId));
     }
 
     private void fillBankTxns(Player player, MenuTemplate template, MenuCanvas canvas) {
@@ -947,46 +941,37 @@ public final class GuiManager implements Listener {
         String accountId = canvas.context() != null ? canvas.context()
                 : BankService.coopId(profile.id());
         List<Integer> slots = template.contentSlots();
-        // dynamic Back (col 4, row 6): return to the right bank menu for this account
+        MenuText text = template.text();
+        // the Back button returns to the right bank menu for this account
         String menu = accountId.startsWith("p:") ? BANK_PERSONAL : COOP_BANK;
-        canvas.setItem(48, infoIcon(Material.ARROW, "&7« Back", List.of("&7Return to the bank.")));
-        canvas.putAction(48, (viewer, right) -> open(viewer, menu));
+        int back = place(canvas, text.slot("back"), button(text, "back", "lore", ph()));
+        onClick(canvas, back, (viewer, right) -> open(viewer, menu));
         if (slots.isEmpty()) {
             return;
         }
         List<BankTxn> txns = plugin.bank().transactions(accountId, slots.size());
         if (txns.isEmpty()) {
-            canvas.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No transactions yet",
-                    List.of("&7Deposits, withdrawals, upgrades,", "&7and interest will show here.")));
+            canvas.setItem(slots.get(0), button(text, "empty", "lore", ph()));
             return;
         }
         for (int i = 0; i < txns.size() && i < slots.size(); i++) {
-            canvas.setItem(slots.get(i), txnIcon(txns.get(i)));
+            canvas.setItem(slots.get(i), txnIcon(txns.get(i), text));
         }
     }
 
-    private ItemStack txnIcon(BankTxn t) {
-        Material material = switch (t.type()) {
-            case "DEPOSIT" -> Material.LIME_DYE;
-            case "WITHDRAW" -> Material.GOLD_NUGGET;
-            case "UPGRADE" -> Material.ANVIL;
-            case "INTEREST" -> Material.EXPERIENCE_BOTTLE;
-            default -> Material.PAPER;
+    private ItemStack txnIcon(BankTxn t, MenuText text) {
+        String type = switch (t.type()) {
+            case "DEPOSIT", "WITHDRAW", "UPGRADE", "INTEREST" -> t.type().toLowerCase(Locale.ROOT);
+            default -> "other";
         };
-        String verb = switch (t.type()) {
-            case "DEPOSIT" -> "&aDeposit";
-            case "WITHDRAW" -> "&6Withdraw";
-            case "UPGRADE" -> "&bUpgrade";
-            case "INTEREST" -> "&dInterest";
-            default -> "&7" + t.type();
-        };
-        List<String> lore = new ArrayList<>();
-        lore.add("&7Amount: &e" + plugin.bank().money(t.amount()));
-        lore.add("&7Balance after: &f" + plugin.bank().money(t.balanceAfter()));
-        if (t.note() != null && !t.note().isEmpty()) {
-            lore.add("&8" + t.note());
-        }
-        return infoIcon(material, verb, lore);
+        boolean hasNote = t.note() != null && !t.note().isEmpty();
+        Map<String, String> ph = ph(
+                "type", t.type(),
+                "amount", plugin.bank().money(t.amount()),
+                "balance", plugin.bank().money(t.balanceAfter()),
+                "note", hasNote ? t.note() : "");
+        return item(MenuText.fill(text.text("types." + type), ph),
+                MenuText.fill(text.lines(hasNote ? "entry.lore-note" : "entry.lore"), ph, Map.of()));
     }
 
     // coop banks can require owner/co-owner to withdraw; personal banks always allow it
@@ -1061,7 +1046,7 @@ public final class GuiManager implements Listener {
                 break;
             }
             int slot = slots.get(i++);
-            canvas.setItem(slot, inviteCandidateIcon(online));
+            canvas.setItem(slot, inviteCandidateIcon(online, template.text()));
             canvas.putAction(slot, (viewer, right) -> {
                 Player target = Bukkit.getPlayerExact(online.getName());
                 if (target == null) {
@@ -1098,76 +1083,31 @@ public final class GuiManager implements Listener {
                 : plugin.conf().getInt("coop.max-members", 4);
     }
 
-    private ItemStack coopInfoIcon(Profile profile, int max) {
-        ItemStack item = new ItemStack(Material.CYAN_BED);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(noItalic("&6&l" + profile.name() + " &7Coop"));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Owner: &f" + ownerName(profile)));
-            lore.add(noItalic("&7Members: &f" + profile.memberCount() + "&7/&f" + max));
-            lore.add(noItalic(""));
-            lore.add(noItalic("&7Click a member to manage them."));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+    // a coop member's head, named and described from the menu file's name/lore paths
+    private ItemStack memberIcon(com.mystipixel.royalskyblock.profile.ProfileMember member, MenuText text,
+                                 String namePath, String lorePath) {
+        boolean online = Bukkit.getPlayerExact(member.name()) != null;
+        Map<String, String> ph = ph(
+                "member", member.name(),
+                "role", roleName(member.role()),
+                "status", plugin.messages().raw(online ? "format.online" : "format.offline"));
+        return dress(head(Bukkit.getOfflinePlayer(member.uuid())), text, namePath, lorePath, ph);
     }
 
-    private ItemStack memberIcon(com.mystipixel.royalskyblock.profile.ProfileMember member, boolean kickable) {
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-        ItemMeta meta = item.getItemMeta();
-        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
-            try {
-                skull.setOwningPlayer(Bukkit.getOfflinePlayer(member.uuid()));
-            } catch (Throwable ignored) {
-                // head lookup failed, leave default
-            }
-        }
-        if (meta != null) {
-            meta.displayName(noItalic("&a" + member.name()));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Role: &f" + member.role().name().toLowerCase(Locale.ROOT).replace('_', ' ')));
-            boolean online = Bukkit.getPlayerExact(member.name()) != null;
-            lore.add(noItalic("&7Status: " + (online ? "&aonline" : "&8offline")));
-            if (kickable) {
-                lore.add(noItalic(""));
-                lore.add(noItalic("&cClick to remove from the island."));
-            }
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+    private String roleName(IslandRole role) {
+        return plugin.messages().raw("format.role." + role.name().toLowerCase(Locale.ROOT).replace('_', '-'));
     }
 
-    private ItemStack inviteCandidateIcon(Player target) {
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-        ItemMeta meta = item.getItemMeta();
-        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
-            try {
-                skull.setOwningPlayer(target);
-            } catch (Throwable ignored) {
-                // head lookup failed, leave default
-            }
-        }
-        if (meta != null) {
-            meta.displayName(noItalic("&a" + target.getName()));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Invite to your coop island."));
-            lore.add(noItalic(""));
-            lore.add(noItalic("&eClick to invite!"));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+    private ItemStack inviteCandidateIcon(Player target, MenuText text) {
+        return dress(head(target), text, "entry.name", "entry.lore", ph("name", target.getName()));
     }
 
     private void fillLevel(Player player, MenuTemplate template, MenuCanvas canvas) {
-        // perks entry point (row 5, col 5), only when the optional perks system is enabled
+        // perks entry point, only when the optional perks system is enabled
+        MenuText text = template.text();
         if (plugin.perks().enabled()) {
-            canvas.setItem(40, infoIcon(Material.NETHER_STAR, "&d&lPerks",
-                    List.of("&7Perks that unlock as your", "&7island levels up.", "", "&eClick to view!")));
-            canvas.putAction(40, (viewer, right) -> open(viewer, PERKS));
+            int perks = place(canvas, text.slot("perks-button"), button(text, "perks-button", "lore", ph()));
+            onClick(canvas, perks, (viewer, right) -> open(viewer, PERKS));
         }
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
         Island island = activeId == null ? null : plugin.islands().getIslandByProfile(activeId);
@@ -1181,8 +1121,7 @@ public final class GuiManager implements Listener {
             return;
         }
         if (breakdown.isEmpty()) {
-            canvas.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No scan yet",
-                    List.of("&7Hit Recalculate to tally", "&7your island's blocks.")));
+            canvas.setItem(slots.get(0), button(text, "empty", "lore", ph()));
             return;
         }
         List<Map.Entry<Material, Long>> entries = new ArrayList<>(breakdown.entrySet());
@@ -1190,23 +1129,17 @@ public final class GuiManager implements Listener {
                 a.getValue() * cfg.value(a.getKey())));
         for (int i = 0; i < entries.size() && i < slots.size(); i++) {
             Map.Entry<Material, Long> e = entries.get(i);
-            canvas.setItem(slots.get(i), levelBlockIcon(e.getKey(), e.getValue(), cfg.value(e.getKey())));
+            canvas.setItem(slots.get(i), levelBlockIcon(e.getKey(), e.getValue(), cfg.value(e.getKey()), text));
         }
     }
 
-    private ItemStack levelBlockIcon(Material material, long count, long unit) {
-        ItemStack item = new ItemStack(material.isItem() ? material : Material.PAPER);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(noItalic("&a" + prettyName(material)));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Count: &f" + count));
-            lore.add(noItalic("&7Each: &e" + unit + " &7pts"));
-            lore.add(noItalic("&7Total: &e" + (count * unit) + " &7pts"));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+    private ItemStack levelBlockIcon(Material material, long count, long unit, MenuText text) {
+        Map<String, String> ph = ph(
+                "block", prettyName(material),
+                "count", String.valueOf(count),
+                "each", String.valueOf(unit),
+                "total", String.valueOf(count * unit));
+        return dress(new ItemStack(material.isItem() ? material : Material.PAPER), text, "entry.name", "entry.lore", ph);
     }
 
     // islands ranked by stored level (never scans live)
@@ -1236,38 +1169,42 @@ public final class GuiManager implements Listener {
         int rank = 0;
         for (BrowseRow row : rows) {
             int slot = slots.get(rank++);
-            canvas.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName()));
+            canvas.setItem(slot, leaderboardIcon(rank, row.island(), row.profile(), row.ownerName(), template.text()));
         }
     }
 
-    private ItemStack leaderboardIcon(int rank, Island island, Profile prof, String ownerName) {
-        ItemStack item = new ItemStack(Material.PLAYER_HEAD);
-        ItemMeta meta = item.getItemMeta();
-        if (meta instanceof org.bukkit.inventory.meta.SkullMeta skull) {
-            try {
-                skull.setOwningPlayer(Bukkit.getOfflinePlayer(prof.owner()));
-            } catch (Throwable ignored) {
-                // head lookup failed, leave default
-            }
-        }
-        if (meta != null) {
-            meta.displayName(noItalic("&e&l#" + rank + " &a" + ownerName));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            lore.add(noItalic("&7Level: &e" + (int) island.level()));
-            lore.add(noItalic("&7Gamemode: &f" + prof.gamemode().name().toLowerCase(Locale.ROOT)));
-            lore.add(noItalic("&7Members: &f" + prof.memberCount()));
-            meta.lore(lore);
-            item.setItemMeta(meta);
-        }
-        return item;
+    private ItemStack leaderboardIcon(int rank, Island island, Profile prof, String ownerName, MenuText text) {
+        Map<String, String> ph = ph(
+                "rank", String.valueOf(rank),
+                "owner", ownerName,
+                "level", String.valueOf((int) island.level()),
+                "gamemode", prof.gamemode().name().toLowerCase(Locale.ROOT),
+                "members", String.valueOf(prof.memberCount()));
+        return dress(head(Bukkit.getOfflinePlayer(prof.owner())), text, "entry.name", "entry.lore", ph);
     }
 
-    private ItemStack infoIcon(Material material, String name, List<String> loreLines) {
-        ItemStack item = new ItemStack(material.isItem() ? material : Material.PAPER);
+    // a code-placed item from a menu file: its item: line (material and name) and the lore at loreKey
+    private ItemStack button(MenuText text, String path, String loreKey, Map<String, String> ph) {
+        return item(MenuText.fill(text.text(path + ".item"), ph),
+                MenuText.fill(text.lines(path + "." + loreKey), ph, Map.of()));
+    }
+
+    private ItemStack item(String spec, List<String> lore) {
+        return ItemSpec.parse(spec).build(ecoHook, Map.of(), lore);
+    }
+
+    // name and lore from the menu file on an item whose material the code picks
+    private static ItemStack dress(ItemStack item, MenuText text, String namePath, String lorePath,
+                                   Map<String, String> ph) {
+        return dress(item, MenuText.fill(text.text(namePath), ph),
+                MenuText.fill(text.lines(lorePath), ph, Map.of()));
+    }
+
+    private static ItemStack dress(ItemStack item, String name, List<String> loreLines) {
         ItemMeta meta = item.getItemMeta();
         if (meta != null) {
             meta.displayName(noItalic(name));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
+            List<net.kyori.adventure.text.Component> lore = new ArrayList<>(loreLines.size());
             for (String line : loreLines) {
                 lore.add(noItalic(line));
             }
@@ -1277,14 +1214,38 @@ public final class GuiManager implements Listener {
         return item;
     }
 
+    // puts the item at slot when the menu file gave it one inside the menu; returns the slot, or -1
+    private static int place(MenuCanvas canvas, int slot, ItemStack item) {
+        if (slot < 0 || slot >= canvas.size()) {
+            return -1;
+        }
+        canvas.setItem(slot, item);
+        return slot;
+    }
+
+    private static void onClick(MenuCanvas canvas, int slot, BiConsumer<Player, Boolean> action) {
+        if (slot >= 0) {
+            canvas.putAction(slot, action);
+        }
+    }
+
+    // placeholder pairs: "name", value, ... (a mutable map, so a builder can add to it)
+    private static Map<String, String> ph(String... pairs) {
+        Map<String, String> map = new LinkedHashMap<>();
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            map.put(pairs[i], String.valueOf(pairs[i + 1]));
+        }
+        return map;
+    }
+
     private void fillPerks(Player player, MenuTemplate template, MenuCanvas canvas) {
         List<Integer> slots = template.contentSlots();
         if (slots.isEmpty()) {
             return;
         }
+        MenuText text = template.text();
         if (!plugin.perks().enabled()) {
-            canvas.setItem(slots.get(0), infoIcon(Material.BARRIER, "&cPerks are disabled",
-                    List.of("&7This server has perks turned off.", "&8(admins: set perks.enabled in config.yml)")));
+            canvas.setItem(slots.get(0), button(text, "disabled", "lore", ph()));
             return;
         }
         UUID activeId = plugin.profiles().getActiveProfileId(player.getUniqueId());
@@ -1292,32 +1253,23 @@ public final class GuiManager implements Listener {
         int level = island == null ? 0 : (int) island.level();
         List<Perk> perks = plugin.perks().perks();
         if (perks.isEmpty()) {
-            canvas.setItem(slots.get(0), infoIcon(Material.PAPER, "&7No perks configured",
-                    List.of("&7Add perks in perks.yml.")));
+            canvas.setItem(slots.get(0), button(text, "empty", "lore", ph()));
             return;
         }
         for (int i = 0; i < perks.size() && i < slots.size(); i++) {
-            canvas.setItem(slots.get(i), perkIcon(perks.get(i), level));
+            canvas.setItem(slots.get(i), perkIcon(perks.get(i), level, text));
         }
     }
 
-    private ItemStack perkIcon(Perk perk, int islandLevel) {
-        boolean unlocked = islandLevel >= perk.requiredLevel();
-        ItemStack item = new ItemStack(unlocked ? perk.icon() : Material.GRAY_DYE);
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            meta.displayName(noItalic(perk.name() + (unlocked ? " &a✔" : " &8(locked)")));
-            List<net.kyori.adventure.text.Component> lore = new ArrayList<>();
-            for (String line : perk.description()) {
-                lore.add(noItalic(line));
-            }
-            lore.add(noItalic(""));
-            lore.add(noItalic("&7Requires island level &f" + perk.requiredLevel()));
-            lore.add(noItalic(unlocked ? "&a✔ Unlocked" : "&c✘ Locked: reach level " + perk.requiredLevel()));
-            meta.lore(lore);
-            item.setItemMeta(meta);
+    private ItemStack perkIcon(Perk perk, int islandLevel, MenuText text) {
+        Map<String, String> ph = ph("name", perk.name(), "required_level", String.valueOf(perk.requiredLevel()));
+        Map<String, List<String>> multi = Map.of("description", perk.description());
+        if (islandLevel >= perk.requiredLevel()) {
+            return dress(new ItemStack(perk.icon()), MenuText.fill(text.text("entry-unlocked.name"), ph),
+                    MenuText.fill(text.lines("entry-unlocked.lore"), ph, multi));
         }
-        return item;
+        return item(MenuText.fill(text.text("entry-locked.item"), ph),
+                MenuText.fill(text.lines("entry-locked.lore"), ph, multi));
     }
 
     private static String prettyName(Material material) {

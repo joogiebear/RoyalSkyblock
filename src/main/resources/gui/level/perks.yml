@@ -67,3 +67,32 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# An unlocked perk. Its material is the perk's icon. %name% %required_level%, and a line that is
+# just %description% becomes the perk's description lines.
+entry-unlocked:
+  name: "%name% &a✔"
+  lore:
+    - "%description%"
+    - ""
+    - "&7Requires island level &f%required_level%"
+    - "&a✔ Unlocked"
+# A perk the island hasn't reached yet. Same placeholders.
+entry-locked:
+  item: gray_dye name:"%name% &8(locked)"
+  lore:
+    - "%description%"
+    - ""
+    - "&7Requires island level &f%required_level%"
+    - "&c✘ Locked: reach level %required_level%"
+
+# In the first 0 slot when perks are turned off, or none are configured.
+disabled:
+  item: barrier name:"&cPerks are disabled"
+  lore:
+    - "&7This server has perks turned off."
+    - "&8(admins: set perks.enabled in config.yml)"
+empty:
+  item: paper name:"&7No perks configured"
+  lore:
+    - "&7Add perks in perks.yml."

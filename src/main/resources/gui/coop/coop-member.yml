@@ -1,7 +1,7 @@
 #  RoyalSkyblock  ·  Manage Member
 #  Opened by clicking a member in the Coop Members menu. The member's head and the
-#  Promote/Demote · Transfer Ownership · Remove buttons are placed by code (they
-#  depend on the target's rank and yours); this file is just the frame + nav.
+#  Promote/Demote · Transfer Ownership · Remove buttons depend on the target's rank
+#  and yours; their look and position are under header: and buttons: at the end.
 #
 #  rows: 1-6. mask: 1 = filler pane, 0 = dynamic slot. Slots are placed by row/column.
 #  click ids: open_menu, close, player_command, console_command, message, play_sound
@@ -33,7 +33,7 @@ pages:
         - "111111111"
 
 slots:
-  # footer (member head + action buttons are placed by code)
+  # footer (member head + action buttons: see header: and buttons: below)
   - item: arrow name:"&7« Back"
     lore:
       - "&7Return to the roster."
@@ -55,3 +55,53 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# The member being managed (their head). %member% %role% %status%
+header:
+  name: "&a%member%"
+  lore:
+    - "&7Role: &f%role%"
+    - "&7Status: %status%"
+  row: 1
+  column: 5
+
+# The actions. %member% is the member's name. Promote and demote share a slot: only the one that
+# fits the member's rank is shown, and both only to the owner, as is transfer.
+buttons:
+  promote:
+    item: lime_dye name:"&a&lPromote to Co-Owner"
+    lore:
+      - "&7Let %member% invite, kick,"
+      - "&7and manage the island."
+      - ""
+      - "&eClick to promote!"
+    row: 2
+    column: 3
+  demote:
+    item: gray_dye name:"&e&lDemote to Member"
+    lore:
+      - "&7Return %member% to a"
+      - "&7regular member."
+      - ""
+      - "&eClick to demote!"
+    row: 2
+    column: 3
+  transfer:
+    item: golden_helmet name:"&6&lTransfer Ownership"
+    lore:
+      - "&7Make %member% the owner."
+      - "&cYou'll become a co-owner."
+      - ""
+      - "&7Left-click: details"
+      - "&eRight-click: confirm transfer"
+    row: 2
+    column: 5
+  kick:
+    item: barrier name:"&c&lRemove from Island"
+    lore:
+      - "&7Kick %member% from"
+      - "&7the coop."
+      - ""
+      - "&eClick to remove!"
+    row: 2
+    column: 7

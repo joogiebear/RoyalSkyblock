@@ -81,3 +81,58 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# The icon of each upgrade track. Its material is the track's icon (upgrades/*.yml).
+# Always: %name% %description% %tier% %max_tier%
+entry:
+  name: "%name% &7(Tier %tier%/%max_tier%)"
+  # Next tier available. Also: %next_tier% %effect% %cost% %wait%
+  lore:
+    - "&7%description%"
+    - ""
+    - "&7Next: tier %next_tier%%effect%"
+    - "&7Cost: &e%cost%%wait%"
+    - ""
+    - "&eClick to upgrade"
+  # The same when the next tier can be skipped for a price. Also: %skip_cost%
+  lore-skippable:
+    - "&7%description%"
+    - ""
+    - "&7Next: tier %next_tier%%effect%"
+    - "&7Cost: &e%cost%%wait%"
+    - "&7Skip cost: &e%skip_cost%"
+    - ""
+    - "&eClick to upgrade &7(right-click after to skip)"
+  lore-maxed:
+    - "&7%description%"
+    - ""
+    - "&a✔ Maxed out."
+  # A tier is on its timer. Also: %target_tier% %time_left%
+  lore-upgrading:
+    - "&7%description%"
+    - ""
+    - "&e⏳ Upgrading to tier %target_tier% &7- %time_left% left"
+  # The same when the wait can be skipped. Also: %skip_cost%
+  lore-upgrading-skippable:
+    - "&7%description%"
+    - ""
+    - "&e⏳ Upgrading to tier %target_tier% &7- %time_left% left"
+    - "&7Skip now: &e%skip_cost%"
+    - ""
+    - "&eRight-click to skip the wait."
+  # %effect%: what the next tier gives (%label%, from effect-labels below); left out when there is none
+  effect: " &8(%label%)"
+  # %wait%: left out for an instant tier. %time%
+  wait: " &7+ %time% wait"
+
+# What the next tier of each upgrade kind gives. %value% is the tier's value; radius also has
+# %size% (the island's full width). The -plural form is used when %value% isn't 1.
+effect-labels:
+  radius: "%size%x%size%"
+  guest-slots: "+%value% guest"
+  guest-slots-plural: "+%value% guests"
+  coop-slots: "+%value% coop slot"
+  coop-slots-plural: "+%value% coop slots"
+  generator: "Tier %value% ores"
+  minions: "+%value% minion slot"
+  minions-plural: "+%value% minion slots"

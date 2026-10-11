@@ -77,3 +77,11 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# A ranked island (the owner's head). %rank% %owner% %level% %gamemode% %members%
+entry:
+  name: "&e&l#%rank% &a%owner%"
+  lore:
+    - "&7Level: &e%level%"
+    - "&7Gamemode: &f%gamemode%"
+    - "&7Members: &f%members%"

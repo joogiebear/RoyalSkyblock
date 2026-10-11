@@ -66,3 +66,13 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# A listed island (the owner's head). %owner% %gamemode% %level% %members%
+entry:
+  name: "&a%owner%&7's Island"
+  lore:
+    - "&7Gamemode: &f%gamemode%"
+    - "&7Island level: &f%level%"
+    - "&7Members: &f%members%"
+    - ""
+    - "&eClick to visit!"

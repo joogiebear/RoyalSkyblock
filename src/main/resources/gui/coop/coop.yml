@@ -102,3 +102,28 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# The coop's summary. %profile% %owner% %members% %max%
+header:
+  item: cyan_bed name:"&6&l%profile% &7Coop"
+  lore:
+    - "&7Owner: &f%owner%"
+    - "&7Members: &f%members%&7/&f%max%"
+    - ""
+    - "&7Click a member to manage them."
+  row: 1
+  column: 5
+
+# A member (their head). %member% %role% %status%
+# Role names and online/offline come from format: in lang.yml.
+entry:
+  name: "&a%member%"
+  lore:
+    - "&7Role: &f%role%"
+    - "&7Status: %status%"
+  # members you can manage
+  lore-manageable:
+    - "&7Role: &f%role%"
+    - "&7Status: %status%"
+    - ""
+    - "&cClick to remove from the island."

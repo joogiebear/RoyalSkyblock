@@ -2,7 +2,7 @@
 #  A shared balance for the coop. Backed by RoyalBank's shared-account API when
 #  RoyalBank is installed, otherwise a Vault-backed store RoyalSkyblock owns: either
 #  way money moves through Vault. The balance header and Deposit/Withdraw buttons
-#  (amounts from coop.bank.amounts in config.yml) are placed by code; this is the frame.
+#  (amounts from coop.bank.amounts in config.yml) are under header: and buttons: at the end.
 #
 #  rows: 1-6. mask: 1 = filler pane, 0 = dynamic slot. Slots are placed by row/column.
 #  click ids: open_menu, close, player_command, console_command, message, play_sound
@@ -37,7 +37,7 @@ pages:
         - "111111111"
 
 slots:
-  # footer (balance + deposit/withdraw buttons are placed by code)
+  # footer (balance + deposit/withdraw buttons: see header: and buttons: below)
   - item: arrow name:"&7« Back"
     lore:
       - "&7Return to the bank menu."
@@ -59,3 +59,113 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# The balance summary. %profile% %balance% %level% %level_name% %max_balance% %next_interest%
+header:
+  item: gold_ingot name:"&6&l%profile% Coop Bank"
+  lore:
+    - "&7Balance: &e%balance%"
+    - "&7Level: &f%level% &8- %level_name%"
+    - "&7Max balance: &f%max_balance%"
+    - "&7Next interest: &f%next_interest%"
+  # when no economy plugin is installed (no buttons are shown then)
+  lore-unavailable:
+    - "&7Balance: &e%balance%"
+    - "&7Level: &f%level% &8- %level_name%"
+    - "&7Max balance: &f%max_balance%"
+    - "&7Next interest: &f%next_interest%"
+    - ""
+    - "&cNo economy plugin: banking disabled."
+  row: 1
+  column: 5
+
+# The bank buttons. deposit and withdraw get one button per amount in coop.bank.amounts
+# (config.yml), placed in the listed positions in order; %amount% is that amount.
+buttons:
+  deposit:
+    item: lime_dye name:"&a&lDeposit %amount%"
+    lore:
+      - "&7From your purse to bank."
+      - ""
+      - "&eClick to deposit!"
+    positions:
+      - {row: 3, column: 2}
+      - {row: 3, column: 4}
+      - {row: 3, column: 6}
+  # hidden from members who may not withdraw (coop.bank.withdraw-requires-manager)
+  withdraw:
+    item: gold_nugget name:"&6&lWithdraw %amount%"
+    lore:
+      - "&7From bank to your purse."
+      - ""
+      - "&eClick to withdraw!"
+    positions:
+      - {row: 4, column: 2}
+      - {row: 4, column: 4}
+      - {row: 4, column: 6}
+  deposit-all:
+    item: lime_wool name:"&a&lDeposit All"
+    lore:
+      - "&7Deposit your whole purse"
+      - "&7(up to the level cap)."
+      - ""
+      - "&eClick to deposit!"
+    row: 3
+    column: 8
+  withdraw-all:
+    item: gold_block name:"&6&lWithdraw All"
+    lore:
+      - "&7Withdraw the whole balance"
+      - "&7to your purse."
+      - ""
+      - "&eClick to withdraw!"
+    row: 4
+    column: 8
+  # claim-interest when interest is ready, interest-waiting until then (same slot). %time%
+  claim-interest:
+    item: experience_bottle name:"&a&lClaim Interest"
+    lore:
+      - "&7Interest is ready."
+      - ""
+      - "&eClick to claim!"
+    row: 5
+    column: 2
+  interest-waiting:
+    item: clock name:"&7Interest"
+    lore:
+      - "&7Next interest in &f%time%&7."
+    row: 5
+    column: 2
+  # upgrade until the top level, then maxed (same slot).
+  # %next_level% %cost% %max_balance%, plus %items% in lore-items (levels that need items)
+  upgrade:
+    item: anvil name:"&6&lUpgrade Bank"
+    lore:
+      - "&7Next: &f%next_level%"
+      - "&7Cost: &e%cost%"
+      - "&7New max balance: &f%max_balance%"
+      - ""
+      - "&eClick to upgrade!"
+    lore-items:
+      - "&7Next: &f%next_level%"
+      - "&7Cost: &e%cost%"
+      - "&7Items: &f%items%"
+      - "&7New max balance: &f%max_balance%"
+      - ""
+      - "&eClick to upgrade!"
+    row: 5
+    column: 4
+  maxed:
+    item: nether_star name:"&a&lBank Maxed"
+    lore:
+      - "&7This bank is at the highest level."
+    row: 5
+    column: 4
+  transactions:
+    item: book name:"&e&lTransactions"
+    lore:
+      - "&7Recent bank activity."
+      - ""
+      - "&eClick to view!"
+    row: 5
+    column: 6

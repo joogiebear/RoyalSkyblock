@@ -57,3 +57,11 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# An online player you can invite (their head). %name%
+entry:
+  name: "&a%name%"
+  lore:
+    - "&7Invite to your coop island."
+    - ""
+    - "&eClick to invite!"

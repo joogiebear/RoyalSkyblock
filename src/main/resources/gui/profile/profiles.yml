@@ -77,3 +77,21 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# One icon per profile in the 0 slots. Its material is the gamemode's icon (gamemodes/*.yml).
+# %name% %gamemode_name% %gamemode_description% %active% %island% %action%
+entry:
+  name: "&e&l%name% &r%gamemode_name%%active%"
+  lore:
+    - "%gamemode_description%"
+    - "&7Island: %island%"
+    - ""
+    - "%action%"
+  # %active%: added to the name of the profile you're on
+  active-tag: " &a(active)"
+  # %island%: whether the profile has an island yet
+  island-yes: "&ayes"
+  island-no: "&cno"
+  # %action%
+  action-active: "&8You're on this profile."
+  action-switch: "&eClick to switch!"

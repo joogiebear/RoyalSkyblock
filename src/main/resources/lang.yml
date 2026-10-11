@@ -234,6 +234,28 @@ messages:
   perks:
     disabled: "&cLevel-gated perks are disabled on this server."
 
+  # Words and units used inside other messages and menus.
+  format:
+    # Time spans (upgrade timers, bank interest), e.g. "1d 4h". Seconds are left out once a
+    # span reaches a day. %value% is the number.
+    duration:
+      instant: "instant"
+      days: "%value%d"
+      hours: "%value%h"
+      minutes: "%value%m"
+      seconds: "%value%s"
+      # when a time can't be worked out
+      unknown: "?"
+    # Coop roles, as shown in the member menus.
+    role:
+      owner: "owner"
+      co-owner: "co owner"
+      member: "member"
+      coop: "coop"
+      visitor: "visitor"
+    online: "&aonline"
+    offline: "&8offline"
+
   help:
     header: "&6&l✦ RoyalSkyblock"
     subtitle: "&7Your Skyblock commands:"

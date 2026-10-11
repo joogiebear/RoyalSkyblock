@@ -35,7 +35,7 @@ pages:
         - "111111111"
 
 slots:
-  # (a dynamic « Back at row 6, col 4 is placed by code: it returns to the right bank)
+  # (the « Back that returns to the right bank is under back: below)
   - item: barrier name:"&cClose"
     lore:
       - "&7Close this menu."
@@ -47,3 +47,37 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# Back to whichever bank the log was opened from.
+back:
+  item: arrow name:"&7« Back"
+  lore:
+    - "&7Return to the bank."
+  row: 6
+  column: 4
+
+# In the first 0 slot when the account has no history.
+empty:
+  item: paper name:"&7No transactions yet"
+  lore:
+    - "&7Deposits, withdrawals, upgrades,"
+    - "&7and interest will show here."
+
+# A ledger entry. %amount% %balance% %note% %type%
+entry:
+  lore:
+    - "&7Amount: &e%amount%"
+    - "&7Balance after: &f%balance%"
+  # entries that carry a note
+  lore-note:
+    - "&7Amount: &e%amount%"
+    - "&7Balance after: &f%balance%"
+    - "&8%note%"
+
+# The item and name for each kind of entry; other is any kind not listed (%type% is its raw id).
+types:
+  deposit: lime_dye name:"&aDeposit"
+  withdraw: gold_nugget name:"&6Withdraw"
+  upgrade: anvil name:"&bUpgrade"
+  interest: experience_bottle name:"&dInterest"
+  other: paper name:"&7%type%"

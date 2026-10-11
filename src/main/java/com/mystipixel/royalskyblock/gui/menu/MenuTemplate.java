@@ -4,6 +4,7 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.inventory.ItemStack;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -26,16 +27,18 @@ public final class MenuTemplate {
     private final List<Integer> contentSlots;  // indices marked 0 in the mask
     private final List<MenuSlot> slots;
     private final Map<String, SoundSpec> sounds;
+    private final MenuText text;
 
     private MenuTemplate(String title, int rows, ItemStack maskFiller,
                          List<Integer> contentSlots, List<MenuSlot> slots,
-                         Map<String, SoundSpec> sounds) {
+                         Map<String, SoundSpec> sounds, MenuText text) {
         this.title = title;
         this.rows = rows;
         this.maskFiller = maskFiller;
         this.contentSlots = contentSlots;
         this.slots = slots;
         this.sounds = sounds;
+        this.text = text;
     }
 
     /** One entry from a menu's {@code sounds:} block. */
@@ -68,10 +71,12 @@ public final class MenuTemplate {
         return Map.copyOf(out);
     }
 
-    public static MenuTemplate load(File file, String defaultTitle, int defaultRows) {
+    // bundled: the jar's copy of the file (may be null), the fallback for a missing title or rows and for
+    // the text of code-placed items
+    public static MenuTemplate load(File file, @Nullable ConfigurationSection bundled) {
         FileConfiguration cfg = YamlConfiguration.loadConfiguration(file);
-        String title = cfg.getString("title", defaultTitle);
-        int rows = Math.max(1, Math.min(6, cfg.getInt("rows", defaultRows)));
+        String title = cfg.getString("title", bundled == null ? "" : bundled.getString("title", ""));
+        int rows = Math.max(1, Math.min(6, cfg.getInt("rows", bundled == null ? 5 : bundled.getInt("rows", 5))));
         int size = rows * 9;
 
         ItemStack filler = null;
@@ -101,7 +106,8 @@ public final class MenuTemplate {
             }
         }
 
-        return new MenuTemplate(title, rows, filler, contentSlots, slots, parseSounds(cfg));
+        return new MenuTemplate(title, rows, filler, contentSlots, slots, parseSounds(cfg),
+                new MenuText(cfg, bundled, size));
     }
 
     private static ConfigurationSection firstPageMask(FileConfiguration cfg) {
@@ -182,6 +188,11 @@ public final class MenuTemplate {
 
     public List<MenuSlot> slots() {
         return slots;
+    }
+
+    /** Text and positions for the items the code places (entries, headers, buttons). */
+    public MenuText text() {
+        return text;
     }
 
     /** A configured sound by key, or null when the menu doesn't define one. */
