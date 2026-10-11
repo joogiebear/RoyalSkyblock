@@ -2,11 +2,13 @@ package com.mystipixel.royalskyblock.bank;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.hooks.VaultHook;
+import com.mystipixel.royalskyblock.message.Reason;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
+import org.jetbrains.annotations.Nullable;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -24,7 +26,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * balance and a ledger row together, and refunds or claws back if a paired step fails. Main thread only.
  *
  * <p>{@code deposit}/{@code withdraw}/{@code upgrade}/{@code claimInterest} return {@code null} on
- * success or a colour-coded, player-facing error string.
+ * success or the {@link Reason} it failed ({@code bank.result.*} in lang.yml).
  */
 public final class BankService {
 
@@ -118,31 +120,31 @@ public final class BankService {
         return currencySymbol() + String.format(Locale.US, "%,.2f", amount);
     }
 
-    public String deposit(Player purse, String id, double amount) {
+    public @Nullable Reason deposit(Player purse, String id, double amount) {
         if (!available()) {
-            return "&cThe bank is unavailable (no economy plugin).";
+            return result("unavailable");
         }
         amount = round(amount);
         double min = levels.config().getDouble("settings.min-transaction", 0.01);
         if (amount < min) {
-            return "&cAmount must be at least " + money(min) + ".";
+            return result("amount-too-small", "amount", money(min));
         }
         BankAccount account = account(id);
         BankLevel level = levels.effectiveLevel(account.level());
         double space = level.maxBalance() - account.balance();
         if (space <= 0) {
-            return "&cThe bank is full. Upgrade it to store more.";
+            return result("full");
         }
         double principal = round(Math.min(account.balance() + Math.min(amount, space), level.maxBalance()));
         double charge = round(principal - account.balance());
         if (charge <= 0.0) {
-            return "&cThe bank is full. Upgrade it to store more.";
+            return result("full");
         }
         if (!vault.has(purse, charge)) {
-            return "&cYou don't have enough money to deposit that.";
+            return result("insufficient-purse");
         }
         if (!vault.withdraw(purse, charge)) {
-            return "&cDeposit failed.";
+            return result("deposit-failed");
         }
         BankAccount updated = account.withBalance(principal);
         if (account.lastInterest() <= 0) {
@@ -151,9 +153,9 @@ public final class BankService {
             updated = updated.withLastInterest(Instant.now().getEpochSecond()).withInterestFloor(principal);
         }
         if (!persist(updated, "DEPOSIT", charge,
-                principal, purse.getName() + " deposited")) {
+                principal, note("deposit", "player", purse.getName()))) {
             vault.deposit(purse, charge);
-            return "&cDeposit could not be saved; your money was refunded.";
+            return result("deposit-not-saved");
         }
         return null;
     }
@@ -179,61 +181,63 @@ public final class BankService {
         }
         if (!vault.deposit(purse, amount)) {
             // The purse refused it: put it back so the payout stays owed rather than vanishing.
-            persist(account(id).withBalance(amount), "PAYOUT_REVERTED", amount, amount, note + " (purse refused)");
+            persist(account(id).withBalance(amount), "PAYOUT_REVERTED", amount, amount,
+                    note("purse-refused", "note", note));
             return -1;
         }
         return amount;
     }
 
-    public String withdraw(Player purse, String id, double amount) {
+    public @Nullable Reason withdraw(Player purse, String id, double amount) {
         if (!available()) {
-            return "&cThe bank is unavailable (no economy plugin).";
+            return result("unavailable");
         }
         amount = round(amount);
         double min = levels.config().getDouble("settings.min-transaction", 0.01);
         if (amount < min) {
-            return "&cAmount must be at least " + money(min) + ".";
+            return result("amount-too-small", "amount", money(min));
         }
         BankAccount account = account(id);
         if (account.balance() < amount) {
-            return "&cThe bank doesn't have that much money.";
+            return result("insufficient-bank");
         }
         // a refused deposit (purse at its cap) must not leave the bank debited
         if (!vault.deposit(purse, amount)) {
-            return "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn.";
+            return result("purse-full");
         }
         double newBalance = round(account.balance() - amount);
         if (!persist(account.withBalance(newBalance), "WITHDRAW", amount,
-                newBalance, purse.getName() + " withdrew")) {
+                newBalance, note("withdraw", "player", purse.getName()))) {
             vault.withdraw(purse, amount);
-            return "&cWithdrawal could not be saved and was reverted; please try again.";
+            return result("withdraw-not-saved");
         }
         return null;
     }
 
-    public String upgrade(Player purse, String id) {
+    public @Nullable Reason upgrade(Player purse, String id) {
         if (!available()) {
-            return "&cThe bank is unavailable (no economy plugin).";
+            return result("unavailable");
         }
         BankAccount account = account(id);
         BankLevel next = levels.getNextLevel(account.level()).orElse(null);
         if (next == null) {
-            return "&eThe bank is already at the maximum level.";
+            return result("max-level");
         }
         if (!vault.has(purse, next.upgradeMoneyCost())) {
-            return "&cYou need " + money(next.upgradeMoneyCost()) + " to upgrade.";
+            return result("upgrade-cost", "cost", money(next.upgradeMoneyCost()));
         }
         List<String> missing = missingItems(purse, next.itemRequirements());
         if (!missing.isEmpty()) {
-            return "&cMissing upgrade items: &f" + String.join(", ", missing);
+            return result("missing-items", "items",
+                    String.join(plugin.messages().raw("bank.result.missing-items-separator"), missing));
         }
         if (!vault.withdraw(purse, next.upgradeMoneyCost())) {
-            return "&cUpgrade payment failed.";
+            return result("upgrade-payment-failed");
         }
         if (!persist(account.withLevel(next.level()), "UPGRADE",
-                next.upgradeMoneyCost(), account.balance(), "Upgraded to " + next.name())) {
+                next.upgradeMoneyCost(), account.balance(), note("upgrade", "level", next.name()))) {
             vault.deposit(purse, next.upgradeMoneyCost()); // refund; items not yet removed
-            return "&cUpgrade could not be saved. Your money was refunded; please try again.";
+            return result("upgrade-not-saved");
         }
         removeItems(purse, next.itemRequirements());
         return null;
@@ -253,29 +257,29 @@ public final class BankService {
     }
 
     /** Pay accrued interest into the account (capped at the level max). Returns null on success/no-op. */
-    public String claimInterest(String id) {
+    public @Nullable Reason claimInterest(String id) {
         if (!available()) {
-            return "&cThe bank is unavailable.";
+            return result("interest-unavailable");
         }
         if (interestSecondsRemaining(id) > 0) {
-            return "&eInterest isn't ready yet.";
+            return result("interest-not-ready");
         }
         BankAccount account = account(id);
         BankLevel level = levels.effectiveLevel(account.level());
         // On the lowest balance held since the last claim, not the balance now (see BankAccount).
         double interest = round(calculateInterest(account.interestBase(), level));
         if (interest <= 0) {
-            return "&eNo interest was earned (empty bank).";
+            return result("no-interest");
         }
         long now = Instant.now().getEpochSecond();
         double newBalance = round(Math.min(account.balance() + interest, level.maxBalance()));
         double paid = round(newBalance - account.balance());
         if (paid <= 0) {
-            return "&eYour bank is full, so no interest could be paid.";
+            return result("interest-full");
         }
         BankAccount updated = account.withBalance(newBalance).withLastInterest(now).withInterestFloor(newBalance);
-        if (!persist(updated, "INTEREST", paid, newBalance, "Interest")) {
-            return "&cInterest could not be saved; please try again.";
+        if (!persist(updated, "INTEREST", paid, newBalance, note("interest"))) {
+            return result("interest-not-saved");
         }
         return null;
     }
@@ -294,7 +298,8 @@ public final class BankService {
         for (ItemRequirement req : requirements) {
             int have = countItems(player, req);
             if (have < req.amount()) {
-                missing.add(req.displayName() + " (have " + have + ")");
+                missing.add(plugin.messages().raw("bank.result.missing-item",
+                        "have", String.valueOf(have), "item", req.displayName()));
             }
         }
         return missing;
@@ -366,6 +371,15 @@ public final class BankService {
         }
         String v = value.toLowerCase(Locale.ROOT);
         return v.equals(wanted) || v.equals(namespace + ":" + wanted);
+    }
+
+    private static Reason result(String key, String... placeholders) {
+        return new Reason("bank.result." + key, placeholders);
+    }
+
+    // the ledger note saved with an entry, from bank.note.<key>
+    private String note(String key, String... placeholders) {
+        return plugin.messages().raw("bank.note." + key, placeholders);
     }
 
     private double round(double value) {

@@ -1,5 +1,6 @@
 package com.mystipixel.royalskyblock.island;
 
+import com.mystipixel.royalskyblock.message.Reason;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
@@ -20,7 +21,7 @@ public final class NoOpSchematics implements SchematicService {
     }
 
     @Override
-    public String saveSelection(Player player, String name) {
-        return "WorldEdit or FAWE isn't installed.";
+    public Reason saveSelection(Player player, String name) {
+        return new Reason("admin.schematic.errors.not-installed");
     }
 }

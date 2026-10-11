@@ -102,6 +102,29 @@ messages:
     delete-usage: "&cUsage: &e/is profile delete <name>"
     unknown-gamemode: "&cUnknown gamemode. Choose: &esolo&c, &ecoop&c, or &eironman&c."
     blocked-command: "&cThat command is disabled on your &e%gamemode% &cprofile."
+    # %has_island% in line
+    island-yes: "&ayes"
+    island-no: "&cno"
+    # %owner% in ambiguous-line
+    owner-yours: "yours"
+    owner-named: "%player%'s"
+    owner-unknown: "someone else's"
+    # A profile's name and mode, for other plugins that show it.
+    label: "%name% &7(%gamemode%)"
+    delete-not-owner: "&cYou can only delete profiles you own: use &e/is leave &cto leave a coop."
+    delete-active: "&cYou can't delete the profile you're on: switch to another first."
+    delete-only: "&cYou can't delete your only profile."
+    # %banks% lists every bank on the profile that still holds money, joined by delete-bank-separator.
+    delete-banks: "&cEmpty the banks on this profile before deleting it: &f%banks%"
+    delete-bank-coop: "the coop bank (%amount%)"
+    delete-bank-personal: "%player%'s personal bank (%amount%)"
+    delete-bank-separator: "&c, &f"
+    # Why a profile couldn't be created, shown as %error% in create-failed.
+    errors:
+      limit: "You've reached the profile limit (%max%)."
+      name-length: "Profile names must be 1-16 characters."
+      name-chars: "Profile names may only use letters, digits, spaces, _ and -."
+      name-taken: "You already have a profile called %name%."
 
   coop:
     payout-waiting-ironman: "&eYou have savings or items waiting from a coop you left. Ironman allows no outside help, so switch to another profile to collect them."
@@ -135,6 +158,35 @@ messages:
     you-promoted: "&aYou were promoted to &eco-owner&a of the island!"
     you-demoted: "&eYou were set back to a regular member."
     you-owner: "&6&l✦ &eYou are now the &6owner &eof the island!"
+    invite-accept-hover: "&aClick to accept"
+    invite-deny-hover: "&cClick to decline"
+    # %profile% in the payout messages when the coop no longer exists
+    former-coop: "a former coop"
+    # Why a coop action was refused, shown as %error% in invite-error, kick-error, leave-error and
+    # role-error.
+    errors:
+      not-online: "That player isn't online."
+      no-profile: "You have no active profile."
+      not-coop-profile: "You're on '%profile%' (%gamemode%). Switch to a Coop profile to invite members."
+      invite-not-owner: "Only the profile owner can invite members."
+      invite-self: "You can't invite yourself."
+      already-member: "%player% is already on this profile."
+      full: "This profile is full (%max% members)."
+      not-on-coop: "You're not on a Coop profile."
+      kick-not-owner: "Only the profile owner can kick members."
+      no-member: "No member named %player%."
+      kick-owner: "You can't kick the owner."
+      kick-co-owner: "Only the owner can remove a co-owner."
+      kick-self: "You can't kick yourself: use /is leave."
+      owner-cant-leave: "The owner can't leave: transfer ownership first (/is transfer) or delete the profile."
+      not-member: "You're not a member of this profile."
+      already-co-owner: "%player% is already a co-owner."
+      not-co-owner: "%player% isn't a co-owner."
+      rank-not-owner: "Only the owner can change member ranks."
+      rank-self: "You can't change your own rank."
+      transfer-not-owner: "Only the owner can transfer ownership."
+      transfer-self: "You already own this profile."
+      transfer-profile-limit: "%player% already owns the maximum number of profiles (%max%)."
 
   bank:
     deposited: "&aDeposited &e%amount% &ainto the bank."
@@ -145,6 +197,39 @@ messages:
     empty: "&cThe coop bank is empty."
     nothing-to-withdraw: "&cThere's nothing in this bank to withdraw."
     no-access: "&cYou no longer have access to this bank."
+    # Why a bank action didn't go through. Sent with the prefix.
+    result:
+      unavailable: "&cThe bank is unavailable (no economy plugin)."
+      interest-unavailable: "&cThe bank is unavailable."
+      amount-too-small: "&cAmount must be at least %amount%."
+      full: "&cThe bank is full. Upgrade it to store more."
+      insufficient-purse: "&cYou don't have enough money to deposit that."
+      deposit-failed: "&cDeposit failed."
+      deposit-not-saved: "&cDeposit could not be saved; your money was refunded."
+      insufficient-bank: "&cThe bank doesn't have that much money."
+      purse-full: "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn."
+      withdraw-not-saved: "&cWithdrawal could not be saved and was reverted; please try again."
+      max-level: "&eThe bank is already at the maximum level."
+      upgrade-cost: "&cYou need %cost% to upgrade."
+      # %items% is one missing-item per item, joined by missing-items-separator
+      missing-items: "&cMissing upgrade items: &f%items%"
+      missing-item: "%item% (have %have%)"
+      missing-items-separator: ", "
+      upgrade-payment-failed: "&cUpgrade payment failed."
+      upgrade-not-saved: "&cUpgrade could not be saved. Your money was refunded; please try again."
+      interest-not-ready: "&eInterest isn't ready yet."
+      no-interest: "&eNo interest was earned (empty bank)."
+      interest-full: "&eYour bank is full, so no interest could be paid."
+      interest-not-saved: "&cInterest could not be saved; please try again."
+    # The note saved with each entry in the transaction log (shown in its lore). Changing one only
+    # affects new entries.
+    note:
+      deposit: "%player% deposited"
+      withdraw: "%player% withdrew"
+      upgrade: "Upgraded to %level%"
+      interest: "Interest"
+      coop-payout: "%player% left %profile%"
+      purse-refused: "%note% (purse refused)"
 
   perks:
     disabled: "&cLevel-gated perks are disabled on this server."
@@ -161,3 +246,155 @@ messages:
     manage: "&8» &e/is manage &8· &esettings &7- island controls and privacy"
     delete: "&8» &e/is delete confirm &7- delete your island"
     admin: "&8» &e/is reload &8· &eadmin &7- admin tools (requires permission)"
+
+  # Command descriptions, as listed by /help.
+  command-descriptions:
+    island: "RoyalSkyblock island command."
+    bank: "Open your bank (personal + coop)."
+
+  # /is admin output. Only staff with royalskyblock.admin see these.
+  admin:
+    help:
+      - "&8» &e/is admin status &7- dependency & config health"
+      - "&8» &e/is admin split-content [confirm] &7- upgrades.yml/perks.yml to one file each"
+      - "&8» &e/is admin mobspawn <status|test <family> [level]> &7- island mob spawning"
+      - "&8» &e/is admin border <blue|red|green|off> &7- island border colour"
+      - "&8» &e/is admin testworld &7- ASP world round-trip diagnostic"
+      - "&8» &e/is admin loadtest <count> [holdSecs] &7- island load/unload + heap benchmark"
+      - "&8» &e/is admin schematic save <name> &7- save your WorldEdit selection"
+      - "&8» &e/is admin upgrade <key> <tier> &7- set an upgrade tier instantly"
+      - "&8» &e/is admin trash <list|restore <archive> <player>> &7- deleted-island archives"
+      - "&8» &e/is admin orphans [purge] &7- worlds no island row references"
+      - "&8» &e/is admin npc-open <player> <command> &7- run a command for a player (hub NPCs)"
+    backend-not-ready: "&cWorld backend not ready: is the server running Advanced Slime Paper?"
+    npc-open:
+      usage: "&cUsage: &e/is admin npc-open <player> <command>"
+      not-online: "&c%player% is not online."
+    trash:
+      empty: "&7The island trash is empty."
+      header: "&8» &e&lIsland trash &7- %count% archive(s), kept %days% day(s)"
+      # one archive. %file% %size% (KB) %date% (written with date-format, a Java DateTimeFormatter pattern)
+      line: "  &8· &f%file% &7(%size% KB, %date%)"
+      date-format: "MMM d HH:mm"
+      more: "  &8… and %count% more"
+      restore-hint: "&7Restore: &e/is admin trash restore <archive> <player>"
+      restore-usage: "&cUsage: &e/is admin trash restore <archive> <player>"
+      unknown-player: "&cNo player named &f%player%&c has played here."
+      no-profile: "&cThat player has no active profile to attach the island to."
+      has-island: "&cTheir active profile already has an island: it must be deleted (into the trash) before an archive can replace it."
+      read-failed: "&cCould not read that archive: &f%error%"
+      restore-failed: "&cRestore failed: &f%error%"
+      restored: "&aRestored &f%archive%&a as %player%'s island. &7/is home takes them there; upgrades and level start fresh (they lived in the deleted rows): the level recalculates on &e/is level recalc&7."
+      usage: "&cUsage: &e/is admin trash <list|restore <archive> <player>>"
+    orphans:
+      list-failed: "&cCould not list the world store: &f%error%"
+      database-failed: "&cThe database didn't answer, so nothing was scanned or moved: &f%error%"
+      none: "&aNo orphaned island worlds: the store matches the database."
+      header: "&8» &e%count% orphaned world(s) &7- no island row references them:"
+      line: "  &8· &f%world%"
+      more: "  &8… and %count% more"
+      purge-hint: "&7Move them into the trash: &e/is admin orphans purge"
+      # %failed% is purged-failures when some couldn't be moved, else empty
+      purged: "&aPurged &f%count%&a orphaned world(s) into the trash.%failed%"
+      purged-failures: " &c%count% failed: see console."
+    split-content:
+      header-applied: "&8» &e&lContent split &7- applied"
+      header-preview: "&8» &e&lContent split &7- preview"
+      note: "&8  · &7%note%"
+      wrote: "&8  · &awrote &f%file%"
+      would-write: "&8  · &awould write &f%file%"
+      skipped: "&8  · &e skipped &f%file%"
+      nothing: "&7Nothing to do: content is already one file per thing."
+      applied: "&7Done. The originals are kept alongside as &f.pre-split&7."
+      preview-hint: "&7Run &e/is admin split-content confirm &7to apply. Originals are kept, not deleted."
+    border:
+      current: "&7Border colour: &f%color%  &8· &e/is admin border <blue|red|green|off>"
+      invalid: "&cUse: blue, red, green, or off."
+      set: "&aIsland border set to &e%color%&a (applied live)."
+    mobspawn:
+      not-running: "&cIsland mob spawning isn't running: it's disabled, or its provider wasn't available at startup. Check the console log at boot."
+      players-only: "&cThat can only be run by a player on an island."
+      test-usage: "&e/is admin mobspawn test <family> [level]"
+      test-result: "&7Mob test: &f%result%"
+      # %availability% is available or unavailable
+      status: "&6Island mobs &7- provider &f%provider% &7(%availability%&7), &f%families% &7families, enabled=&f%enabled%"
+      available: "&aavailable"
+      unavailable: "&cunavailable"
+      intimidation: "&7Intimidation: &f%summary%"
+      test-hint: "&8» &e/is admin mobspawn test <family> [level] &7- force-spawn near you"
+    status:
+      header: "&6&l✦ RoyalSkyblock &7- status"
+      # One line per dependency: ready (ready-detail when there's a %detail%) or missing.
+      ready: "&7%name%: &a✔ ready"
+      ready-detail: "&7%name%: &a✔ ready &7(%detail%)"
+      missing: "&7%name%: &c✘ %detail%"
+      islands: "Islands (ASP)"
+      islands-ready: "source: %source%"
+      islands-missing: "install Advanced Slime Paper"
+      economy: "Economy (Vault)"
+      economy-ready: ""
+      economy-missing: "not found: bank & coin costs off"
+      bank: "Bank"
+      bank-ready: "%count% levels"
+      bank-missing: "needs Vault + bank.yml levels"
+      schematics: "Schematics"
+      schematics-ready: "WorldEdit/FAWE"
+      schematics-missing: "built-in generator"
+      progression: "Progression (eco)"
+      progression-ready: "per-profile"
+      progression-missing: "not per-profile"
+      storage: "&7Storage: &f%storage%"
+      perks-on: "&7Perks: &a✔ on &7(%count%)"
+      perks-off: "&7Perks: &8off (optional)"
+      border: "&7Border: &f%color% &8(per-player; admins bypass)"
+      config-health: "&7Config health:"
+      # One line per check: check-ok or check-failed around the %message%.
+      check-ok: "  &a✔ &7%message%"
+      check-failed: "  &c✘ &f%message%"
+      spawn-ok: "spawn world '%world%' loaded"
+      spawn-missing: "spawn world '%world%' NOT found: set spawn.world in config.yml"
+      upgrades-ok: "%count% upgrade track(s) loaded"
+      upgrades-missing: "no upgrades loaded: check upgrades.yml"
+      bank-levels-ok: "%count% bank level(s) loaded"
+      bank-levels-missing: "no bank levels: check bank.yml"
+    schematic:
+      usage: "&cUsage: &e/is admin schematic save <name>"
+      unavailable: "&cWorldEdit or FAWE isn't installed: schematics are unavailable."
+      saved: "&aSaved &eschematics/%name%.schem&a. Use it by setting &eisland.starter.schematic: %name% &ain config.yml."
+      failed: "&c%error%"
+      # %error% in failed
+      errors:
+        not-installed: "WorldEdit or FAWE isn't installed."
+        bad-name: "Schematic names may only use letters, digits, _ and - (up to 64 characters)."
+        no-selection: "Make a WorldEdit selection first (//wand, then left/right-click two corners)."
+        save-failed: "Couldn't save schematic: %error%"
+    chesttest:
+      not-ready: "&cWorld backend not ready."
+      placed: "&7[chest] placed; count now = &e%count%"
+      reloaded: "&7[chest] after save+reload = &e%count% &7(5 = persists ✔, 0 = ASP drops container contents)"
+      failed: "&c[chest] FAILED: %error%"
+    upgrade:
+      usage: "&cUsage: &e/is admin upgrade <key> <tier>"
+      unknown: "&cUnknown upgrade '%key%'. Try: size, guest-limit, coop-slots."
+      bad-tier: "&cTier must be a number (0-%max%)."
+      set: "&aSet &e%key% &ato tier &e%tier% &7(value %value%)."
+    loadtest:
+      usage: "&cUsage: &e/is admin loadtest <count> [holdSeconds]"
+      bad-count: "&ccount must be 1-64 (this is a live server: start small)."
+      starting: "&e[loadtest] creating + loading &f%count%&e slime worlds concurrently... watch console TPS."
+      # A progress line, also written to the console. %message% is one of the lines below.
+      report: "&e[loadtest] &7%message%"
+      loaded: "loaded %loaded%/%count% in %ms%ms (%average%ms avg/island)"
+      heap: "heap: +%total% total, ~%per_island% per island"
+      some-failed: "&c[loadtest] some loads failed: %error%"
+      holding: "&7[loadtest] holding %seconds%s, then unloading through the throttle..."
+      unloaded: "unloaded + deleted %count% in %ms%ms. Leaked: %leaked%"
+      # %result% is done-clean or done-leaked
+      done: "DONE: %count% islands, %total%ms total (incl. hold), teardown %ms%ms, leaked %leaked%%result%"
+      done-clean: ", clean."
+      done-leaked: ", CHECK: worlds still loaded!"
+    testworld:
+      creating: "&7[diag] creating + loading throwaway slime world '%world%'..."
+      created: "&a[diag] created & loaded &f%world%"
+      failed: "&c[diag] FAILED: %error%"
+      deleted: "&a[diag] deleted '%world%': ASP round-trip succeeded. ✔"

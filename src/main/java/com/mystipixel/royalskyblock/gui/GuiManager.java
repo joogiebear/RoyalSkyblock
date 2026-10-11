@@ -13,6 +13,7 @@ import com.mystipixel.royalskyblock.hooks.EcoHook;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
+import com.mystipixel.royalskyblock.message.Reason;
 import com.mystipixel.royalskyblock.island.IslandSetting;
 import com.mystipixel.royalskyblock.level.LevelConfig;
 import com.mystipixel.royalskyblock.perk.Perk;
@@ -777,9 +778,9 @@ public final class GuiManager implements Listener {
                 List.of("&7Kick " + target.name() + " from", "&7the coop.", "", "&eClick to remove!")));
         canvas.putAction(actionRow + 6, (viewer, right) -> {
             Player online = Bukkit.getPlayerExact(target.name());
-            String error = plugin.profiles().kick(viewer, target.name());
+            Reason error = plugin.profiles().kick(viewer, target.name());
             if (error != null) {
-                plugin.messages().send(viewer, "coop.kick-error", "error", error);
+                plugin.messages().send(viewer, "coop.kick-error", "error", plugin.messages().raw(error));
                 open(viewer, COOP_MEMBER, target.name());
             } else {
                 plugin.messages().send(viewer, "coop.kicked", "player", target.name());
@@ -861,9 +862,9 @@ public final class GuiManager implements Listener {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
-                String error = bank.claimInterest(accountId);
+                Reason error = bank.claimInterest(accountId);
                 if (error != null) {
-                    viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+                    plugin.messages().send(viewer, error);
                 } else {
                     plugin.messages().send(viewer, "bank.interest");
                 }
@@ -881,9 +882,9 @@ public final class GuiManager implements Listener {
                 if (!bankAccess(viewer, accountId, false)) {
                     return;
                 }
-                String error = bank.upgrade(viewer, accountId);
+                Reason error = bank.upgrade(viewer, accountId);
                 if (error != null) {
-                    viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+                    plugin.messages().send(viewer, error);
                 } else {
                     plugin.messages().send(viewer, "bank.upgraded");
                 }
@@ -1019,9 +1020,9 @@ public final class GuiManager implements Listener {
             return;
         }
         BankService bank = plugin.bank();
-        String error = deposit ? bank.deposit(viewer, accountId, amount) : bank.withdraw(viewer, accountId, amount);
+        Reason error = deposit ? bank.deposit(viewer, accountId, amount) : bank.withdraw(viewer, accountId, amount);
         if (error != null) {
-            viewer.sendMessage(Text.color(plugin.messages().prefix() + error));
+            plugin.messages().send(viewer, error);
         } else {
             plugin.messages().send(viewer, deposit ? "bank.deposited" : "bank.withdrew", "amount", fmtCoins(amount));
         }
@@ -1032,9 +1033,10 @@ public final class GuiManager implements Listener {
         return String.format(Locale.US, "%,.0f", value);
     }
 
-    private void runRoleAction(Player viewer, String error, String successKey, String targetName, String targetKey) {
+    private void runRoleAction(Player viewer, @Nullable Reason error, String successKey, String targetName,
+                               String targetKey) {
         if (error != null) {
-            plugin.messages().send(viewer, "coop.role-error", "error", error);
+            plugin.messages().send(viewer, "coop.role-error", "error", plugin.messages().raw(error));
             open(viewer, COOP_MEMBER, targetName);
         } else {
             plugin.messages().send(viewer, successKey, "player", targetName);
@@ -1063,13 +1065,14 @@ public final class GuiManager implements Listener {
             canvas.putAction(slot, (viewer, right) -> {
                 Player target = Bukkit.getPlayerExact(online.getName());
                 if (target == null) {
-                    plugin.messages().send(viewer, "coop.invite-error", "error", "That player isn't online.");
+                    plugin.messages().send(viewer, "coop.invite-error", "error",
+                            plugin.messages().raw("coop.errors.not-online"));
                     open(viewer, COOP_INVITE);
                     return;
                 }
-                String error = plugin.profiles().invite(viewer, target);
+                Reason error = plugin.profiles().invite(viewer, target);
                 if (error != null) {
-                    plugin.messages().send(viewer, "coop.invite-error", "error", error);
+                    plugin.messages().send(viewer, "coop.invite-error", "error", plugin.messages().raw(error));
                 } else {
                     plugin.messages().send(viewer, "coop.invite-sent", "player", target.getName());
                     plugin.messages().sendInvite(target, viewer.getName());

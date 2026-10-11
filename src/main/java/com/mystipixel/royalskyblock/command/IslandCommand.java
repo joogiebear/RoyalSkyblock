@@ -7,12 +7,14 @@ import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
+import com.mystipixel.royalskyblock.message.Reason;
+import com.mystipixel.royalskyblock.message.ReasonException;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
-import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -222,7 +224,7 @@ public final class IslandCommand {
                     "name", p.name(),
                     "gamemode", p.gamemode().name().toLowerCase(Locale.ROOT),
                     "active", activeTag,
-                    "has_island", hasIsland ? "&ayes" : "&cno");
+                    "has_island", plugin.messages().raw(hasIsland ? "profile.island-yes" : "profile.island-no"));
         }
         plugin.messages().sendPlain(player, "profile.hint");
     }
@@ -309,8 +311,9 @@ public final class IslandCommand {
             for (int i : matches) {
                 Profile p = profiles.get(i);
                 ProfileMember owner = p.member(p.owner());
-                String ownerName = p.owner().equals(player.getUniqueId()) ? "yours"
-                        : owner != null ? owner.name() + "'s" : "someone else's";
+                String ownerName = p.owner().equals(player.getUniqueId()) ? plugin.messages().raw("profile.owner-yours")
+                        : owner != null ? plugin.messages().raw("profile.owner-named", "player", owner.name())
+                        : plugin.messages().raw("profile.owner-unknown");
                 plugin.messages().sendPlain(player, "profile.ambiguous-line",
                         "action", action, "index", String.valueOf(i + 1), "name", p.name(),
                         "gamemode", p.gamemode().name().toLowerCase(Locale.ROOT), "owner", ownerName);
@@ -443,12 +446,12 @@ public final class IslandCommand {
         }
         Player target = plugin.getServer().getPlayerExact(args[1]);
         if (target == null) {
-            plugin.messages().send(player, "coop.invite-error", "error", "That player isn't online.");
+            plugin.messages().send(player, "coop.invite-error", "error", plugin.messages().raw("coop.errors.not-online"));
             return;
         }
-        String error = plugin.profiles().invite(player, target);
+        Reason error = plugin.profiles().invite(player, target);
         if (error != null) {
-            plugin.messages().send(player, "coop.invite-error", "error", error);
+            plugin.messages().send(player, "coop.invite-error", "error", plugin.messages().raw(error));
             return;
         }
         plugin.messages().send(player, "coop.invite-sent", "player", target.getName());
@@ -501,9 +504,9 @@ public final class IslandCommand {
             return;
         }
         Player target = plugin.getServer().getPlayerExact(args[1]);
-        String error = plugin.profiles().kick(player, args[1]);
+        Reason error = plugin.profiles().kick(player, args[1]);
         if (error != null) {
-            plugin.messages().send(player, "coop.kick-error", "error", error);
+            plugin.messages().send(player, "coop.kick-error", "error", plugin.messages().raw(error));
             return;
         }
         plugin.messages().send(player, "coop.kicked", "player", args[1]);
@@ -551,9 +554,10 @@ public final class IslandCommand {
                 "coop.demoted", "coop.you-demoted");
     }
 
-    private void coopRoleCommand(Player actor, String targetName, String error, String successKey, String targetKey) {
+    private void coopRoleCommand(Player actor, String targetName, @Nullable Reason error, String successKey,
+                                 String targetKey) {
         if (error != null) {
-            plugin.messages().send(actor, "coop.role-error", "error", error);
+            plugin.messages().send(actor, "coop.role-error", "error", plugin.messages().raw(error));
             return;
         }
         plugin.messages().send(actor, successKey, "player", targetName);
@@ -568,9 +572,9 @@ public final class IslandCommand {
             plugin.messages().send(sender, "general.players-only");
             return;
         }
-        String error = plugin.profiles().leave(player);
+        Reason error = plugin.profiles().leave(player);
         if (error != null) {
-            plugin.messages().send(player, "coop.leave-error", "error", error);
+            plugin.messages().send(player, "coop.leave-error", "error", plugin.messages().raw(error));
         } else {
             plugin.messages().send(player, "coop.left");
         }
@@ -718,29 +722,24 @@ public final class IslandCommand {
             handleNpcOpen(sender, args);
             return;
         }
-        sender.sendMessage(Text.color("&8» &e/is admin status &7- dependency & config health"));
-        sender.sendMessage(Text.color("&8» &e/is admin split-content [confirm] &7- upgrades.yml/perks.yml to one file each"));
-        sender.sendMessage(Text.color("&8» &e/is admin mobspawn <status|test <family> [level]> &7- island mob spawning"));
-        sender.sendMessage(Text.color("&8» &e/is admin border <blue|red|green|off> &7- island border colour"));
-        sender.sendMessage(Text.color("&8» &e/is admin testworld &7- ASP world round-trip diagnostic"));
-        sender.sendMessage(Text.color("&8» &e/is admin loadtest <count> [holdSecs] &7- island load/unload + heap benchmark"));
-        sender.sendMessage(Text.color("&8» &e/is admin schematic save <name> &7- save your WorldEdit selection"));
-        sender.sendMessage(Text.color("&8» &e/is admin upgrade <key> <tier> &7- set an upgrade tier instantly"));
-        sender.sendMessage(Text.color("&8» &e/is admin trash <list|restore <archive> <player>> &7- deleted-island archives"));
-        sender.sendMessage(Text.color("&8» &e/is admin orphans [purge] &7- worlds no island row references"));
-        sender.sendMessage(Text.color("&8» &e/is admin npc-open <player> <command> &7- run a command for a player (hub NPCs)"));
+        plugin.messages().sendLines(sender, "admin.help");
+    }
+
+    // admin output: sent as is, without the chat prefix
+    private void say(CommandSender sender, String key, String... placeholders) {
+        plugin.messages().sendPlain(sender, key, placeholders);
     }
 
     // /is admin npc-open <player> <command...>: how a hub NPC opens an npc-only-commands entry. The
     // command runs as the player, skipping the typed-command gate but still asking the gamemode gate.
     private void handleNpcOpen(CommandSender sender, String[] args) {
         if (args.length < 4) {
-            sender.sendMessage(Text.color("&cUsage: &e/is admin npc-open <player> <command>"));
+            say(sender, "admin.npc-open.usage");
             return;
         }
         Player target = plugin.getServer().getPlayerExact(args[2]);
         if (target == null) {
-            sender.sendMessage(Text.color("&c" + args[2] + " is not online."));
+            say(sender, "admin.npc-open.not-online", "player", args[2]);
             return;
         }
         String command = String.join(" ", java.util.Arrays.copyOfRange(args, 3, args.length));
@@ -761,65 +760,62 @@ public final class IslandCommand {
         if (sub.equals("list")) {
             var entries = trash.list();
             if (entries.isEmpty()) {
-                sender.sendMessage(Text.color("&7The island trash is empty."));
+                say(sender, "admin.trash.empty");
                 return;
             }
-            sender.sendMessage(Text.color("&8» &e&lIsland trash &7- " + entries.size()
-                    + " archive(s), kept " + trash.retentionDays() + " day(s)"));
-            var fmt = java.time.format.DateTimeFormatter.ofPattern("MMM d HH:mm")
+            say(sender, "admin.trash.header", "count", String.valueOf(entries.size()),
+                    "days", String.valueOf(trash.retentionDays()));
+            var fmt = java.time.format.DateTimeFormatter.ofPattern(plugin.messages().raw("admin.trash.date-format"))
                     .withZone(java.time.ZoneId.systemDefault());
             int shown = 0;
             for (var entry : entries) {
                 if (shown++ >= 15) {
-                    sender.sendMessage(Text.color("  &8… and " + (entries.size() - 15) + " more"));
+                    say(sender, "admin.trash.more", "count", String.valueOf(entries.size() - 15));
                     break;
                 }
-                sender.sendMessage(Text.color("  &8· &f" + entry.fileName() + " &7("
-                        + entry.size() / 1024 + " KB, " + fmt.format(java.time.Instant.ofEpochMilli(entry.modified())) + ")"));
+                say(sender, "admin.trash.line", "size", String.valueOf(entry.size() / 1024),
+                        "date", fmt.format(java.time.Instant.ofEpochMilli(entry.modified())), "file", entry.fileName());
             }
-            sender.sendMessage(Text.color("&7Restore: &e/is admin trash restore <archive> <player>"));
+            say(sender, "admin.trash.restore-hint");
             return;
         }
 
         if (sub.equals("restore")) {
             if (args.length < 5) {
-                sender.sendMessage(Text.color("&cUsage: &e/is admin trash restore <archive> <player>"));
+                say(sender, "admin.trash.restore-usage");
                 return;
             }
             org.bukkit.OfflinePlayer target = knownPlayer(args[4]);
             if (target == null || !target.hasPlayedBefore() && !target.isOnline()) {
-                sender.sendMessage(Text.color("&cNo player named &f" + args[4] + "&c has played here."));
+                say(sender, "admin.trash.unknown-player", "player", args[4]);
                 return;
             }
             UUID profileId = plugin.profiles().getActiveProfileId(target.getUniqueId());
             if (profileId == null) {
-                sender.sendMessage(Text.color("&cThat player has no active profile to attach the island to."));
+                say(sender, "admin.trash.no-profile");
                 return;
             }
             if (plugin.islands().getIslandByProfile(profileId) != null) {
-                sender.sendMessage(Text.color("&cTheir active profile already has an island: it must be"
-                        + " deleted (into the trash) before an archive can replace it."));
+                say(sender, "admin.trash.has-island");
                 return;
             }
             byte[] data;
             try {
                 data = trash.read(args[3]);
             } catch (Exception e) {
-                sender.sendMessage(Text.color("&cCould not read that archive: &f" + e.getMessage()));
+                say(sender, "admin.trash.read-failed", "error", String.valueOf(e.getMessage()));
                 return;
             }
             plugin.islands().restoreIsland(profileId, data).whenComplete((island, error) -> onMain(() -> {
                 if (error != null) {
-                    sender.sendMessage(Text.color("&cRestore failed: &f" + error.getMessage()));
+                    say(sender, "admin.trash.restore-failed", "error", String.valueOf(error.getMessage()));
                 } else {
-                    sender.sendMessage(Text.color("&aRestored &f" + args[3] + "&a as " + args[4]
-                            + "'s island. &7/is home takes them there; upgrades and level start fresh"
-                            + " (they lived in the deleted rows): the level recalculates on &e/is level recalc&7."));
+                    say(sender, "admin.trash.restored", "player", args[4], "archive", args[3]);
                 }
             }));
             return;
         }
-        sender.sendMessage(Text.color("&cUsage: &e/is admin trash <list|restore <archive> <player>>"));
+        say(sender, "admin.trash.usage");
     }
 
     // /is admin orphans [purge]: store worlds no island row references. Purge always archives to the
@@ -832,7 +828,7 @@ public final class IslandCommand {
             try {
                 names = plugin.worlds().listWorldNames();
             } catch (Exception e) {
-                onMain(() -> sender.sendMessage(Text.color("&cCould not list the world store: &f" + e.getMessage())));
+                onMain(() -> say(sender, "admin.orphans.list-failed", "error", String.valueOf(e.getMessage())));
                 return;
             }
             java.util.List<String> orphans = new java.util.ArrayList<>();
@@ -854,24 +850,23 @@ public final class IslandCommand {
             } catch (StorageException e) {
                 // One unanswered lookup makes the whole list untrustworthy, and a partial purge on it would
                 // archive live islands. Stop before anything moves.
-                onMain(() -> sender.sendMessage(Text.color("&cThe database didn't answer, so nothing was "
-                        + "scanned or moved: &f" + e.getMessage())));
+                onMain(() -> say(sender, "admin.orphans.database-failed", "error", String.valueOf(e.getMessage())));
                 return;
             }
             if (orphans.isEmpty()) {
-                onMain(() -> sender.sendMessage(Text.color("&aNo orphaned island worlds: the store matches the database.")));
+                onMain(() -> say(sender, "admin.orphans.none"));
                 return;
             }
             if (!purge) {
                 onMain(() -> {
-                    sender.sendMessage(Text.color("&8» &e" + orphans.size() + " orphaned world(s) &7- no island row references them:"));
+                    say(sender, "admin.orphans.header", "count", String.valueOf(orphans.size()));
                     for (int i = 0; i < orphans.size() && i < 15; i++) {
-                        sender.sendMessage(Text.color("  &8· &f" + orphans.get(i)));
+                        say(sender, "admin.orphans.line", "world", orphans.get(i));
                     }
                     if (orphans.size() > 15) {
-                        sender.sendMessage(Text.color("  &8… and " + (orphans.size() - 15) + " more"));
+                        say(sender, "admin.orphans.more", "count", String.valueOf(orphans.size() - 15));
                     }
-                    sender.sendMessage(Text.color("&7Move them into the trash: &e/is admin orphans purge"));
+                    say(sender, "admin.orphans.purge-hint");
                 });
                 return;
             }
@@ -889,8 +884,9 @@ public final class IslandCommand {
             }
             int finalMoved = moved;
             int finalFailed = failed;
-            onMain(() -> sender.sendMessage(Text.color("&aPurged &f" + finalMoved + "&a orphaned world(s)"
-                    + " into the trash." + (finalFailed > 0 ? " &c" + finalFailed + " failed: see console." : ""))));
+            onMain(() -> say(sender, "admin.orphans.purged", "failed", finalFailed > 0
+                    ? plugin.messages().raw("admin.orphans.purged-failures", "count", String.valueOf(finalFailed))
+                    : "", "count", String.valueOf(finalMoved)));
         });
     }
 
@@ -899,37 +895,31 @@ public final class IslandCommand {
         boolean apply = args.length >= 3 && args[2].equalsIgnoreCase("confirm");
         ContentSplitter.Result result = new ContentSplitter(plugin).run(apply);
 
-        sender.sendMessage(Text.color("&8» &e&lContent split &7" + (apply ? "- applied" : "- preview")));
+        say(sender, apply ? "admin.split-content.header-applied" : "admin.split-content.header-preview");
         for (String note : result.notes()) {
-            sender.sendMessage(Text.color("&8  · &7" + note));
+            say(sender, "admin.split-content.note", "note", note);
         }
         for (String file : result.written()) {
-            sender.sendMessage(Text.color("&8  · &a" + (apply ? "wrote " : "would write ") + "&f" + file));
+            say(sender, apply ? "admin.split-content.wrote" : "admin.split-content.would-write", "file", file);
         }
         for (String file : result.skipped()) {
-            sender.sendMessage(Text.color("&8  · &e skipped &f" + file));
+            say(sender, "admin.split-content.skipped", "file", file);
         }
         if (result.isEmpty()) {
-            sender.sendMessage(Text.color("&7Nothing to do: content is already one file per thing."));
+            say(sender, "admin.split-content.nothing");
             return;
         }
-        if (apply) {
-            sender.sendMessage(Text.color("&7Done. The originals are kept alongside as &f.pre-split&7."));
-        } else {
-            sender.sendMessage(Text.color("&7Run &e/is admin split-content confirm &7to apply. "
-                    + "Originals are kept, not deleted."));
-        }
+        say(sender, apply ? "admin.split-content.applied" : "admin.split-content.preview-hint");
     }
 
     void handleBorderAdmin(CommandSender sender, String[] args) {
         if (args.length < 3) {
-            sender.sendMessage(Text.color("&7Border colour: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
-                    + "  &8· &e/is admin border <blue|red|green|off>"));
+            say(sender, "admin.border.current", "color", plugin.borders().color().name().toLowerCase(Locale.ROOT));
             return;
         }
         String choice = args[2].toLowerCase(Locale.ROOT);
         if (!java.util.Set.of("blue", "red", "green", "off").contains(choice)) {
-            sender.sendMessage(Text.color("&cUse: blue, red, green, or off."));
+            say(sender, "admin.border.invalid");
             return;
         }
         // Through the plugin, not conf().set() + saveConfig(): conf() is a converted copy of eco's config,
@@ -937,24 +927,23 @@ public final class IslandCommand {
         plugin.setConfigValue("island.border.color", choice);
         plugin.borders().reload();
         plugin.borders().refreshAll();
-        sender.sendMessage(Text.color("&aIsland border set to &e" + choice + "&a (applied live)."));
+        say(sender, "admin.border.set", "color", choice);
     }
 
     void handleMobSpawnAdmin(CommandSender sender, String[] args) {
         com.mystipixel.royalskyblock.island.IslandMobSpawnService svc = plugin.mobSpawns();
         if (svc == null) {
-            sender.sendMessage(Text.color("&cIsland mob spawning isn't running: it's disabled, or its "
-                    + "provider wasn't available at startup. Check the console log at boot."));
+            say(sender, "admin.mobspawn.not-running");
             return;
         }
         String sub = args.length >= 3 ? args[2].toLowerCase(Locale.ROOT) : "status";
         if (sub.equals("test")) {
             if (!(sender instanceof Player player)) {
-                sender.sendMessage(Text.color("&cThat can only be run by a player on an island."));
+                say(sender, "admin.mobspawn.players-only");
                 return;
             }
             if (args.length < 4) {
-                sender.sendMessage(Text.color("&e/is admin mobspawn test <family> [level]"));
+                say(sender, "admin.mobspawn.test-usage");
                 return;
             }
             int level = 1;
@@ -965,58 +954,67 @@ public final class IslandCommand {
                     // keep default
                 }
             }
-            sender.sendMessage(Text.color("&7Mob test: &f" + svc.testSpawn(player, args[3], level)));
+            say(sender, "admin.mobspawn.test-result", "result", svc.testSpawn(player, args[3], level));
             return;
         }
-        sender.sendMessage(Text.color("&6Island mobs &7- provider &f" + svc.providerId() + " &7("
-                + (svc.providerAvailable() ? "&aavailable" : "&cunavailable") + "&7), &f"
-                + svc.familyCount() + " &7families, enabled=&f" + svc.enabled()));
+        say(sender, "admin.mobspawn.status",
+                "availability", plugin.messages().raw(svc.providerAvailable()
+                        ? "admin.mobspawn.available" : "admin.mobspawn.unavailable"),
+                "families", String.valueOf(svc.familyCount()),
+                "enabled", String.valueOf(svc.enabled()),
+                "provider", svc.providerId());
         if (sender instanceof Player viewer) {
-            sender.sendMessage(Text.color("&7Intimidation: &f" + plugin.intimidationSummary(viewer)));
+            say(sender, "admin.mobspawn.intimidation", "summary", plugin.intimidationSummary(viewer));
         }
-        sender.sendMessage(Text.color("&8» &e/is admin mobspawn test <family> [level] &7- force-spawn near you"));
+        say(sender, "admin.mobspawn.test-hint");
     }
 
     void handleAdminStatus(CommandSender sender) {
         String worldSrc = plugin.conf().getString("world.slime-data-source", "file");
         String storage = plugin.conf().getString("storage.type", "sqlite").toUpperCase(Locale.ROOT);
-        sender.sendMessage(Text.color("&6&l✦ RoyalSkyblock &7- status"));
-        sender.sendMessage(Text.color(dep("Islands (ASP)", plugin.isWorldBackendReady(),
-                "source: " + worldSrc, "install Advanced Slime Paper")));
-        sender.sendMessage(Text.color(dep("Economy (Vault)", plugin.economyReady(),
-                "", "not found: bank & coin costs off")));
-        sender.sendMessage(Text.color(dep("Bank", plugin.bank().available(),
-                plugin.bank().levels().levelCount() + " levels", "needs Vault + bank.yml levels")));
-        sender.sendMessage(Text.color(dep("Schematics", plugin.schematics().isAvailable(),
-                "WorldEdit/FAWE", "built-in generator")));
-        sender.sendMessage(Text.color(dep("Progression (eco)", plugin.eco().isPresent(),
-                "per-profile", "not per-profile")));
-        sender.sendMessage(Text.color("&7Storage: &f" + storage));
-        sender.sendMessage(Text.color("&7Perks: " + (plugin.perks().enabled()
-                ? "&a✔ on &7(" + plugin.perks().perkCount() + ")" : "&8off (optional)")));
-        sender.sendMessage(Text.color("&7Border: &f" + plugin.borders().color().name().toLowerCase(Locale.ROOT)
-                + " &8(per-player; admins bypass)"));
-        sender.sendMessage(Text.color("&7Config health:"));
+        String levelCount = String.valueOf(plugin.bank().levels().levelCount());
+        say(sender, "admin.status.header");
+        dep(sender, "islands", plugin.isWorldBackendReady(), "source", worldSrc);
+        dep(sender, "economy", plugin.economyReady());
+        dep(sender, "bank", plugin.bank().available(), "count", levelCount);
+        dep(sender, "schematics", plugin.schematics().isAvailable());
+        dep(sender, "progression", plugin.eco().isPresent());
+        say(sender, "admin.status.storage", "storage", storage);
+        if (plugin.perks().enabled()) {
+            say(sender, "admin.status.perks-on", "count", String.valueOf(plugin.perks().perkCount()));
+        } else {
+            say(sender, "admin.status.perks-off");
+        }
+        say(sender, "admin.status.border", "color", plugin.borders().color().name().toLowerCase(Locale.ROOT));
+        say(sender, "admin.status.config-health");
         String spawnWorld = plugin.conf().getString("spawn.world", "world");
         boolean spawnOk = plugin.getServer().getWorld(spawnWorld) != null;
-        sender.sendMessage(Text.color(check(spawnOk, "spawn world '" + spawnWorld + "' loaded",
-                "spawn world '" + spawnWorld + "' NOT found: set spawn.world in config.yml")));
+        check(sender, spawnOk, "spawn-ok", "spawn-missing", "world", spawnWorld);
         int upTracks = plugin.upgrades().all().size();
-        sender.sendMessage(Text.color(check(upTracks > 0, upTracks + " upgrade track(s) loaded",
-                "no upgrades loaded: check upgrades.yml")));
-        sender.sendMessage(Text.color(check(!plugin.bank().levels().isEmpty(),
-                plugin.bank().levels().levelCount() + " bank level(s) loaded", "no bank levels: check bank.yml")));
+        check(sender, upTracks > 0, "upgrades-ok", "upgrades-missing", "count", String.valueOf(upTracks));
+        check(sender, !plugin.bank().levels().isEmpty(), "bank-levels-ok", "bank-levels-missing", "count", levelCount);
     }
 
-    private static String dep(String name, boolean ok, String okDetail, String failDetail) {
-        if (ok) {
-            return "&7" + name + ": &a✔ ready" + (okDetail.isEmpty() ? "" : " &7(" + okDetail + ")");
+    // One dependency line: admin.status.<id> is its name, <id>-ready / <id>-missing the detail (an
+    // empty ready detail shows plain "ready").
+    private void dep(CommandSender sender, String id, boolean ok, String... placeholders) {
+        String name = plugin.messages().raw("admin.status." + id);
+        if (!ok) {
+            say(sender, "admin.status.missing", "detail",
+                    plugin.messages().raw("admin.status." + id + "-missing", placeholders), "name", name);
+            return;
         }
-        return "&7" + name + ": &c✘ " + failDetail;
+        String detail = plugin.messages().raw("admin.status." + id + "-ready", placeholders);
+        if (detail.isEmpty()) {
+            say(sender, "admin.status.ready", "name", name);
+        } else {
+            say(sender, "admin.status.ready-detail", "detail", detail, "name", name);
+        }
     }
 
-    private static String check(boolean ok, String okMsg, String failMsg) {
-        return ok ? "  &a✔ &7" + okMsg : "  &c✘ &f" + failMsg;
+    private void check(CommandSender sender, boolean ok, String okKey, String failKey, String... placeholders) {
+        String message = plugin.messages().raw("admin.status." + (ok ? okKey : failKey), placeholders);
+        say(sender, ok ? "admin.status.check-ok" : "admin.status.check-failed", "message", message);
     }
 
     void handleSchematic(CommandSender sender, String[] args) {
@@ -1025,27 +1023,26 @@ public final class IslandCommand {
             return;
         }
         if (args.length < 4 || !args[2].equalsIgnoreCase("save")) {
-            sender.sendMessage(Text.color("&cUsage: &e/is admin schematic save <name>"));
+            say(sender, "admin.schematic.usage");
             return;
         }
         if (!plugin.schematics().isAvailable()) {
-            sender.sendMessage(Text.color("&cWorldEdit or FAWE isn't installed: schematics are unavailable."));
+            say(sender, "admin.schematic.unavailable");
             return;
         }
         String name = args[3];
-        String error = plugin.schematics().saveSelection(player, name);
+        Reason error = plugin.schematics().saveSelection(player, name);
         if (error == null) {
-            sender.sendMessage(Text.color("&aSaved &eschematics/" + name + ".schem&a. "
-                    + "Use it by setting &eisland.starter.schematic: " + name + " &ain config.yml."));
+            say(sender, "admin.schematic.saved", "name", name);
         } else {
-            sender.sendMessage(Text.color("&c" + error));
+            say(sender, "admin.schematic.failed", "error", plugin.messages().raw(error));
         }
     }
 
     // diagnostic: does a starter chest lose its items through save/unload/reload (placement vs ASP persistence)
     void handleChestTest(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
-            sender.sendMessage(Text.color("&cWorld backend not ready."));
+            say(sender, "admin.chesttest.not-ready");
             return;
         }
         String name = "rsb_chesttest";
@@ -1057,20 +1054,19 @@ public final class IslandCommand {
                         chest.getBlockInventory().addItem(new org.bukkit.inventory.ItemStack(org.bukkit.Material.DIAMOND, 5));
                         chest.update(true, false);
                     }
-                    sender.sendMessage(Text.color("&7[chest] placed; count now = &e" + chestCount(world)));
+                    say(sender, "admin.chesttest.placed", "count", String.valueOf(chestCount(world)));
                     return world;
                 }))
                 .thenCompose(w -> plugin.worlds().unloadIsland(name, true))
                 .thenCompose(v -> plugin.worlds().loadIsland(name))
                 .thenCompose(world -> onMainSupply(() -> {
-                    sender.sendMessage(Text.color("&7[chest] after save+reload = &e" + chestCount(world)
-                            + " &7(5 = persists ✔, 0 = ASP drops container contents)"));
+                    say(sender, "admin.chesttest.reloaded", "count", String.valueOf(chestCount(world)));
                     return world;
                 }))
                 .thenCompose(w -> plugin.worlds().deleteIsland(name))
                 .whenComplete((ignored, error) -> {
                     if (error != null) {
-                        onMain(() -> sender.sendMessage(Text.color("&c[chest] FAILED: " + rootMessage(error))));
+                        onMain(() -> say(sender, "admin.chesttest.failed", "error", rootMessage(error)));
                     }
                 });
     }
@@ -1106,19 +1102,19 @@ public final class IslandCommand {
             return;
         }
         if (args.length < 4) {
-            sender.sendMessage(Text.color("&cUsage: &e/is admin upgrade <key> <tier>"));
+            say(sender, "admin.upgrade.usage");
             return;
         }
         com.mystipixel.royalskyblock.upgrade.UpgradeDef def = plugin.upgrades().get(args[2]);
         if (def == null) {
-            sender.sendMessage(Text.color("&cUnknown upgrade '" + args[2] + "'. Try: size, guest-limit, coop-slots."));
+            say(sender, "admin.upgrade.unknown", "key", args[2]);
             return;
         }
         int tier;
         try {
             tier = Math.max(0, Math.min(def.maxTier(), Integer.parseInt(args[3])));
         } catch (NumberFormatException e) {
-            sender.sendMessage(Text.color("&cTier must be a number (0-" + def.maxTier() + ")."));
+            say(sender, "admin.upgrade.bad-tier", "max", String.valueOf(def.maxTier()));
             return;
         }
         com.mystipixel.royalskyblock.island.Island island = islandOf(player);
@@ -1127,8 +1123,8 @@ public final class IslandCommand {
             return;
         }
         plugin.upgrades().setTier(island, def, tier);
-        sender.sendMessage(Text.color("&aSet &e" + def.key() + " &ato tier &e" + tier
-                + " &7(value " + def.valueAt(tier) + ")."));
+        say(sender, "admin.upgrade.set", "tier", String.valueOf(tier),
+                "value", String.valueOf(def.valueAt(tier)), "key", def.key());
     }
 
     private com.mystipixel.royalskyblock.island.@org.jetbrains.annotations.Nullable Island islandOf(Player player) {
@@ -1137,8 +1133,9 @@ public final class IslandCommand {
     }
 
     // also to the console: the runner is usually a player, and their chat isn't logged
-    private void loadTestReport(CommandSender sender, String msg) {
-        sender.sendMessage(Text.color("&e[loadtest] &7" + msg));
+    private void loadTestReport(CommandSender sender, String key, String... placeholders) {
+        String msg = plugin.messages().raw(key, placeholders);
+        say(sender, "admin.loadtest.report", "message", msg);
         plugin.getLogger().info("[loadtest] " + msg);
     }
 
@@ -1147,18 +1144,18 @@ public final class IslandCommand {
     // player presence. Every world is deleted at the end, even on partial failure.
     void handleLoadTest(CommandSender sender, String[] args) {
         if (!plugin.isWorldBackendReady()) {
-            sender.sendMessage(Text.color("&cWorld backend not ready: is the server running Advanced Slime Paper?"));
+            say(sender, "admin.backend-not-ready");
             return;
         }
         int count;
         try {
             count = Integer.parseInt(args.length >= 3 ? args[2] : "10");
         } catch (NumberFormatException e) {
-            sender.sendMessage(Text.color("&cUsage: &e/is admin loadtest <count> [holdSeconds]"));
+            say(sender, "admin.loadtest.usage");
             return;
         }
         if (count < 1 || count > 64) {
-            sender.sendMessage(Text.color("&ccount must be 1-64 (this is a live server: start small)."));
+            say(sender, "admin.loadtest.bad-count");
             return;
         }
         long holdSeconds = 3;
@@ -1178,8 +1175,7 @@ public final class IslandCommand {
         long heapBefore = rt.totalMemory() - rt.freeMemory();
         long batchStart = System.currentTimeMillis();
 
-        sender.sendMessage(Text.color("&e[loadtest] creating + loading &f" + count
-                + "&e slime worlds concurrently... watch console TPS."));
+        say(sender, "admin.loadtest.starting", "count", String.valueOf(count));
 
         List<String> names = new ArrayList<>();
         List<java.util.concurrent.CompletableFuture<Void>> loads = new ArrayList<>();
@@ -1202,17 +1198,17 @@ public final class IslandCommand {
                             loaded++;
                         }
                     }
-                    loadTestReport(sender, "loaded " + loaded + "/" + count + " in " + loadMs
-                            + "ms (" + (loadMs / Math.max(1, count)) + "ms avg/island)");
-                    loadTestReport(sender, "heap: +" + human(heapAfter - heapBefore)
-                            + " total, ~" + human(perIsland) + " per island");
+                    loadTestReport(sender, "admin.loadtest.loaded", "loaded", String.valueOf(loaded),
+                            "count", String.valueOf(count), "ms", String.valueOf(loadMs),
+                            "average", String.valueOf(loadMs / Math.max(1, count)));
+                    loadTestReport(sender, "admin.loadtest.heap", "total", human(heapAfter - heapBefore),
+                            "per_island", human(perIsland));
                     if (error != null) {
-                        sender.sendMessage(Text.color("&c[loadtest] some loads failed: " + rootMessage(error)));
+                        say(sender, "admin.loadtest.some-failed", "error", rootMessage(error));
                     }
 
                     long hold = holdSeconds * 20L;
-                    sender.sendMessage(Text.color("&7[loadtest] holding " + holdSeconds
-                            + "s, then unloading through the throttle..."));
+                    say(sender, "admin.loadtest.holding", "seconds", String.valueOf(holdSeconds));
                     plugin.getServer().getScheduler().runTaskLater(plugin,
                             () -> teardownLoadTest(sender, names, batchStart), hold);
                 }));
@@ -1235,11 +1231,12 @@ public final class IslandCommand {
                             leaked++;
                         }
                     }
-                    loadTestReport(sender, "unloaded + deleted " + names.size() + " in " + teardownMs
-                            + "ms. Leaked: " + leaked);
-                    loadTestReport(sender, "DONE: " + names.size() + " islands, " + totalMs
-                            + "ms total (incl. hold), teardown " + teardownMs + "ms, leaked " + leaked
-                            + (leaked == 0 ? ", clean." : ", CHECK: worlds still loaded!"));
+                    loadTestReport(sender, "admin.loadtest.unloaded", "count", String.valueOf(names.size()),
+                            "ms", String.valueOf(teardownMs), "leaked", String.valueOf(leaked));
+                    loadTestReport(sender, "admin.loadtest.done",
+                            "result", plugin.messages().raw(leaked == 0 ? "admin.loadtest.done-clean" : "admin.loadtest.done-leaked"),
+                            "count", String.valueOf(names.size()), "total", String.valueOf(totalMs),
+                            "ms", String.valueOf(teardownMs), "leaked", String.valueOf(leaked));
                 }));
     }
 
@@ -1256,21 +1253,21 @@ public final class IslandCommand {
 
     void handleTestWorld(CommandSender sender) {
         if (!plugin.isWorldBackendReady()) {
-            sender.sendMessage(Text.color("&cWorld backend not ready: is the server running Advanced Slime Paper?"));
+            say(sender, "admin.backend-not-ready");
             return;
         }
         String name = "rsb_diagnostic";
-        sender.sendMessage(Text.color("&7[diag] creating + loading throwaway slime world '" + name + "'..."));
+        say(sender, "admin.testworld.creating", "world", name);
         plugin.worlds().createIsland(name)
                 .thenCompose(world -> {
-                    onMain(() -> sender.sendMessage(Text.color("&a[diag] created & loaded &f" + world.getName())));
+                    onMain(() -> say(sender, "admin.testworld.created", "world", world.getName()));
                     return plugin.worlds().deleteIsland(name);
                 })
                 .whenComplete((ignored, error) -> onMain(() -> {
                     if (error != null) {
-                        sender.sendMessage(Text.color("&c[diag] FAILED: " + rootMessage(error)));
+                        say(sender, "admin.testworld.failed", "error", rootMessage(error));
                     } else {
-                        sender.sendMessage(Text.color("&a[diag] deleted '" + name + "': ASP round-trip succeeded. ✔"));
+                        say(sender, "admin.testworld.deleted", "world", name);
                     }
                 }));
     }
@@ -1299,10 +1296,14 @@ public final class IslandCommand {
         }
     }
 
-    private static String rootMessage(Throwable t) {
+    // the deepest cause's message, or the player-facing text of a ReasonException
+    private String rootMessage(Throwable t) {
         Throwable cause = t;
         while (cause.getCause() != null) {
             cause = cause.getCause();
+        }
+        if (cause instanceof ReasonException reason) {
+            return plugin.messages().raw(reason.reason());
         }
         return cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName();
     }
