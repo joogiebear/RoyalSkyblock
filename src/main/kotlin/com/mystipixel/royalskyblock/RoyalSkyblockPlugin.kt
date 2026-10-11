@@ -137,6 +137,10 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
         @JvmStatic
         fun get(): RoyalSkyblockPlugin = instance!!
+
+        // null while RoyalSkyblock is not enabled (not loaded yet, failed to enable, or disabled)
+        @JvmStatic
+        fun enabledOrNull(): RoyalSkyblockPlugin? = instance?.takeIf { it.isEnabled }
     }
 
     override fun loadConfigCategories(): List<ConfigCategory> = emptyList()
