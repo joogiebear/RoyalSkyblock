@@ -126,6 +126,32 @@ RoyalSkyblock adapts to whatever the server has:
 - **No EcoItems** → progression isn't per-profile (islands/profiles still work). eco itself is required and the plugin will not load without it.
 - **No WorldEdit/FAWE** → starter islands use the built-in generator.
 
+## API for other plugins
+
+`com.mystipixel.royalskyblock.api.RoyalSkyblockApi` holds static methods that use JDK types only, so a
+plugin can call them by reflection without depending on RoyalSkyblock at build time.
+
+`savePlayerNow(UUID player)` saves the player's active profile (inventory, ender chest, XP, health,
+hunger, eco progression) right away instead of at the next autosave or quit. Call it after anything
+that moves items or money between players, such as a completed trade, so a crash can't roll one side
+back. It uses the same path as the periodic autosave: captured on the main thread, written on the
+storage thread, and never written over a later save. Calls for the same player within one second fold
+into one save at the end of that second. It returns false if RoyalSkyblock isn't enabled or the player
+has no loaded profile, and can be called from any thread.
+
+```java
+try {
+    Class.forName("com.mystipixel.royalskyblock.api.RoyalSkyblockApi")
+            .getMethod("savePlayerNow", UUID.class)
+            .invoke(null, player.getUniqueId());
+} catch (ReflectiveOperationException | LinkageError notInstalled) {
+    // RoyalSkyblock not installed, or too old to have the method
+}
+```
+
+Resolve the `Method` once at startup rather than on every call. Extensions that compile against
+RoyalSkyblock can call `RoyalSkyblockApi.savePlayerNow` directly.
+
 ## License / attribution
 
 Part of the Royal suite by Mystipixel. Built for Advanced Slime Paper (MC 26.2 / Java 25) on the eco platform.

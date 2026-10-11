@@ -29,11 +29,15 @@ public final class ProfileManager {
             "Apple", "Banana", "Cherry", "Mango", "Lemon", "Melon", "Papaya", "Peach",
             "Pear", "Kiwi", "Lime", "Coconut", "Guava", "Plum", "Fig", "Orange"};
 
+    // on-demand saves (RoyalSkyblockApi.savePlayerNow) run at most once a second per player
+    private static final long SAVE_REQUEST_COOLDOWN_MILLIS = 1_000L;
+
     private final RoyalSkyblockPlugin plugin;
     private final Storage storage;
     private final PlayerStateService state;
 
     private final Map<UUID, UUID> activeProfile = new ConcurrentHashMap<>();  // player to active profile
+    private final SaveRequests saveRequests = new SaveRequests(SAVE_REQUEST_COOLDOWN_MILLIS);
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
     private final Map<UUID, Invite> pendingInvites = new ConcurrentHashMap<>(); // invited player to invite
 
@@ -256,6 +260,7 @@ public final class ProfileManager {
             state.save(player, active);
         }
         state.rows().forget(player.getUniqueId());
+        saveRequests.forget(player.getUniqueId());
         activeProfile.remove(player.getUniqueId());
         // A second login may have preloaded before this session's save above; applying it on join would hand
         // back items given away since.
@@ -271,6 +276,36 @@ public final class ProfileManager {
         if (active != null) {
             state.saveInBackground(player, active);
         }
+    }
+
+    /**
+     * On-demand save of an online player's active profile, through the same path as {@link #autosave}.
+     * Rate limited by {@link SaveRequests}: a request inside the cooldown becomes one save at its end.
+     * False if the player has no loaded profile. Main thread.
+     */
+    public boolean requestSave(Player player) {
+        UUID uuid = player.getUniqueId();
+        if (!activeProfile.containsKey(uuid)) {
+            return false;
+        }
+        long now = System.currentTimeMillis();
+        switch (saveRequests.request(uuid, now)) {
+            case NOW -> autosave(player);
+            case DEFERRED -> {
+                long ticks = Math.max(1L, (saveRequests.remainingMillis(uuid, now) + 49L) / 50L);
+                Bukkit.getScheduler().runTaskLater(plugin, () -> {
+                    if (saveRequests.due(uuid, System.currentTimeMillis())) {
+                        Player online = Bukkit.getPlayer(uuid);
+                        if (online != null) {
+                            autosave(online);
+                        }
+                    }
+                }, ticks);
+            }
+            case COALESCED -> {
+            }
+        }
+        return true;
     }
 
     private Profile createDefaultProfile(Player player) {
