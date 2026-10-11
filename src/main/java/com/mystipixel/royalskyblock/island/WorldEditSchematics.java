@@ -1,6 +1,7 @@
 package com.mystipixel.royalskyblock.island;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.message.Reason;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 
@@ -96,10 +97,10 @@ public final class WorldEditSchematics implements SchematicService {
     }
 
     @Override
-    public String saveSelection(Player player, String name) {
+    public @Nullable Reason saveSelection(Player player, String name) {
         // the name becomes a file path; "../" in it would write outside the schematics folder
         if (!name.matches("[A-Za-z0-9_-]{1,64}")) {
-            return "Schematic names may only use letters, digits, _ and - (up to 64 characters).";
+            return new Reason("admin.schematic.errors.bad-name");
         }
         try {
             com.sk89q.worldedit.entity.Player actor = com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(player);
@@ -129,9 +130,9 @@ public final class WorldEditSchematics implements SchematicService {
             }
             return null;
         } catch (com.sk89q.worldedit.IncompleteRegionException e) {
-            return "Make a WorldEdit selection first (//wand, then left/right-click two corners).";
+            return new Reason("admin.schematic.errors.no-selection");
         } catch (Throwable t) {
-            return "Couldn't save schematic: " + t.getMessage();
+            return new Reason("admin.schematic.errors.save-failed", "error", String.valueOf(t.getMessage()));
         }
     }
 }

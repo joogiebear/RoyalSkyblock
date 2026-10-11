@@ -1,5 +1,6 @@
 package com.mystipixel.royalskyblock.island;
 
+import com.mystipixel.royalskyblock.message.Reason;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
@@ -19,6 +20,6 @@ public interface SchematicService {
      */
     boolean tryPasteSchematic(World world, int x, int y, int z, String name);
 
-    /** Save the player's WorldEdit selection to {@code schematics/<name>.schem}. Null = success, else error. */
-    @Nullable String saveSelection(Player player, String name);
+    /** Save the player's WorldEdit selection to {@code schematics/<name>.schem}. Null on success, else why not. */
+    @Nullable Reason saveSelection(Player player, String name);
 }

@@ -11,6 +11,8 @@ import org.bukkit.entity.Player;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Loads every player-facing string from eco's {@code lang.yml}, with {@code %token%} placeholders.
@@ -84,14 +86,41 @@ public final class MessageManager {
         return apply(value != null ? value : "&c<missing:" + key + ">", placeholders);
     }
 
+    public String raw(Reason reason) {
+        return raw(reason.key(), reason.placeholders());
+    }
+
+    /** A list key (multi-line help), each line with {@code %token%} substitution; empty when missing. */
+    public List<String> lines(String key, String... placeholders) {
+        List<String> value = plugin.getLangYml().getStringsOrNull(ROOT + key);
+        List<String> out = new ArrayList<>();
+        if (value != null) {
+            for (String line : value) {
+                out.add(apply(line, placeholders));
+            }
+        }
+        return out;
+    }
+
     /** Send with the prefix. {@code placeholders} are token/value pairs: {@code "player", name}. */
     public void send(CommandSender sender, String key, String... placeholders) {
         sender.sendMessage(Text.color(prefix() + raw(key, placeholders)));
     }
 
+    public void send(CommandSender sender, Reason reason) {
+        send(sender, reason.key(), reason.placeholders());
+    }
+
     /** Send without the prefix: for headers, help lines, and multi-line blocks. */
     public void sendPlain(CommandSender sender, String key, String... placeholders) {
         sender.sendMessage(Text.color(raw(key, placeholders)));
+    }
+
+    /** Send each line of a list key without the prefix. */
+    public void sendLines(CommandSender sender, String key, String... placeholders) {
+        for (String line : lines(key, placeholders)) {
+            sender.sendMessage(Text.color(line));
+        }
     }
 
     /**
@@ -102,10 +131,10 @@ public final class MessageManager {
         Component base = Text.color(prefix() + raw("coop.invite-received", "player", inviterName));
         Component accept = Text.color(raw("coop.invite-accept-button"))
                 .clickEvent(ClickEvent.runCommand("/is accept"))
-                .hoverEvent(HoverEvent.showText(Text.color("&aClick to accept")));
+                .hoverEvent(HoverEvent.showText(Text.color(raw("coop.invite-accept-hover"))));
         Component deny = Text.color(raw("coop.invite-deny-button"))
                 .clickEvent(ClickEvent.runCommand("/is deny"))
-                .hoverEvent(HoverEvent.showText(Text.color("&cClick to decline")));
+                .hoverEvent(HoverEvent.showText(Text.color(raw("coop.invite-deny-hover"))));
         target.sendMessage(base.append(Component.space()).append(accept)
                 .append(Component.space()).append(deny));
     }

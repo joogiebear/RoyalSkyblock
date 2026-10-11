@@ -94,7 +94,7 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
 
     override fun getAliases(): List<String> = listOf("is", "sb", "skyblock")
 
-    override fun getDescription(): String = "RoyalSkyblock island command."
+    override fun getDescription(): String = plugin.messages().raw("command-descriptions.island")
 
     // Handlers get the argument array they always had (their own name first, then the rest), since eco
     // strips the subcommand name and every handler reads args[1] onwards.

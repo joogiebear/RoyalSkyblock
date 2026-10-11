@@ -34,6 +34,6 @@ public final class BankCommand extends PluginCommand {
 
     @Override
     public @NotNull String getDescription() {
-        return "Open your bank (personal + coop).";
+        return ((RoyalSkyblockPlugin) getPlugin()).messages().raw("command-descriptions.bank");
     }
 }

@@ -5,6 +5,8 @@ import com.mystipixel.royalskyblock.bank.BankService;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
+import com.mystipixel.royalskyblock.message.Reason;
+import com.mystipixel.royalskyblock.message.ReasonException;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
@@ -277,16 +279,16 @@ public final class ProfileManager {
 
     // Why a chosen profile name can't be used, or null if it can: colour codes, length, and duplicate
     // names (which make one unreachable by name).
-    private static @Nullable String nameProblem(String raw, List<Profile> existing) {
+    private static @Nullable Reason nameProblem(String raw, List<Profile> existing) {
         String name = cleanName(raw);
         if (name.isEmpty() || name.length() > 16) {
-            return "Profile names must be 1-16 characters.";
+            return new Reason("profile.errors.name-length");
         }
         if (!name.matches("[A-Za-z0-9 _-]+")) {
-            return "Profile names may only use letters, digits, spaces, _ and -.";
+            return new Reason("profile.errors.name-chars");
         }
         if (existing.stream().anyMatch(p -> p.name().equalsIgnoreCase(name))) {
-            return "You already have a profile called " + name + ".";
+            return new Reason("profile.errors.name-taken", "name", name);
         }
         return null;
     }
@@ -315,12 +317,12 @@ public final class ProfileManager {
         int max = plugin.conf().getInt("profiles.max-profiles", 3);
         if (existing.size() >= max) {
             return CompletableFuture.failedFuture(
-                    new IllegalStateException("You've reached the profile limit (" + max + ")."));
+                    new ReasonException(new Reason("profile.errors.limit", "max", String.valueOf(max))));
         }
         if (name != null && !name.isBlank()) {
-            String problem = nameProblem(name, existing);
+            Reason problem = nameProblem(name, existing);
             if (problem != null) {
-                return CompletableFuture.failedFuture(new IllegalStateException(problem));
+                return CompletableFuture.failedFuture(new ReasonException(problem));
             }
             name = cleanName(name);
         }
@@ -391,18 +393,15 @@ public final class ProfileManager {
             return CompletableFuture.completedFuture(false);
         }
         if (!target.owner().equals(uuid)) {
-            player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
-                    "&cYou can only delete profiles you own: use &e/is leave &cto leave a coop."));
+            plugin.messages().sendPlain(player, "profile.delete-not-owner");
             return CompletableFuture.completedFuture(false);
         }
         if (targetId.equals(getActiveProfileId(uuid))) {
-            player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
-                    "&cYou can't delete the profile you're on: switch to another first."));
+            plugin.messages().sendPlain(player, "profile.delete-active");
             return CompletableFuture.completedFuture(false);
         }
         if (storage.getProfilesByOwner(uuid).size() <= 1) {
-            player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
-                    "&cYou can't delete your only profile."));
+            plugin.messages().sendPlain(player, "profile.delete-only");
             return CompletableFuture.completedFuture(false);
         }
         // Money in any bank on the profile (members' personal accounts included) would become unreachable,
@@ -410,17 +409,18 @@ public final class ProfileManager {
         List<String> funded = new java.util.ArrayList<>();
         double coopBalance = plugin.bank().balance(BankService.coopId(targetId));
         if (coopBalance > 0) {
-            funded.add("the coop bank (" + plugin.bank().money(coopBalance) + ")");
+            funded.add(plugin.messages().raw("profile.delete-bank-coop", "amount", plugin.bank().money(coopBalance)));
         }
         for (ProfileMember member : target.members()) {
             double personal = plugin.bank().balance(BankService.personalId(targetId, member.uuid()));
             if (personal > 0) {
-                funded.add(member.name() + "'s personal bank (" + plugin.bank().money(personal) + ")");
+                funded.add(plugin.messages().raw("profile.delete-bank-personal",
+                        "amount", plugin.bank().money(personal), "player", member.name()));
             }
         }
         if (!funded.isEmpty()) {
-            player.sendMessage(com.mystipixel.royalskyblock.util.Text.color(
-                    "&cEmpty the banks on this profile before deleting it: &f" + String.join("&c, &f", funded)));
+            plugin.messages().sendPlain(player, "profile.delete-banks",
+                    "banks", String.join(plugin.messages().raw("profile.delete-bank-separator"), funded));
             return CompletableFuture.completedFuture(false);
         }
 
@@ -457,31 +457,31 @@ public final class ProfileManager {
                 });
     }
 
-    /** Invite a player to the inviter's active Coop profile. Returns an error message, or null on success. */
-    public String invite(Player inviter, Player target) {
+    /** Invite a player to the inviter's active Coop profile. Returns why not, or null on success. */
+    public @Nullable Reason invite(Player inviter, Player target) {
         Profile active = getActiveProfile(inviter);
         if (active == null) {
-            return "You have no active profile.";
+            return new Reason("coop.errors.no-profile");
         }
         if (active.gamemode() != Gamemode.COOP) {
-            return "You're on '" + active.name() + "' (" + active.gamemode().name().toLowerCase(Locale.ROOT)
-                    + "). Switch to a Coop profile to invite members.";
+            return new Reason("coop.errors.not-coop-profile",
+                    "gamemode", active.gamemode().name().toLowerCase(Locale.ROOT), "profile", active.name());
         }
         IslandRole role = active.roleOf(inviter.getUniqueId());
         if (role != IslandRole.OWNER && role != IslandRole.CO_OWNER) {
-            return "Only the profile owner can invite members.";
+            return new Reason("coop.errors.invite-not-owner");
         }
         if (target.getUniqueId().equals(inviter.getUniqueId())) {
-            return "You can't invite yourself.";
+            return new Reason("coop.errors.invite-self");
         }
         if (active.isMember(target.getUniqueId())) {
-            return target.getName() + " is already on this profile.";
+            return new Reason("coop.errors.already-member", "player", target.getName());
         }
         Island island = plugin.islands().getIslandByProfile(active.id());
         int max = island != null ? plugin.upgrades().coopMemberCap(island)
                 : plugin.conf().getInt("coop.max-members", 4);
         if (active.memberCount() >= max) {
-            return "This profile is full (" + max + " members).";
+            return new Reason("coop.errors.full", "max", String.valueOf(max));
         }
         long timeout = plugin.conf().getLong("coop.invite-timeout-seconds", 60) * 1000L;
         pendingInvites.put(target.getUniqueId(), new Invite(active.id(), inviter.getName(), System.currentTimeMillis() + timeout));
@@ -547,29 +547,29 @@ public final class ProfileManager {
         return invite != null && !invite.expired();
     }
 
-    /** Kick a member from the actor's active Coop profile. Returns an error message, or null on success. */
-    public String kick(Player actor, String targetName) {
+    /** Kick a member from the actor's active Coop profile. Returns why not, or null on success. */
+    public @Nullable Reason kick(Player actor, String targetName) {
         Profile active = getActiveProfile(actor);
         if (active == null || active.gamemode() != Gamemode.COOP) {
-            return "You're not on a Coop profile.";
+            return new Reason("coop.errors.not-on-coop");
         }
         IslandRole role = active.roleOf(actor.getUniqueId());
         if (role != IslandRole.OWNER && role != IslandRole.CO_OWNER) {
-            return "Only the profile owner can kick members.";
+            return new Reason("coop.errors.kick-not-owner");
         }
         ProfileMember target = active.members().stream()
                 .filter(m -> m.name().equalsIgnoreCase(targetName)).findFirst().orElse(null);
         if (target == null) {
-            return "No member named " + targetName + ".";
+            return new Reason("coop.errors.no-member", "player", targetName);
         }
         if (target.role() == IslandRole.OWNER) {
-            return "You can't kick the owner.";
+            return new Reason("coop.errors.kick-owner");
         }
         if (role == IslandRole.CO_OWNER && target.role() == IslandRole.CO_OWNER) {
-            return "Only the owner can remove a co-owner.";
+            return new Reason("coop.errors.kick-co-owner");
         }
         if (target.uuid().equals(actor.getUniqueId())) {
-            return "You can't kick yourself: use /is leave.";
+            return new Reason("coop.errors.kick-self");
         }
         active.removeMember(target.uuid());
         storage.saveProfile(active);
@@ -578,17 +578,17 @@ public final class ProfileManager {
         return null;
     }
 
-    /** Leave the player's active Coop profile (non-owner only). Returns an error message, or null on success. */
-    public String leave(Player player) {
+    /** Leave the player's active Coop profile (non-owner only). Returns why not, or null on success. */
+    public @Nullable Reason leave(Player player) {
         Profile active = getActiveProfile(player);
         if (active == null || active.gamemode() != Gamemode.COOP) {
-            return "You're not on a Coop profile.";
+            return new Reason("coop.errors.not-on-coop");
         }
         if (active.roleOf(player.getUniqueId()) == IslandRole.OWNER) {
-            return "The owner can't leave: transfer ownership first (/is transfer) or delete the profile.";
+            return new Reason("coop.errors.owner-cant-leave");
         }
         if (!active.isMember(player.getUniqueId())) {
-            return "You're not a member of this profile.";
+            return new Reason("coop.errors.not-member");
         }
         active.removeMember(player.getUniqueId());
         storage.saveProfile(active);
@@ -597,32 +597,33 @@ public final class ProfileManager {
         return null;
     }
 
-    /** Promote a member to co-owner. Owner only. Returns an error message, or null on success. */
-    public String promote(Player actor, String targetName) {
+    /** Promote a member to co-owner. Owner only. Returns why not, or null on success. */
+    public @Nullable Reason promote(Player actor, String targetName) {
         return changeRole(actor, targetName, IslandRole.MEMBER, IslandRole.CO_OWNER,
-                targetName + " is already a co-owner.");
+                new Reason("coop.errors.already-co-owner", "player", targetName));
     }
 
-    /** Demote a co-owner back to member. Owner only. Returns an error message, or null on success. */
-    public String demote(Player actor, String targetName) {
+    /** Demote a co-owner back to member. Owner only. Returns why not, or null on success. */
+    public @Nullable Reason demote(Player actor, String targetName) {
         return changeRole(actor, targetName, IslandRole.CO_OWNER, IslandRole.MEMBER,
-                targetName + " isn't a co-owner.");
+                new Reason("coop.errors.not-co-owner", "player", targetName));
     }
 
-    private String changeRole(Player actor, String targetName, IslandRole from, IslandRole to, String wrongState) {
+    private @Nullable Reason changeRole(Player actor, String targetName, IslandRole from, IslandRole to,
+                                        Reason wrongState) {
         Profile active = getActiveProfile(actor);
         if (active == null || active.gamemode() != Gamemode.COOP) {
-            return "You're not on a Coop profile.";
+            return new Reason("coop.errors.not-on-coop");
         }
         if (active.roleOf(actor.getUniqueId()) != IslandRole.OWNER) {
-            return "Only the owner can change member ranks.";
+            return new Reason("coop.errors.rank-not-owner");
         }
         ProfileMember target = memberByName(active, targetName);
         if (target == null) {
-            return "No member named " + targetName + ".";
+            return new Reason("coop.errors.no-member", "player", targetName);
         }
         if (target.uuid().equals(actor.getUniqueId())) {
-            return "You can't change your own rank.";
+            return new Reason("coop.errors.rank-self");
         }
         if (target.role() != from) {
             return wrongState;
@@ -635,27 +636,27 @@ public final class ProfileManager {
 
     /**
      * Transfer ownership of the actor's active Coop profile to another member: the target becomes OWNER
-     * and the current owner steps down to co-owner. Current owner only. Returns an error, or null on ok.
+     * and the current owner steps down to co-owner. Current owner only. Returns why not, or null on ok.
      */
-    public String transferOwnership(Player actor, String targetName) {
+    public @Nullable Reason transferOwnership(Player actor, String targetName) {
         Profile active = getActiveProfile(actor);
         if (active == null || active.gamemode() != Gamemode.COOP) {
-            return "You're not on a Coop profile.";
+            return new Reason("coop.errors.not-on-coop");
         }
         if (active.roleOf(actor.getUniqueId()) != IslandRole.OWNER || !active.owner().equals(actor.getUniqueId())) {
-            return "Only the owner can transfer ownership.";
+            return new Reason("coop.errors.transfer-not-owner");
         }
         ProfileMember target = memberByName(active, targetName);
         if (target == null) {
-            return "No member named " + targetName + ".";
+            return new Reason("coop.errors.no-member", "player", targetName);
         }
         if (target.uuid().equals(actor.getUniqueId())) {
-            return "You already own this profile.";
+            return new Reason("coop.errors.transfer-self");
         }
         // the coop counts towards the new owner's profile cap from now on
         int max = plugin.conf().getInt("profiles.max-profiles", 3);
         if (storage.getProfilesByOwner(target.uuid()).size() >= max) {
-            return target.name() + " already owns the maximum number of profiles (" + max + ").";
+            return new Reason("coop.errors.transfer-profile-limit", "max", String.valueOf(max), "player", target.name());
         }
         ProfileMember self = active.member(actor.getUniqueId());
         long selfJoined = self != null ? self.joinedAt() : Instant.now().toEpochMilli();
@@ -741,11 +742,11 @@ public final class ProfileManager {
             if (from.equals(current)) {
                 continue;                               // never pay a profile into itself
             }
-            String name = coop != null ? coop.name() : "a former coop";
+            String name = coop != null ? coop.name() : plugin.messages().raw("coop.former-coop");
             boolean settled = true;
 
             double paid = plugin.bank().payOutAll(player, BankService.personalId(from, uuid),
-                    player.getName() + " left " + name);
+                    plugin.messages().raw("bank.note.coop-payout", "profile", name, "player", player.getName()));
             if (paid < 0) {
                 settled = false;
             } else if (paid > 0) {
@@ -797,6 +798,7 @@ public final class ProfileManager {
     }
 
     public String describe(Profile profile) {
-        return profile.name() + " &7(" + profile.gamemode().name().toLowerCase(Locale.ROOT) + ")";
+        return plugin.messages().raw("profile.label",
+                "gamemode", profile.gamemode().name().toLowerCase(Locale.ROOT), "name", profile.name());
     }
 }
