@@ -4,34 +4,25 @@ import java.util.Locale;
 
 /**
  * A per-island toggle; new ones appear in the settings menu automatically. Each has a stable,
- * persisted {@link #key()}, a default, and display metadata.
+ * persisted {@link #key()} and a default; its icon, name and description are in gui/island/settings.yml.
  */
 public enum IslandSetting {
 
     /** Whether non-members may visit this island ({@code /is visit}). Off = private/invite-only. */
-    VISITORS_ALLOWED("visitors-allowed", true, "&bVisitors", "oak_door",
-            "Allow players who aren't members to visit your island."),
+    VISITORS_ALLOWED("visitors-allowed", true),
 
     /** Whether this island appears in the public Visit browser. */
-    LISTED("listed", true, "&aVisit Listing", "book",
-            "Show this island in the public /visit browser."),
+    LISTED("listed", true),
 
     /** Whether RoyalSkyblock spawns night mobs on this island (see island-mobs in config.yml). */
-    MOB_SPAWNS("mob-spawns", true, "&cMob Spawns", "zombie_head",
-            "Spawn combat mobs on your island at night.");
+    MOB_SPAWNS("mob-spawns", true);
 
     private final String key;
     private final boolean defaultEnabled;
-    private final String displayName;
-    private final String icon;
-    private final String description;
 
-    IslandSetting(String key, boolean defaultEnabled, String displayName, String icon, String description) {
+    IslandSetting(String key, boolean defaultEnabled) {
         this.key = key;
         this.defaultEnabled = defaultEnabled;
-        this.displayName = displayName;
-        this.icon = icon;
-        this.description = description;
     }
 
     public String key() {
@@ -40,18 +31,6 @@ public enum IslandSetting {
 
     public boolean defaultEnabled() {
         return defaultEnabled;
-    }
-
-    public String displayName() {
-        return displayName;
-    }
-
-    public String icon() {
-        return icon;
-    }
-
-    public String description() {
-        return description;
     }
 
     public static IslandSetting byKey(String key) {

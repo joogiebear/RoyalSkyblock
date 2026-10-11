@@ -97,3 +97,29 @@ slots:
       - id: open_menu
         args:
           menu: top
+
+# A block from the last scan. Its material is the block. %block% %count% %each% %total%
+entry:
+  name: "&a%block%"
+  lore:
+    - "&7Count: &f%count%"
+    - "&7Each: &e%each% &7pts"
+    - "&7Total: &e%total% &7pts"
+
+# In the first 0 slot when the island hasn't been scanned yet.
+empty:
+  item: paper name:"&7No scan yet"
+  lore:
+    - "&7Hit Recalculate to tally"
+    - "&7your island's blocks."
+
+# Opens the perks menu. Only shown when perks are enabled (perks.enabled in config.yml).
+perks-button:
+  item: nether_star name:"&d&lPerks"
+  lore:
+    - "&7Perks that unlock as your"
+    - "&7island levels up."
+    - ""
+    - "&eClick to view!"
+  row: 5
+  column: 5

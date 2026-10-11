@@ -54,3 +54,33 @@ slots:
       name: UI_BUTTON_CLICK
       volume: 0.6
       pitch: 1.2
+
+# How each island setting looks. The toggles fill the 0 slots in a fixed order:
+# visitors-allowed, listed, mob-spawns.
+settings:
+  visitors-allowed:
+    icon: oak_door
+    name: "&bVisitors"
+    description: "Allow players who aren't members to visit your island."
+  listed:
+    icon: book
+    name: "&aVisit Listing"
+    description: "Show this island in the public /visit browser."
+  mob-spawns:
+    icon: zombie_head
+    name: "&cMob Spawns"
+    description: "Spawn combat mobs on your island at night."
+
+# A setting toggle. %name% %description% %state% %action%
+entry:
+  name: "%name% %state%"
+  lore:
+    - "&7%description%"
+    - ""
+    - "%action%"
+  state-on: "&a&lON"
+  state-off: "&c&lOFF"
+  action-enable: "&eClick to enable"
+  action-disable: "&eClick to disable"
+  # shown to members who can't change settings
+  action-locked: "&8Only the owner can change this."
