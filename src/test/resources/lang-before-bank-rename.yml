@@ -1,0 +1,45 @@
+# The bank section of lang.yml before its result and note keys were renamed (RenamedKeysTest).
+messages:
+  bank:
+    deposited: "&aDeposited &e%amount% &ainto the bank."
+    withdrew: "&aWithdrew &e%amount% &afrom the bank."
+    upgraded: "&aThe bank was upgraded!"
+    interest: "&aInterest claimed into your bank."
+    empty-purse: "&cYou have no money to deposit."
+    empty: "&cThe coop bank is empty."
+    nothing-to-withdraw: "&cThere's nothing in this bank to withdraw."
+    no-access: "&cYou no longer have access to this bank."
+    # Why a bank action didn't go through. Sent with the prefix.
+    result:
+      unavailable: "&cThe bank is unavailable (no economy plugin)."
+      interest-unavailable: "&cThe bank is unavailable."
+      amount-too-small: "&cAmount must be at least %amount%."
+      full: "&cThe bank is full. Upgrade it to store more."
+      insufficient-purse: "&cYou don't have enough money to deposit that."
+      deposit-failed: "&cDeposit failed."
+      deposit-not-saved: "&cDeposit could not be saved; your money was refunded."
+      insufficient-bank: "&cThe bank doesn't have that much money."
+      purse-full: "&cYour purse couldn't take that much (is it at its limit?). Nothing was withdrawn."
+      withdraw-not-saved: "&cWithdrawal could not be saved and was reverted; please try again."
+      max-level: "&eThe bank is already at the maximum level."
+      upgrade-cost: "&cYou need %cost% to upgrade."
+      # %items% is one missing-item per item, joined by missing-items-separator
+      missing-items: "&cMissing upgrade items: &f%items%"
+      missing-item: "%item% (have %have%)"
+      missing-items-separator: ", "
+      upgrade-payment-failed: "&cUpgrade payment failed."
+      upgrade-not-saved: "&cUpgrade could not be saved. Your money was refunded; please try again."
+      interest-not-ready: "&eInterest isn't ready yet."
+      no-interest: "&eNo interest was earned (empty bank)."
+      interest-full: "&eYour bank is full, so no interest could be paid."
+      interest-not-saved: "&cInterest could not be saved; please try again."
+    # The note saved with each entry in the transaction log (shown in its lore). Changing one only
+    # affects new entries.
+    note:
+      deposit: "%player% deposited"
+      withdraw: "%player% withdrew"
+      upgrade: "Upgraded to %level%"
+      interest: "Interest"
+      coop-payout: "%player% left %profile%"
+      purse-refused: "%note% (purse refused)"
+
