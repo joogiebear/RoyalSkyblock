@@ -217,16 +217,15 @@ coop:
   # How long a coop invite stays valid before it expires.
   invite-timeout-seconds: 60
 
-  # Shared coop bank. Backed by RoyalBank's shared-account API when RoyalBank is installed, otherwise a
-  # Vault-backed balance RoyalSkyblock owns. Needs an economy (Vault) either way.
+  # Shared coop bank, part of the built-in bank: levels, max balance and interest come from bank.yml,
+  # and money moves through your Vault economy. Needs Vault.
   bank:
-    # Preset deposit/withdraw amount buttons in the coop-bank GUI (first three are shown).
+    # Preset deposit/withdraw amount buttons, used by the coop and personal bank menus (first three are shown).
     amounts:
       - 100
       - 1000
       - 10000
-    # Cap for the Vault-backed store. -1 = unlimited. (The RoyalBank backend uses its own
-    # shared-accounts.max-balance instead.)
+    # Not used: the coop bank's cap is the max-balance of its level in bank.yml.
     max-balance: -1
     # Require owner/co-owner to withdraw? Deposits are always open to members.
     withdraw-requires-manager: false

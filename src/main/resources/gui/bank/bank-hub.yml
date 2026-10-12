@@ -1,6 +1,6 @@
 #  RoyalSkyblock  ·  Bank
 #  Shown on a Coop profile: pick which bank to open. Personal Bank is your own
-#  per-profile RoyalBank account (native /bank); Coop Bank is the shared account.
+#  account for this profile; Coop Bank is the account shared by the coop.
 #
 #  rows: 1-6. mask: 1 = filler pane, 0 = dynamic slot. Slots are placed by row/column.
 #  click ids: open_menu, close, player_command, console_command, message, play_sound
