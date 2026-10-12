@@ -20,11 +20,12 @@
 # Where island metadata lives (owner, members, level, upgrades). Island blocks live in
 # the slime data source below.
 storage:
-  # sqlite (default), mysql (a network), or eco.
+  # sqlite (default), mysql, or eco. Each server needs its own database for now: sharing one
+  # between servers is planned but not safe yet, because servers can overwrite each other's data.
   #
   # eco stores everything in eco's own data-handler, like the rest of the suite; the
   # mysql block below is then ignored. eco storage is for ONE server only: servers
-  # sharing one eco database overwrite each other's data. For a network, use mysql.
+  # sharing one eco database overwrite each other's data.
   #
   # Switching to eco: stop the server, set eco, start. An existing islands.db is
   # migrated, verified, and renamed to islands.db.migrated; if anything doesn't match,
@@ -46,9 +47,10 @@ storage:
 world:
   # The ASP data-source islands are stored in. Must be a loader ASP has registered:
   #   file  : flat .slime files under the ASP world folder (single server only)
-  #   mysql : slime blobs in MySQL   (recommended: shardable across a network)
+  #   mysql : slime blobs in MySQL
   #   mongo : slime blobs in MongoDB
-  # For a multi-server network use "mysql" (or "mongo") so any server can load any island.
+  # Each server needs its own database for now: sharing island worlds between servers is planned
+  # but not safe yet.
   slime-data-source: file
 
   # Islands are named "<prefix><owner-uuid>" in the data source.
