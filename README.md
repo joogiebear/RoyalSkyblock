@@ -5,7 +5,7 @@ upgrades, all driven by clean configurable menus. Part of the Royal plugin suite
 no other Royal plugin is required.
 
 Every island is its own [Advanced Slime Paper](https://github.com/InfernalSuite/AdvancedSlimePaper)
-world, loaded on demand and unloaded when empty, so a server (or a whole network) can host thousands of
+world, loaded on demand and unloaded when empty, so a server can host thousands of
 islands without a bloated single world.
 
 ## Requirements
@@ -67,12 +67,16 @@ levels, bank, and menus).
 
 ## Storage
 
-- **Island metadata** (`storage.type`): `sqlite` (default, zero-setup), `mysql` (**use this for a network**),
+- **Island metadata** (`storage.type`): `sqlite` (default, zero-setup), `mysql`,
   or `eco` (eco's own data layer, like the rest of the suite; **single server only**: eco caches data per
   server and has no atomic updates, so servers sharing one eco database overwrite each other's island and
   profile lists; the plugin warns at startup if it sees eco storage on a shared eco handler).
-- **Island worlds** (`world.slime-data-source`): `file` (single server) or `mysql`/`mongo` (shared across a
-  network). RoyalSkyblock ships its own `SlimeLoader`s, so no ASP companion plugin is required.
+- **Island worlds** (`world.slime-data-source`): `file` (default), `mysql` or `mongo`. RoyalSkyblock ships
+  its own `SlimeLoader`s, so no ASP companion plugin is required.
+
+MySQL is supported, but each server needs its own database for now. Sharing one database between
+servers (a hub and island servers, say) is planned and not safe yet, because two servers can overwrite
+each other's data.
 
 ## Commands
 
