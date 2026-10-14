@@ -43,6 +43,9 @@ messages:
     spawn-set: "&aIsland spawn set to where you're standing."
     guest-spawn-set: "&aGuest spawn set to where you're standing."
     kicked-guests: "&aKicked &e%count% &aguest(s) from your island."
+    # Fills %error% of the failure messages when the island is open on another server sharing the database.
+    hosted-elsewhere: "the island is open on server &e%server%&7 right now; join that server, or try again once everyone has left it"
+    host-lost: "&cAnother server took over this island, so you were moved off it. Rejoin it from there."
 
   home:
     no-island: "&cYou don't have an island yet. Use &e/is create&c."
@@ -55,6 +58,7 @@ messages:
     private: "&e%player%&c's island is private: only members can visit."
     full: "&e%player%&c's island is full: try again later."
     failed: "&cCouldn't take you there: &7%error%"
+    hosted-elsewhere: "&e%player%&c's island is open on server &e%server%&c: visit it there."
 
   delete:
     warning: "&c&lWarning: &7this permanently deletes your island and everything on it."
@@ -75,6 +79,8 @@ messages:
     in-progress: "&r%upgrade% &7is already upgrading: &e%time% &7left."
     not-in-progress: "&7There's no upgrade in progress to skip."
     cant-afford: "&cYou can't afford that."
+    tier-changed: "&r%upgrade% &7was just upgraded from another server. Take another look."
+    failed: "&cCouldn't save that upgrade. Anything you paid was refunded."
 
   level:
     scanning: "&7Scanning your island: this runs in the background."
@@ -84,6 +90,8 @@ messages:
 
   profile:
     header: "&6&lYour Profiles &7(%count%/%max%)"
+    # Login refused: the server the player just left (shared database) hasn't finished saving them.
+    still-saving: "&cServer &e%server%&c is still saving your data. Try again in a few seconds."
     line: "&8» &e%name% &7(%gamemode%)%active% &8- &7island: %has_island%"
     active-tag: " &a(active)"
     hint: "&7Use &e/is profile switch <name> &7or &e/is profile create <mode>&7."
@@ -243,6 +251,7 @@ messages:
       interest: "Interest"
       coop-payout: "%player% left %profile%"
       purse-refused: "%note% (purse refused)"
+      withdraw-reverted: "%player% withdrew (purse refused, put back)"
 
   perks:
     disabled: "&cLevel-gated perks are disabled on this server."

@@ -20,8 +20,9 @@
 # Where island metadata lives (owner, members, level, upgrades). Island blocks live in
 # the slime data source below.
 storage:
-  # sqlite (default), mysql, or eco. Each server needs its own database for now: sharing one
-  # between servers is planned but not safe yet, because servers can overwrite each other's data.
+  # sqlite (default), mysql, or eco. A mysql database may be shared by several servers: each
+  # island is then hosted on one server at a time, and a player's data moves with them when they
+  # change server. A shared setup also needs world.slime-data-source: mysql (below).
   #
   # eco stores everything in eco's own data-handler, like the rest of the suite; the
   # mysql block below is then ignored. eco storage is for ONE server only: servers
@@ -31,6 +32,10 @@ storage:
   # migrated, verified, and renamed to islands.db.migrated; if anything doesn't match,
   # the file is left alone and the plugin refuses to start.
   type: sqlite
+  # This server's name in a shared database (letters, digits, dots, dashes, underscores; up to 64).
+  # Players are told an island is "hosted on <server-id>". Blank: a random id is generated and kept
+  # in server-id.txt. Give every server its own id; a copied server folder copies that file too.
+  server-id: ""
   # SQLite database file name (under the plugin folder).
   sqlite-file: islands.db
   mysql:
@@ -49,8 +54,8 @@ world:
   #   file  : flat .slime files under the ASP world folder (single server only)
   #   mysql : slime blobs in MySQL
   #   mongo : slime blobs in MongoDB
-  # Each server needs its own database for now: sharing island worlds between servers is planned
-  # but not safe yet.
+  # Servers sharing a mysql storage database need mysql here as well, so an island's blocks
+  # follow it to whichever server hosts it. Only one server hosts an island at a time.
   slime-data-source: file
 
   # Islands are named "<prefix><owner-uuid>" in the data source.

@@ -2,6 +2,7 @@ package com.mystipixel.royalskyblock.listener;
 
 import com.destroystokyo.paper.event.player.PlayerConnectionCloseEvent;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
@@ -25,12 +26,20 @@ public final class ProfileListener implements Listener {
         this.plugin = plugin;
     }
 
-    // runs off the server thread while the player connects, so the database read costs the server nothing
-    @EventHandler(priority = EventPriority.MONITOR)
+    // Runs off the server thread while the player connects, so the database read costs the server nothing.
+    // HIGHEST, not MONITOR: it may refuse the login while another server is still saving the player.
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onPreLogin(AsyncPlayerPreLoginEvent event) {
-        if (event.getLoginResult() == AsyncPlayerPreLoginEvent.Result.ALLOWED) {
-            plugin.profiles().preload(event.getUniqueId());
+        if (event.getLoginResult() != AsyncPlayerPreLoginEvent.Result.ALLOWED) {
+            return;
         }
+        String stillSaving = plugin.profiles().claimForLogin(event.getUniqueId());
+        if (stillSaving != null) {
+            event.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,
+                    Text.color(plugin.messages().raw("profile.still-saving", "server", stillSaving)));
+            return;
+        }
+        plugin.profiles().preload(event.getUniqueId());
     }
 
     // The connection closed before the join (login denied, client dropped), so the preload was never

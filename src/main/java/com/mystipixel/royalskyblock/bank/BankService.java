@@ -1,6 +1,8 @@
 package com.mystipixel.royalskyblock.bank;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
+import com.mystipixel.royalskyblock.data.BankMutation;
+import com.mystipixel.royalskyblock.data.BankOutcome;
 import com.mystipixel.royalskyblock.hooks.VaultHook;
 import com.mystipixel.royalskyblock.message.Reason;
 import org.bukkit.NamespacedKey;
@@ -22,8 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * RoyalSkyblock's native bank. Accounts are keyed by an opaque id (personal per-profile or shared
- * coop), with a {@link Player} as the Vault/inventory counterparty. Every mutation persists the
- * balance and a ledger row together, and refunds or claws back if a paired step fails. Main thread only.
+ * coop), with a {@link Player} as the Vault/inventory counterparty. Every mutation is decided on the
+ * locked account in one database transaction that also writes its ledger row, and refunds or claws back
+ * if a paired step fails. Main thread only.
  *
  * <p>{@code deposit}/{@code withdraw}/{@code upgrade}/{@code claimInterest} return {@code null} on
  * success or the {@link Reason} it failed ({@code bank.result.*} in lang.yml). Completed movements are
@@ -92,14 +95,23 @@ public final class BankService {
         return result;
     }
 
-    // Returns false if the write failed; callers must then undo what they already did (refund, claw back).
-    private boolean persist(BankAccount account, String type, double amount, double balance, String note) {
-        if (!plugin.storage().saveBankAccountWithTxn(account, type, amount, balance, note)) {
-            cache.remove(account.id());   // unknown DB state, force the next read to go to source
-            return false;
+    // One locked movement in the store; the cache is refreshed from what it found or wrote. Vault money moves
+    // only after this returns, so a movement is never decided on a stale balance.
+    private BankOutcome transact(String id, BankMutation work) {
+        BankOutcome outcome = plugin.storage().bankTransaction(id, levels.getStartingLevel(), work);
+        if (outcome.failed()) {
+            cache.remove(id);   // unknown DB state, force the next read to go to source
+        } else {
+            cache.put(id, new Cached(outcome.account(), System.currentTimeMillis() + CACHE_TTL_MILLIS));
         }
-        cache.put(account.id(), new Cached(account, System.currentTimeMillis() + CACHE_TTL_MILLIS));
-        return true;
+        return outcome;
+    }
+
+    // the debit landed, the purse refused the money and putting it back failed: it is now in neither place
+    private void lostInTransit(String id, Player purse, double amount, String type) {
+        plugin.getLogger().severe("Bank " + type + " of " + money(amount) + " from account " + id + " for "
+                + purse.getName() + " (" + purse.getUniqueId() + ") was debited, refused by the purse and could not"
+                + " be put back: credit it by hand.");
     }
 
     /** Drop a cached account, so an external change (an admin edit, a reload) is picked up at once. */
@@ -136,14 +148,10 @@ public final class BankService {
         if (amount < min) {
             return result("amount.too-small", "amount", money(min));
         }
-        BankAccount account = account(id);
-        BankLevel level = levels.effectiveLevel(account.level());
-        double space = level.maxBalance() - account.balance();
-        if (space <= 0) {
-            return result("account.deposit.bank-full");
-        }
-        double principal = round(Math.min(account.balance() + Math.min(amount, space), level.maxBalance()));
-        double charge = round(principal - account.balance());
+        // a first look from the cache, so a full bank never touches the purse; the transaction decides
+        BankAccount seen = account(id);
+        BankLevel seenLevel = levels.effectiveLevel(seen.level());
+        double charge = round(Math.min(amount, seenLevel.maxBalance() - seen.balance()));
         if (charge <= 0.0) {
             return result("account.deposit.bank-full");
         }
@@ -153,18 +161,36 @@ public final class BankService {
         if (!vault.withdraw(purse, charge)) {
             return result("deposit-failed");
         }
-        BankAccount updated = account.withBalance(principal);
-        if (account.lastInterest() <= 0) {
-            // First money in starts the interest clock, so a new account (or new profile) can't deposit and
-            // claim at once. The floor starts at this deposit so a normal first period still earns.
-            updated = updated.withLastInterest(Instant.now().getEpochSecond()).withInterestFloor(principal);
-        }
-        if (!persist(updated, "DEPOSIT", charge,
-                principal, note("account-deposit", "player", purse.getName()))) {
+        String note = note("account-deposit", "player", purse.getName());
+        long now = Instant.now().getEpochSecond();
+        BankOutcome outcome = transact(id, locked -> {
+            BankLevel level = levels.effectiveLevel(locked.level());
+            double credit = round(Math.min(charge, level.maxBalance() - locked.balance()));
+            if (credit <= 0.0) {
+                return BankOutcome.refuse(locked, result("account.deposit.bank-full"));
+            }
+            double principal = round(locked.balance() + credit);
+            BankAccount updated = locked.withBalance(principal);
+            if (locked.lastInterest() <= 0) {
+                // First money in starts the interest clock, so a new account (or new profile) can't deposit and
+                // claim at once. The floor starts at this deposit so a normal first period still earns.
+                updated = updated.withLastInterest(now).withInterestFloor(principal);
+            }
+            return BankOutcome.write(updated, "DEPOSIT", credit, note);
+        });
+        if (outcome.failed()) {
             vault.deposit(purse, charge);
             return result("account.deposit.refunded");
         }
-        audit.deposited(id, purse.getUniqueId(), purse.getName(), charge, principal);
+        if (!outcome.written()) {
+            vault.deposit(purse, charge);
+            return outcome.refusal();
+        }
+        double unused = round(charge - outcome.amount());
+        if (unused > 0) {
+            vault.deposit(purse, unused);   // the bank filled up elsewhere meanwhile
+        }
+        audit.deposited(id, purse.getUniqueId(), purse.getName(), outcome.amount(), outcome.account().balance());
         return null;
     }
 
@@ -174,9 +200,7 @@ public final class BankService {
      * economy, or the ledger write failed), in which case nothing moved.
      */
     public double payOutAll(Player purse, String id, String note) {
-        BankAccount account = account(id);
-        double amount = round(account.balance());
-        if (amount <= 0) {
+        if (account(id).balance() <= 0) {
             return 0;
         }
         if (!available()) {
@@ -184,13 +208,26 @@ public final class BankService {
         }
         // Ledger first: if the deposit then fails the money is lost to the economy, but it can never be
         // paid twice, which is the failure that would matter on a retry.
-        if (!persist(account.withBalance(0.0), "PAYOUT", amount, 0.0, note)) {
+        BankOutcome outcome = transact(id, locked -> {
+            double amount = round(locked.balance());
+            return amount <= 0 ? BankOutcome.refuse(locked, null)
+                    : BankOutcome.write(locked.withBalance(0.0), "PAYOUT", amount, note);
+        });
+        if (outcome.failed()) {
             return -1;
         }
+        if (!outcome.written()) {
+            return 0;
+        }
+        double amount = outcome.amount();
         if (!vault.deposit(purse, amount)) {
             // The purse refused it: put it back so the payout stays owed rather than vanishing.
-            persist(account(id).withBalance(amount), "PAYOUT_REVERTED", amount, amount,
-                    note("purse-refused", "note", note));
+            String reverted = note("purse-refused", "note", note);
+            BankOutcome back = transact(id, locked -> BankOutcome.write(
+                    locked.withBalance(round(locked.balance() + amount)), "PAYOUT_REVERTED", amount, reverted));
+            if (back.failed()) {
+                lostInTransit(id, purse, amount, "PAYOUT");
+            }
             return -1;
         }
         audit.paidOut(purse.getUniqueId(), purse.getName(), amount);
@@ -201,26 +238,36 @@ public final class BankService {
         if (!available()) {
             return result("unavailable");
         }
-        amount = round(amount);
+        double wanted = round(amount);
         double min = levels.config().getDouble("settings.min-transaction", 0.01);
-        if (amount < min) {
+        if (wanted < min) {
             return result("amount.too-small", "amount", money(min));
         }
-        BankAccount account = account(id);
-        if (account.balance() < amount) {
+        if (account(id).balance() < wanted) {
             return result("account.withdraw.not-enough-money");
         }
-        // a refused deposit (purse at its cap) must not leave the bank debited
-        if (!vault.deposit(purse, amount)) {
-            return result("purse-full");
-        }
-        double newBalance = round(account.balance() - amount);
-        if (!persist(account.withBalance(newBalance), "WITHDRAW", amount,
-                newBalance, note("account-withdraw", "player", purse.getName()))) {
-            vault.withdraw(purse, amount);
+        // Debit first, against the locked balance, then pay the purse: two servers withdrawing at once can't
+        // both be paid from the same money. A purse that refuses gets the debit put back.
+        String note = note("account-withdraw", "player", purse.getName());
+        BankOutcome outcome = transact(id, locked -> locked.balance() < wanted
+                ? BankOutcome.refuse(locked, result("account.withdraw.not-enough-money"))
+                : BankOutcome.write(locked.withBalance(round(locked.balance() - wanted)), "WITHDRAW", wanted, note));
+        if (outcome.failed()) {
             return result("withdraw.reverted");
         }
-        audit.withdrew(id, purse.getUniqueId(), purse.getName(), amount, account.balance());
+        if (!outcome.written()) {
+            return outcome.refusal();
+        }
+        if (!vault.deposit(purse, wanted)) {
+            String reverted = note("withdraw-reverted", "player", purse.getName());
+            BankOutcome back = transact(id, locked -> BankOutcome.write(
+                    locked.withBalance(round(locked.balance() + wanted)), "WITHDRAW_REVERTED", wanted, reverted));
+            if (back.failed()) {
+                lostInTransit(id, purse, wanted, "WITHDRAW");
+            }
+            return result("purse-full");
+        }
+        audit.withdrew(id, purse.getUniqueId(), purse.getName(), wanted, round(outcome.account().balance() + wanted));
         return null;
     }
 
@@ -244,10 +291,18 @@ public final class BankService {
         if (!vault.withdraw(purse, next.upgradeMoneyCost())) {
             return result("upgrade-payment-failed");
         }
-        if (!persist(account.withLevel(next.level()), "UPGRADE",
-                next.upgradeMoneyCost(), account.balance(), note("upgrade", "level", next.name()))) {
+        String note = note("upgrade", "level", next.name());
+        BankOutcome outcome = transact(id, locked -> {
+            BankLevel now = levels.getNextLevel(locked.level()).orElse(null);
+            // upgraded elsewhere meanwhile: this purchase was for a level it no longer leads to
+            if (now == null || now.level() != next.level()) {
+                return BankOutcome.refuse(locked, result("upgrade.refunded"));
+            }
+            return BankOutcome.write(locked.withLevel(next.level()), "UPGRADE", next.upgradeMoneyCost(), note);
+        });
+        if (!outcome.written()) {
             vault.deposit(purse, next.upgradeMoneyCost()); // refund; items not yet removed
-            return result("upgrade.refunded");
+            return outcome.failed() ? result("upgrade.refunded") : outcome.refusal();
         }
         removeItems(purse, next.itemRequirements());
         return null;
@@ -274,24 +329,35 @@ public final class BankService {
         if (interestSecondsRemaining(id) > 0) {
             return result("interest-not-ready");
         }
-        BankAccount account = account(id);
-        BankLevel level = levels.effectiveLevel(account.level());
-        // On the lowest balance held since the last claim, not the balance now (see BankAccount).
-        double interest = round(calculateInterest(account.interestBase(), level));
-        if (interest <= 0) {
-            return result("no-interest");
-        }
+        long cooldown = levels.config().getLong("settings.interest-cooldown-hours", 24) * 3600L;
         long now = Instant.now().getEpochSecond();
-        double newBalance = round(Math.min(account.balance() + interest, level.maxBalance()));
-        double paid = round(newBalance - account.balance());
-        if (paid <= 0) {
-            return result("interest-full");
-        }
-        BankAccount updated = account.withBalance(newBalance).withLastInterest(now).withInterestFloor(newBalance);
-        if (!persist(updated, "INTEREST", paid, newBalance, note("interest"))) {
+        String note = note("interest");
+        // the cooldown is checked again on the locked row, so two servers can't both pay one period
+        BankOutcome outcome = transact(id, locked -> {
+            if (locked.lastInterest() > 0 && now < locked.lastInterest() + cooldown) {
+                return BankOutcome.refuse(locked, result("interest-not-ready"));
+            }
+            BankLevel level = levels.effectiveLevel(locked.level());
+            // On the lowest balance held since the last claim, not the balance now (see BankAccount).
+            double interest = round(calculateInterest(locked.interestBase(), level));
+            if (interest <= 0) {
+                return BankOutcome.refuse(locked, result("no-interest"));
+            }
+            double newBalance = round(Math.min(locked.balance() + interest, level.maxBalance()));
+            double paid = round(newBalance - locked.balance());
+            if (paid <= 0) {
+                return BankOutcome.refuse(locked, result("interest-full"));
+            }
+            BankAccount updated = locked.withBalance(newBalance).withLastInterest(now).withInterestFloor(newBalance);
+            return BankOutcome.write(updated, "INTEREST", paid, note);
+        });
+        if (outcome.failed()) {
             return result("interest.not-saved");
         }
-        audit.interest(id, claimer.getUniqueId(), claimer.getName(), paid, newBalance);
+        if (!outcome.written()) {
+            return outcome.refusal();
+        }
+        audit.interest(id, claimer.getUniqueId(), claimer.getName(), outcome.amount(), outcome.account().balance());
         return null;
     }
 

@@ -360,8 +360,10 @@ public final class GuiManager implements Listener {
                     if (current == null) {
                         return;
                     }
-                    current.setSetting(setting, !current.isEnabled(setting));
-                    plugin.writeAsync(() -> plugin.storage().saveIsland(current));
+                    boolean enabled = !current.isEnabled(setting);
+                    current.setSetting(setting, enabled);
+                    plugin.islands().writeIsland(current,
+                            () -> plugin.storage().updateIslandSetting(current.id(), setting.key(), enabled));
                     open(viewer, SETTINGS);
                 });
             }
@@ -434,6 +436,8 @@ public final class GuiManager implements Listener {
         Profile profile = plugin.profiles().getProfile(island.profileId());
         IslandRole role = profile == null ? IslandRole.VISITOR : profile.roleOf(player.getUniqueId());
         boolean canEdit = role == IslandRole.OWNER || role == IslandRole.CO_OWNER;
+        // a timer started on another server shows its countdown after the next repaint
+        plugin.upgrades().refreshPendingIfStale(island.id());
 
         Map<String, Integer> named = template.namedContentSlots();
         List<Integer> auto = template.contentSlots();
@@ -448,10 +452,7 @@ public final class GuiManager implements Listener {
             }
             canvas.setItem(slot, upgradeIcon(def, island, template.text()));
             if (canEdit) {
-                canvas.putAction(slot, (viewer, right) -> {
-                    handleUpgradeClick(viewer, def, right);
-                    open(viewer, UPGRADES);
-                });
+                canvas.putAction(slot, (viewer, right) -> handleUpgradeClick(viewer, def, right));
             }
         }
     }
@@ -461,8 +462,24 @@ public final class GuiManager implements Listener {
         if (island == null) {
             return;
         }
-        var result = skip ? plugin.upgrades().skip(viewer, island, def)
+        var purchase = skip ? plugin.upgrades().skip(viewer, island, def)
                 : plugin.upgrades().start(viewer, island, def);
+        purchase.whenComplete((result, error) -> {
+            if (!viewer.isOnline()) {
+                return;
+            }
+            if (error != null) {
+                plugin.getLogger().warning("Upgrade purchase failed: " + error.getMessage());
+                plugin.messages().send(viewer, "upgrade.failed");
+            } else {
+                upgradeResult(viewer, island, def, skip, result);
+            }
+            open(viewer, UPGRADES);
+        });
+    }
+
+    private void upgradeResult(Player viewer, Island island, com.mystipixel.royalskyblock.upgrade.UpgradeDef def,
+                               boolean skip, com.mystipixel.royalskyblock.upgrade.UpgradeManager.PurchaseResult result) {
         switch (result) {
             case STARTED -> {
                 var next = def.tier(island.upgradeTier(def.key()) + 1);
@@ -477,6 +494,8 @@ public final class GuiManager implements Listener {
                     "time", pendingTimeLeft(island, def));
             case NOT_IN_PROGRESS -> plugin.messages().send(viewer, "upgrade.not-in-progress");
             case CANT_AFFORD -> plugin.messages().send(viewer, "upgrade.cant-afford");
+            case TIER_CHANGED -> plugin.messages().send(viewer, "upgrade.tier-changed", "upgrade", def.displayName());
+            case FAILED -> plugin.messages().send(viewer, "upgrade.failed");
         }
     }
 
@@ -682,7 +701,11 @@ public final class GuiManager implements Listener {
         }
         plugin.islands().teleportVisitor(viewer, island).whenComplete((ok, error) ->
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (error != null) {
+                    var hosted = com.mystipixel.royalskyblock.island.IslandHostedElsewhereException.find(error);
+                    if (hosted != null) {
+                        plugin.messages().send(viewer, "visit.hosted-elsewhere", "player", ownerName,
+                                "server", hosted.holder());
+                    } else if (error != null) {
                         plugin.messages().send(viewer, "visit.failed", "error", error.getMessage());
                     } else {
                         plugin.messages().send(viewer, "visit.visiting", "player", ownerName);

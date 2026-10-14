@@ -21,6 +21,11 @@ repositories {
     mavenCentral()
     maven("https://repo.papermc.io/repository/maven-public/")
     maven("https://repo.auxilor.io/repository/maven-public/")
+    // royal-common before jitpack: jitpack serves com.github.* too and would try to build it from a tag
+    exclusiveContent {
+        forRepository { maven("https://raw.githubusercontent.com/joogiebear/royal-common/maven") }
+        filter { includeGroup("com.github.joogiebear") }
+    }
     maven("https://jitpack.io")
     maven("https://repo.extendedclip.com/content/repositories/placeholderapi/")
     // Advanced Slime Paper (ASP) — the maintained SlimeWorld lineage, providing the per-island
@@ -41,6 +46,10 @@ dependencies {
     // compileOnly — eco does not provide it at runtime — and relocated below, which is how the
     // Auxilor plugins consume it. Used by the menu engine's port onto eco's Menu API.
     implementation("com.willfp:ecomponent:1.5.0")
+
+    // Shared storage helpers of the Royal plugins (transactions, schema version, leases, player hand-off).
+    // Shaded and relocated below.
+    implementation("com.github.joogiebear:royal-common:2026.42.0")
 
     compileOnly("org.jetbrains:annotations:26.0.2")
     compileOnly("org.jetbrains.kotlin:kotlin-stdlib:2.3.0")
@@ -129,6 +138,9 @@ dependencies {
 
     // The real SQLite driver, so the connection settings are checked against what it actually applies.
     testImplementation("org.xerial:sqlite-jdbc:3.53.4.0")
+    // SqlStorage runs on a Hikari pool; the MySQL driver serves the tests gated on RSB_TEST_MYSQL_PORT
+    testImplementation("com.zaxxer:HikariCP:7.1.0")
+    testImplementation("com.mysql:mysql-connector-j:26.7.0")
     // RsbFileLoader implements ASP's SlimeLoader, so its tests need the interface to compile.
     testImplementation("com.infernalsuite.asp:api:4.1.0") { isTransitive = false }
 
@@ -202,6 +214,7 @@ tasks.shadowJar {
     // ecomponent is bundled, so it must be relocated too — otherwise two eco plugins shipping
     // different versions clash on the same classes.
     relocate("com.willfp.ecomponent", "com.mystipixel.royalskyblock.ecomponent")
+    relocate("com.mystipixel.royalcommon", "com.mystipixel.royalskyblock.libs.royalcommon")
 
     // Match eco's own relocation so every eco plugin shares one Kotlin runtime.
     relocate("kotlin", "com.willfp.eco.libs.kotlin")

@@ -104,7 +104,7 @@ public final class IslandUnloadService {
         // Stamp before unloading so a crash mid-save still leaves a stamp. Over-estimating downtime is
         // harmless (it's clamped); a missing stamp skips the catch-up.
         island.setUnloadedAt(now);
-        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
+        plugin.islands().writeIsland(island, () -> plugin.storage().updateIslandUnloadedAt(island.id(), now));
 
         // The unload future completes on whichever thread finished the save, so hop back to the main thread
         // before touching the island. The bookkeeping maps are concurrent for the same reason.
@@ -117,6 +117,7 @@ public final class IslandUnloadService {
                         + ". It stays loaded and will be retried.");
                 return;
             }
+            plugin.islands().releaseHost(island.id());
             if (plugin.conf().getBoolean("settings.debug", false)) {
                 plugin.getLogger().info("Unloaded empty island " + name + ".");
             }

@@ -6,10 +6,13 @@ import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileData;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
+import com.mystipixel.royalskyblock.upgrade.PendingUpgrade;
+import com.mystipixel.royalcommon.storage.PlayerHandoff;
+import com.mystipixel.royalcommon.storage.SchemaTooNewException;
+import com.mystipixel.royalcommon.storage.SchemaVersion;
+import com.mystipixel.royalcommon.storage.TxRunner;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.bukkit.configuration.ConfigurationSection;
-import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -18,14 +21,16 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
+import java.time.Duration;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The SQL-backed {@link Storage}: SQLite by default, MySQL for a network, behind a HikariCP pool.
@@ -36,74 +41,138 @@ public final class SqlStorage implements Storage {
 
     public enum Type { SQLITE, MYSQL }
 
-    private final RoyalSkyblockPlugin plugin;
+    private final SqlSettings settings;
+    private final Logger logger;
+
+    static final int SCHEMA_VERSION = 1;
+    /** Seconds a MySQL statement waits for a row lock another connection holds. */
+    static final int LOCK_WAIT_SECONDS = 5;
+    // a player's row may sit ACTIVE this long without a heartbeat before another server treats it as abandoned
+    public static final Duration HANDOFF_STALE = Duration.ofSeconds(60);
 
     private Type type;
     private HikariDataSource dataSource;
+    private TxRunner tx;
+    // bank movements run on the server thread, so a lock wait is tried once and then refused, not retried
+    private TxRunner bankTx;
+    private PlayerHandoff handoff;
+    private IslandHostLock hosts;
+    private Duration hostTtl = IslandHostLock.DEFAULT_TTL;
 
-    public SqlStorage(RoyalSkyblockPlugin plugin) {
-        this.plugin = plugin;
+    public SqlStorage(SqlSettings settings, Logger logger) {
+        this.settings = settings;
+        this.logger = logger;
+    }
+
+    /**
+     * Whether other servers can share this database. SQLite is one file on one server, so nothing it caches
+     * can change behind its back.
+     */
+    public boolean shared() {
+        return type == Type.MYSQL;
+    }
+
+    /** For tests: a shorter island host claim. Call before {@link #connect}. */
+    void hostTtl(Duration ttl) {
+        this.hostTtl = ttl;
     }
 
     public boolean connect() {
         try {
-            ConfigurationSection storage = plugin.conf().getConfigurationSection("storage");
-            if (storage == null) {
-                storage = plugin.conf().createSection("storage");
-            }
-            String rawType = storage.getString("type", "SQLITE").toUpperCase(Locale.ROOT);
-            this.type = "MYSQL".equals(rawType) ? Type.MYSQL : Type.SQLITE;
-
+            this.type = settings.type();
             HikariConfig hikari = new HikariConfig();
             hikari.setPoolName("RoyalSkyblock");
-
-            if (type == Type.MYSQL) {
-                ConfigurationSection my = storage.getConfigurationSection("mysql");
-                if (my == null) {
-                    my = storage.createSection("mysql");
-                }
-                String host = my.getString("host", "localhost");
-                int port = my.getInt("port", 3306);
-                String database = my.getString("database", "royalskyblock");
-                String props = my.getString("properties", "useSSL=false");
-                loadDriver("com.mysql.cj.jdbc.Driver");
-                hikari.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?" + props);
-                hikari.setDriverClassName("com.mysql.cj.jdbc.Driver");
-                hikari.setUsername(my.getString("username", "root"));
-                hikari.setPassword(my.getString("password", ""));
-                hikari.setMaximumPoolSize(Math.max(1, my.getInt("pool-size", 10)));
-            } else {
-                File dataFolder = plugin.getDataFolder();
+            if (type == Type.SQLITE) {
+                File dataFolder = settings.dataFolder();
                 if (!dataFolder.exists() && !dataFolder.mkdirs()) {
-                    plugin.getLogger().severe("Could not create plugin data folder: " + dataFolder.getAbsolutePath());
+                    logger.severe("Could not create plugin data folder: " + dataFolder.getAbsolutePath());
                     return false;
                 }
-                File databaseFile = new File(dataFolder, storage.getString("sqlite-file", "islands.db"));
-                loadDriver("org.sqlite.JDBC");
-                hikari.setJdbcUrl("jdbc:sqlite:" + databaseFile.getAbsolutePath());
-                hikari.setDriverClassName("org.sqlite.JDBC");
-                hikari.setMaximumPoolSize(SqliteSettings.POOL_SIZE);
-                hikari.setDataSourceProperties(SqliteSettings.properties());
+            }
+            loadDriver(settings.driver());
+            hikari.setJdbcUrl(settings.jdbcUrl());
+            hikari.setDriverClassName(settings.driver());
+            if (settings.username() != null) {
+                hikari.setUsername(settings.username());
+                hikari.setPassword(settings.password());
+            }
+            hikari.setMaximumPoolSize(settings.poolSize());
+            if (!settings.dataSourceProps().isEmpty()) {
+                hikari.setDataSourceProperties(settings.dataSourceProps());
             }
             // fail the call rather than hold the server thread; Hikari's 30s default could freeze the server
             // behind one stuck query
             hikari.setConnectionTimeout(10_000);
+            if (type == Type.MYSQL) {
+                // a row lock held by another server fails fast instead of after InnoDB's 50 s default
+                hikari.setConnectionInitSql("SET SESSION innodb_lock_wait_timeout = " + LOCK_WAIT_SECONDS);
+            }
 
             this.dataSource = new HikariDataSource(hikari);
-            createTables();
-            plugin.getLogger().info("RoyalSkyblock connected to " + type + " storage.");
+            this.tx = new TxRunner(dataSource);
+            this.bankTx = type == Type.MYSQL ? new TxRunner(dataSource, 1) : tx;
+            migrate();
+            this.handoff = new PlayerHandoff(tx, "rsb", settings.serverId(), HANDOFF_STALE);
+            handoff.createTable();
+            this.hosts = new IslandHostLock(tx, settings.serverId(), hostTtl);
+            hosts.createTable();
+            logger.info("RoyalSkyblock connected to " + type + " storage as server " + settings.serverId() + ".");
             return true;
+        } catch (SchemaTooNewException tooNew) {
+            logger.severe(tooNew.getMessage());
+            closePool();
+            return false;
         } catch (Exception exception) {
-            plugin.getLogger().severe("RoyalSkyblock storage init failed: " + exception.getMessage());
+            logger.log(Level.SEVERE, "RoyalSkyblock storage init failed: " + exception.getMessage(), exception);
+            closePool();
             return false;
         }
+    }
+
+    private void closePool() {
+        if (dataSource != null) {
+            dataSource.close();
+            dataSource = null;
+        }
+    }
+
+    // servers sharing a MySQL database that start together take turns here; the later ones find nothing to do
+    private void migrate() throws SQLException {
+        int before = new SchemaVersion(tx, "rsb").ensure(SCHEMA_VERSION, (c, dialect, from, to) -> {
+            if (from < 1) {
+                createTables(c);
+            }
+        });
+        if (before < SCHEMA_VERSION) {
+            logger.info("Database schema migrated from version " + before + " to " + SCHEMA_VERSION + ".");
+        }
+    }
+
+    public TxRunner tx() {
+        return tx;
+    }
+
+    public DataSource dataSource() {
+        return dataSource;
+    }
+
+    public PlayerHandoff handoff() {
+        return handoff;
+    }
+
+    public IslandHostLock hosts() {
+        return hosts;
+    }
+
+    public String serverId() {
+        return settings.serverId();
     }
 
     private void loadDriver(String driverClass) {
         try {
             Class.forName(driverClass, true, getClass().getClassLoader());
         } catch (ClassNotFoundException exception) {
-            plugin.getLogger().log(Level.WARNING, "JDBC driver not found on classpath: " + driverClass, exception);
+            logger.log(Level.WARNING, "JDBC driver not found on classpath: " + driverClass, exception);
         }
     }
 
@@ -111,7 +180,9 @@ public final class SqlStorage implements Storage {
         return type == Type.MYSQL;
     }
 
-    private void createTables() throws SQLException {
+    // Every step is safe to repeat: on MySQL the migration runs in autocommit, so a server that dies half way
+    // leaves some steps done.
+    private void createTables(Connection c) throws SQLException {
         String blob = mysql() ? "MEDIUMBLOB" : "BLOB";
         String big = mysql() ? "BIGINT" : "INTEGER";
         String dbl = mysql() ? "DOUBLE" : "REAL";
@@ -169,50 +240,50 @@ public final class SqlStorage implements Storage {
                         + ", account_id " + txt + " NOT NULL, type " + txt32 + " NOT NULL, amount " + dbl + " NOT NULL, "
                         + "balance_after " + dbl + " NOT NULL, created_at " + big + " NOT NULL, note " + txt + " NOT NULL DEFAULT '')"
         };
-        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
+        try (Statement s = c.createStatement()) {
             for (String q : ddl) {
                 s.executeUpdate(q);
             }
-            createIndexIfMissing(c, "idx_islands_profile", "islands", "profile_id");
-            createIndexIfMissing(c, "idx_profiles_owner", "profiles", "owner");
-            createIndexIfMissing(c, "idx_profile_members_uuid", "profile_members", "uuid");
-            // serves getBankTransactions (WHERE account_id = ? ORDER BY created_at DESC) without a full scan
-            createIndexIfMissing(c, "idx_bank_txns_account_created", "bank_txns", "account_id, created_at");
         }
+        createIndexIfMissing(c, "idx_islands_profile", "islands", "profile_id");
+        createIndexIfMissing(c, "idx_profiles_owner", "profiles", "owner");
+        createIndexIfMissing(c, "idx_profile_members_uuid", "profile_members", "uuid");
+        // serves getBankTransactions (WHERE account_id = ? ORDER BY created_at DESC) without a full scan
+        createIndexIfMissing(c, "idx_bank_txns_account_created", "bank_txns", "account_id, created_at");
+        createIndexIfMissing(c, "idx_pending_complete", "pending_upgrades", "complete_at");
         // migrations for tables that predate a column
-        addColumnIfMissing("islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
-        addColumnIfMissing("islands", "guest_home", (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT ''");
-        addColumnIfMissing("islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
-        addColumnIfMissing("islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing(c, "islands", "guest_home", (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing(c, "islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing(c, "islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         // -1 = not recorded yet, read as the balance (BankAccount.interestBase).
-        addColumnIfMissing("bank_accounts", "interest_floor", dbl + " NOT NULL DEFAULT -1");
+        addColumnIfMissing(c, "bank_accounts", "interest_floor", dbl + " NOT NULL DEFAULT -1");
         // Unused: left from the RoyalBank-backed personal bank; balances now live in bank_accounts.
-        addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profile_data", "bank_level", integer + " NOT NULL DEFAULT 1");
-        addColumnIfMissing("profile_data", "bank_last_interest", big + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profile_data", "bank_bonus", integer + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_level", integer + " NOT NULL DEFAULT 1");
+        addColumnIfMissing(c, "profile_data", "bank_last_interest", big + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_bonus", integer + " NOT NULL DEFAULT 0");
+        // raised by every write, so other servers sharing the database notice the row changed
+        addColumnIfMissing(c, "islands", "version", big + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profiles", "version", big + " NOT NULL DEFAULT 0");
     }
 
-    // ADD COLUMN unless the metadata says it exists, so it is safe to run every boot
-    private void addColumnIfMissing(String table, String column, String definition) {
-        try (Connection c = dataSource.getConnection()) {
-            try (ResultSet rs = c.getMetaData().getColumns(null, null, table, column)) {
-                if (rs.next()) {
-                    return;                     // already there
-                }
+    // ADD COLUMN unless the metadata says it exists. Throws: a half-migrated schema breaks every read, and the
+    // schema version must only be stamped once every step worked.
+    private void addColumnIfMissing(Connection c, String table, String column, String definition)
+            throws SQLException {
+        try (ResultSet rs = c.getMetaData().getColumns(c.getCatalog(), null, table, column)) {
+            if (rs.next()) {
+                return;
             }
-            try (Statement s = c.createStatement()) {
-                s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
-                plugin.getLogger().info("Migrated " + table + ": added column " + column + ".");
-            }
-        } catch (SQLException e) {
-            // a half-migrated schema breaks every read, so fail loudly
-            plugin.getLogger().severe("Migration failed: could not add " + table + "." + column
-                    + " (" + e.getMessage() + ")");
+        }
+        try (Statement s = c.createStatement()) {
+            s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+            logger.info("Migrated " + table + ": added column " + column + ".");
         }
     }
 
@@ -220,7 +291,7 @@ public final class SqlStorage implements Storage {
     // before the index existed.
     private void createIndexIfMissing(Connection c, String name, String table, String columns)
             throws SQLException {
-        try (ResultSet rs = c.getMetaData().getIndexInfo(null, null, table, false, true)) {
+        try (ResultSet rs = c.getMetaData().getIndexInfo(c.getCatalog(), null, table, false, true)) {
             while (rs.next()) {
                 if (name.equalsIgnoreCase(rs.getString("INDEX_NAME"))) {
                     return;
@@ -243,7 +314,7 @@ public final class SqlStorage implements Storage {
     // the columns readIsland expects, in one place so every query asks for all of them
     private static final String ISLAND_COLUMNS =
             "id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, "
-            + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at";
+            + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at, version";
 
     private @Nullable Island queryIsland(String where, String param) {
         String sql = "SELECT " + ISLAND_COLUMNS + " FROM islands " + where;
@@ -272,6 +343,7 @@ public final class SqlStorage implements Storage {
         island.setRewardLevel(rs.getInt("reward_level"));
         island.setPerkLevel(rs.getInt("perk_level"));
         island.setUnloadedAt(rs.getLong("unloaded_at"));
+        island.setVersion(rs.getLong("version"));
         return island;
     }
 
@@ -284,21 +356,15 @@ public final class SqlStorage implements Storage {
                 out.add(readIsland(rs));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load islands: " + e.getMessage());
+            logger.severe("Could not load islands: " + e.getMessage());
         }
         return out;
     }
 
-    public boolean saveIsland(Island island) {
-        String sql = mysql()
-                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
-                + "radius=VALUES(radius), level=VALUES(level), home_x=VALUES(home_x), home_y=VALUES(home_y), home_z=VALUES(home_z), "
-                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings), guest_home=VALUES(guest_home), upgrades=VALUES(upgrades), reward_level=VALUES(reward_level), perk_level=VALUES(perk_level), unloaded_at=VALUES(unloaded_at)"
-                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
-                + "radius=excluded.radius, level=excluded.level, home_x=excluded.home_x, home_y=excluded.home_y, home_z=excluded.home_z, "
-                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings, guest_home=excluded.guest_home, upgrades=excluded.upgrades, reward_level=excluded.reward_level, perk_level=excluded.perk_level, unloaded_at=excluded.unloaded_at";
+    public boolean insertIsland(Island island) {
+        String sql = "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, "
+                + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at, version) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, island.id().toString());
             st.setString(2, island.profileId().toString());
@@ -320,8 +386,148 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save island " + island.id() + ": " + e.getMessage());
+            logger.severe("Could not save island " + island.id() + ": " + e.getMessage());
             return false;
+        }
+    }
+
+    private String greatest() {
+        return mysql() ? "GREATEST" : "MAX";
+    }
+
+    // UPDATE islands SET <set>, version = version + 1 WHERE id = ?, then the new version; -1 if no row or failed
+    private long updateIsland(UUID id, String what, String set, Object... values) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement(
+                        "UPDATE islands SET " + set + ", version = version + 1 WHERE id = ?")) {
+                    int i = 1;
+                    for (Object value : values) {
+                        st.setObject(i++, value);
+                    }
+                    st.setString(i, id.toString());
+                    if (st.executeUpdate() == 0) {
+                        return -1L;
+                    }
+                }
+                return versionOf(c, "islands", id);
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not save the " + what + " of island " + id + ": " + e.getMessage());
+            return -1;
+        }
+    }
+
+    private static long versionOf(Connection c, String table, UUID id) throws SQLException {
+        try (PreparedStatement st = c.prepareStatement("SELECT version FROM " + table + " WHERE id = ?")) {
+            st.setString(1, id.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : -1;
+            }
+        }
+    }
+
+    @Override
+    public long updateIslandHome(UUID id, double x, double y, double z, float yaw, float pitch) {
+        return updateIsland(id, "home", "home_x = ?, home_y = ?, home_z = ?, home_yaw = ?, home_pitch = ?",
+                x, y, z, yaw, pitch);
+    }
+
+    @Override
+    public long updateIslandGuestHome(UUID id, String serializedGuestHome) {
+        return updateIsland(id, "guest home", "guest_home = ?", serializedGuestHome);
+    }
+
+    @Override
+    public long updateIslandLevel(UUID id, double level, int rewardLevel) {
+        return updateIsland(id, "level", "level = ?, reward_level = " + greatest() + "(reward_level, ?)",
+                level, rewardLevel);
+    }
+
+    @Override
+    public long updateIslandPerkLevel(UUID id, int perkLevel) {
+        return updateIsland(id, "perk level", "perk_level = " + greatest() + "(perk_level, ?)", perkLevel);
+    }
+
+    @Override
+    public long updateIslandUnloadedAt(UUID id, long unloadedAt) {
+        return updateIsland(id, "unload time", "unloaded_at = ?", unloadedAt);
+    }
+
+    @Override
+    public long claimUnloadStamp(UUID id) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                long stamp;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT unloaded_at FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, id.toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        stamp = rs.next() ? rs.getLong(1) : 0;
+                    }
+                }
+                if (stamp <= 0) {
+                    return 0L;
+                }
+                try (PreparedStatement st = c.prepareStatement("UPDATE islands SET unloaded_at = 0, "
+                        + "version = version + 1 WHERE id = ? AND unloaded_at = ?")) {
+                    st.setString(1, id.toString());
+                    st.setLong(2, stamp);
+                    return st.executeUpdate() > 0 ? stamp : 0L;
+                }
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not read the unload time of island " + id + ": " + e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius) {
+        return mergeIslandColumn(id, "upgrades", current -> Island.withUpgradeTier(current, upgradeKey, tier),
+                radius);
+    }
+
+    @Override
+    public long updateIslandSetting(UUID id, String settingKey, boolean enabled) {
+        return mergeIslandColumn(id, "settings", current -> Island.withSetting(current, settingKey, enabled), null);
+    }
+
+    // a locked read-modify-write of one serialized map column, so a key set elsewhere meanwhile is kept
+    private long mergeIslandColumn(UUID id, String column, java.util.function.UnaryOperator<String> merge,
+                                   @Nullable Integer radius) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                String current;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT " + column + " FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, id.toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        if (!rs.next()) {
+                            return -1L;
+                        }
+                        current = rs.getString(1);
+                    }
+                }
+                String sql = "UPDATE islands SET " + column + " = ?" + (radius != null ? ", radius = ?" : "")
+                        + ", version = version + 1 WHERE id = ?";
+                try (PreparedStatement st = c.prepareStatement(sql)) {
+                    int i = 1;
+                    st.setString(i++, merge.apply(current));
+                    if (radius != null) {
+                        st.setInt(i++, radius);
+                    }
+                    st.setString(i, id.toString());
+                    st.executeUpdate();
+                }
+                return versionOf(c, "islands", id);
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not save the " + column + " of island " + id + ": " + e.getMessage());
+            return -1;
         }
     }
 
@@ -330,7 +536,7 @@ public final class SqlStorage implements Storage {
     }
 
     public @Nullable Profile getProfile(UUID id) {
-        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE id = ?";
+        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level, version FROM profiles WHERE id = ?";
         Profile profile;
         // Release this connection before looking up the island: that query opens its own, and nesting on
         // the single-connection SQLite pool would deadlock.
@@ -344,7 +550,7 @@ public final class SqlStorage implements Storage {
                 loadMembers(c, profile);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profile " + id + ": " + e.getMessage());
+            logger.severe("Could not load profile " + id + ": " + e.getMessage());
             return null;
         }
         Island island = getIslandByProfile(profile.id());
@@ -358,7 +564,7 @@ public final class SqlStorage implements Storage {
     public List<Profile> getProfilesByOwner(UUID owner) {
         List<Profile> out = new ArrayList<>();
         Map<UUID, Profile> byId = new HashMap<>();
-        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE owner = ? ORDER BY created_at";
+        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level, version FROM profiles WHERE owner = ? ORDER BY created_at";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             try (ResultSet rs = st.executeQuery()) {
@@ -372,7 +578,7 @@ public final class SqlStorage implements Storage {
                 loadMembersFor(c, byId);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profiles for " + owner + ": " + e.getMessage());
+            logger.severe("Could not load profiles for " + owner + ": " + e.getMessage());
         }
         // island lookup after the connection above is released (see getProfile)
         if (!byId.isEmpty()) {
@@ -421,7 +627,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load island ids for " + profiles.size()
+            logger.severe("Could not load island ids for " + profiles.size()
                     + " profile(s): " + e.getMessage());
         }
     }
@@ -449,7 +655,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load member profiles for " + uuid + ": " + e.getMessage());
+            logger.severe("Could not load member profiles for " + uuid + ": " + e.getMessage());
         }
         return out;
     }
@@ -459,6 +665,7 @@ public final class SqlStorage implements Storage {
                 rs.getString("name"), Gamemode.fromString(rs.getString("gamemode"), Gamemode.SOLO),
                 rs.getLong("created_at"));
         profile.setRewardLevel(rs.getInt("reward_level"));
+        profile.setVersion(rs.getLong("version"));
         return profile;
     }
 
@@ -481,20 +688,13 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    /** Upsert a profile and replace its member roster in one transaction. */
-    public boolean saveProfile(Profile profile) {
-        String upsert = mysql()
-                ? "INSERT INTO profiles (id, owner, name, gamemode, created_at, reward_level) VALUES (?,?,?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE owner=VALUES(owner), name=VALUES(name), gamemode=VALUES(gamemode), "
-                + "reward_level=VALUES(reward_level)"
-                : "INSERT INTO profiles (id, owner, name, gamemode, created_at, reward_level) VALUES (?,?,?,?,?,?) "
-                + "ON CONFLICT(id) DO UPDATE SET owner=excluded.owner, name=excluded.name, gamemode=excluded.gamemode, "
-                + "reward_level=excluded.reward_level";
-        try (Connection c = dataSource.getConnection()) {
-            boolean auto = c.getAutoCommit();
-            c.setAutoCommit(false);
-            try {
-                try (PreparedStatement st = c.prepareStatement(upsert)) {
+    /** Insert a new profile and its roster in one transaction. */
+    public boolean insertProfile(Profile profile) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement("INSERT INTO profiles "
+                        + "(id, owner, name, gamemode, created_at, reward_level, version) VALUES (?,?,?,?,?,?,0)")) {
                     st.setString(1, profile.id().toString());
                     st.setString(2, profile.owner().toString());
                     st.setString(3, profile.name());
@@ -503,34 +703,148 @@ public final class SqlStorage implements Storage {
                     st.setInt(6, profile.rewardLevel());
                     st.executeUpdate();
                 }
-                try (PreparedStatement del = c.prepareStatement("DELETE FROM profile_members WHERE profile_id = ?")) {
-                    del.setString(1, profile.id().toString());
-                    del.executeUpdate();
+                for (ProfileMember m : profile.members()) {
+                    insertMember(c, profile.id(), m);
                 }
-                try (PreparedStatement ins = c.prepareStatement(
-                        "INSERT INTO profile_members (profile_id, uuid, name, role, joined_at) VALUES (?,?,?,?,?)")) {
-                    for (ProfileMember m : profile.members()) {
-                        ins.setString(1, profile.id().toString());
-                        ins.setString(2, m.uuid().toString());
-                        ins.setString(3, m.name() == null ? "" : m.name());
-                        ins.setString(4, m.role().name());
-                        ins.setLong(5, m.joinedAt());
-                        ins.addBatch();
-                    }
-                    ins.executeBatch();
-                }
-                c.commit();
                 return true;
-            } catch (SQLException e) {
-                c.rollback();
-                plugin.getLogger().severe("Could not save profile " + profile.id() + ": " + e.getMessage());
-                return false;
-            } finally {
-                c.setAutoCommit(auto);
-            }
+            });
         } catch (SQLException e) {
-            plugin.getLogger().severe("Profile DB connection error (save): " + e.getMessage());
+            logger.severe("Could not save profile " + profile.id() + ": " + e.getMessage());
             return false;
+        }
+    }
+
+    private static void insertMember(Connection c, UUID profileId, ProfileMember m) throws SQLException {
+        try (PreparedStatement ins = c.prepareStatement(
+                "INSERT INTO profile_members (profile_id, uuid, name, role, joined_at) VALUES (?,?,?,?,?)")) {
+            ins.setString(1, profileId.toString());
+            ins.setString(2, m.uuid().toString());
+            ins.setString(3, m.name() == null ? "" : m.name());
+            ins.setString(4, m.role().name());
+            ins.setLong(5, m.joinedAt());
+            ins.executeUpdate();
+        }
+    }
+
+    private static void bumpProfile(Connection c, UUID id) throws SQLException {
+        try (PreparedStatement st = c.prepareStatement("UPDATE profiles SET version = version + 1 WHERE id = ?")) {
+            st.setString(1, id.toString());
+            st.executeUpdate();
+        }
+    }
+
+    // runs work with the profile row locked; false when the row is gone, the work says so, or the write failed
+    private boolean withProfileLocked(UUID id, String what, TxRunner.Work<Boolean> work) {
+        try {
+            return tx.inTransaction(t -> {
+                if (!t.lock("profiles", "id", id.toString()) || !work.run(t)) {
+                    return false;
+                }
+                bumpProfile(t.connection(), id);
+                return true;
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not " + what + " on profile " + id + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public AddMemberResult addMember(UUID profileId, ProfileMember member, int maxMembers) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                if (!t.lock("profiles", "id", profileId.toString())) {
+                    return AddMemberResult.FAILED;
+                }
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT COUNT(*), SUM(CASE WHEN uuid = ? THEN 1 ELSE 0 END) FROM profile_members WHERE profile_id = ?")) {
+                    st.setString(1, member.uuid().toString());
+                    st.setString(2, profileId.toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        rs.next();
+                        if (rs.getInt(2) > 0) {
+                            return AddMemberResult.ALREADY;
+                        }
+                        if (rs.getInt(1) >= maxMembers) {
+                            return AddMemberResult.FULL;
+                        }
+                    }
+                }
+                insertMember(c, profileId, member);
+                bumpProfile(c, profileId);
+                return AddMemberResult.ADDED;
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not add " + member.uuid() + " to profile " + profileId + ": " + e.getMessage());
+            return AddMemberResult.FAILED;
+        }
+    }
+
+    @Override
+    public boolean removeMember(UUID profileId, UUID member) {
+        return withProfileLocked(profileId, "remove member " + member, t -> {
+            try (PreparedStatement st = t.connection().prepareStatement(
+                    "DELETE FROM profile_members WHERE profile_id = ? AND uuid = ?")) {
+                st.setString(1, profileId.toString());
+                st.setString(2, member.toString());
+                st.executeUpdate();
+            }
+            return true;
+        });
+    }
+
+    private static boolean setRole(Connection c, UUID profileId, UUID member, IslandRole role) throws SQLException {
+        try (PreparedStatement st = c.prepareStatement(
+                "UPDATE profile_members SET role = ? WHERE profile_id = ? AND uuid = ?")) {
+            st.setString(1, role.name());
+            st.setString(2, profileId.toString());
+            st.setString(3, member.toString());
+            return st.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean setMemberRole(UUID profileId, UUID member, IslandRole role) {
+        return withProfileLocked(profileId, "change the role of " + member,
+                t -> setRole(t.connection(), profileId, member, role));
+    }
+
+    @Override
+    public boolean transferOwner(UUID profileId, UUID newOwner, UUID oldOwner) {
+        return withProfileLocked(profileId, "transfer ownership to " + newOwner, t -> {
+            Connection c = t.connection();
+            if (!setRole(c, profileId, newOwner, IslandRole.OWNER)) {
+                return false;                               // not on the roster any more: roll back
+            }
+            setRole(c, profileId, oldOwner, IslandRole.CO_OWNER);
+            try (PreparedStatement st = c.prepareStatement("UPDATE profiles SET owner = ? WHERE id = ?")) {
+                st.setString(1, newOwner.toString());
+                st.setString(2, profileId.toString());
+                st.executeUpdate();
+            }
+            return true;
+        });
+    }
+
+    @Override
+    public long updateProfileRewardLevel(UUID id, int rewardLevel) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement("UPDATE profiles SET reward_level = " + greatest()
+                        + "(reward_level, ?), version = version + 1 WHERE id = ?")) {
+                    st.setInt(1, rewardLevel);
+                    st.setString(2, id.toString());
+                    if (st.executeUpdate() == 0) {
+                        return -1L;
+                    }
+                }
+                return versionOf(c, "profiles", id);
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not save the reward level on profile " + id + ": " + e.getMessage());
+            return -1;
         }
     }
 
@@ -560,62 +874,160 @@ public final class SqlStorage implements Storage {
                 return true;
             } catch (SQLException e) {
                 c.rollback();
-                plugin.getLogger().severe("Could not delete profile " + id + ": " + e.getMessage());
+                logger.severe("Could not delete profile " + id + ": " + e.getMessage());
                 return false;
             } finally {
                 c.setAutoCommit(auto);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Profile DB connection error (delete): " + e.getMessage());
+            logger.severe("Profile DB connection error (delete): " + e.getMessage());
             return false;
         }
     }
 
-    public List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> getAllPending() {
-        List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> out = new ArrayList<>();
+    private static final String PENDING_COLUMNS = "island_id, upgrade_key, target_tier, complete_at";
+
+    @Override
+    public ReserveResult reservePending(PendingUpgrade p, int expectedTier) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                String upgrades;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT upgrades FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, p.islandId().toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        if (!rs.next()) {
+                            return ReserveResult.FAILED;
+                        }
+                        upgrades = rs.getString(1);
+                    }
+                }
+                if (Island.upgradeTierIn(upgrades, p.upgradeKey()) != expectedTier) {
+                    return ReserveResult.TIER_CHANGED;
+                }
+                try (PreparedStatement st = c.prepareStatement(t.dialect().insertIgnore()
+                        + " INTO pending_upgrades (" + PENDING_COLUMNS + ") VALUES (?,?,?,?)")) {
+                    st.setString(1, p.islandId().toString());
+                    st.setString(2, p.upgradeKey());
+                    st.setInt(3, p.targetTier());
+                    st.setLong(4, p.completeAt());
+                    return st.executeUpdate() > 0 ? ReserveResult.RESERVED : ReserveResult.IN_PROGRESS;
+                }
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not reserve upgrade " + p.upgradeKey() + " on island " + p.islandId() + ": "
+                    + e.getMessage());
+            return ReserveResult.FAILED;
+        }
+    }
+
+    @Override
+    public List<PendingUpgrade> getPending(UUID islandId) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(
-                     "SELECT island_id, upgrade_key, target_tier, complete_at FROM pending_upgrades");
-             ResultSet rs = st.executeQuery()) {
-            while (rs.next()) {
-                out.add(new com.mystipixel.royalskyblock.upgrade.PendingUpgrade(
-                        UUID.fromString(rs.getString("island_id")), rs.getString("upgrade_key"),
-                        rs.getInt("target_tier"), rs.getLong("complete_at")));
+                     "SELECT " + PENDING_COLUMNS + " FROM pending_upgrades WHERE island_id = ?")) {
+            st.setString(1, islandId.toString());
+            return readPendingRows(st);
+        } catch (SQLException e) {
+            logger.severe("Could not load the upgrades cooking on island " + islandId + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    @Override
+    public List<PendingUpgrade> duePending(long now, Collection<UUID> islandIds) {
+        List<PendingUpgrade> out = new ArrayList<>();
+        List<UUID> ids = List.copyOf(islandIds);
+        try (Connection c = dataSource.getConnection()) {
+            for (int from = 0; from < ids.size(); from += 500) {
+                List<UUID> chunk = ids.subList(from, Math.min(ids.size(), from + 500));
+                String sql = "SELECT " + PENDING_COLUMNS + " FROM pending_upgrades WHERE complete_at <= ?"
+                        + " AND island_id IN (" + String.join(",", java.util.Collections.nCopies(chunk.size(), "?"))
+                        + ")";
+                try (PreparedStatement st = c.prepareStatement(sql)) {
+                    st.setLong(1, now);
+                    for (int i = 0; i < chunk.size(); i++) {
+                        st.setString(i + 2, chunk.get(i).toString());
+                    }
+                    out.addAll(readPendingRows(st));
+                }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load pending upgrades: " + e.getMessage());
+            logger.severe("Could not load finished upgrades: " + e.getMessage());
+            return List.of();
         }
         return out;
     }
 
-    public boolean savePending(com.mystipixel.royalskyblock.upgrade.PendingUpgrade p) {
-        String sql = mysql()
-                ? "INSERT INTO pending_upgrades (island_id, upgrade_key, target_tier, complete_at) VALUES (?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE target_tier=VALUES(target_tier), complete_at=VALUES(complete_at)"
-                : "INSERT INTO pending_upgrades (island_id, upgrade_key, target_tier, complete_at) VALUES (?,?,?,?) "
-                + "ON CONFLICT(island_id, upgrade_key) DO UPDATE SET target_tier=excluded.target_tier, complete_at=excluded.complete_at";
-        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
-            st.setString(1, p.islandId().toString());
-            st.setString(2, p.upgradeKey());
-            st.setInt(3, p.targetTier());
-            st.setLong(4, p.completeAt());
-            st.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save pending upgrade: " + e.getMessage());
-            return false;
+    private static List<PendingUpgrade> readPendingRows(PreparedStatement st) throws SQLException {
+        List<PendingUpgrade> out = new ArrayList<>();
+        try (ResultSet rs = st.executeQuery()) {
+            while (rs.next()) {
+                out.add(new PendingUpgrade(UUID.fromString(rs.getString("island_id")), rs.getString("upgrade_key"),
+                        rs.getInt("target_tier"), rs.getLong("complete_at")));
+            }
         }
+        return out;
     }
 
-    public void deletePending(UUID islandId, String upgradeKey) {
+    @Override
+    public int deletePending(UUID islandId, String upgradeKey) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(
                      "DELETE FROM pending_upgrades WHERE island_id = ? AND upgrade_key = ?")) {
             st.setString(1, islandId.toString());
             st.setString(2, upgradeKey);
-            st.executeUpdate();
+            return st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not delete pending upgrade: " + e.getMessage());
+            logger.severe("Could not delete pending upgrade: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public boolean completePending(PendingUpgrade p, @Nullable Integer radius) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                // the island row first, in the same order as reservePending, so the two never deadlock
+                String upgrades;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT upgrades FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, p.islandId().toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        upgrades = rs.next() ? rs.getString(1) : null;
+                    }
+                }
+                try (PreparedStatement st = c.prepareStatement("DELETE FROM pending_upgrades"
+                        + " WHERE island_id = ? AND upgrade_key = ? AND target_tier = ?")) {
+                    st.setString(1, p.islandId().toString());
+                    st.setString(2, p.upgradeKey());
+                    st.setInt(3, p.targetTier());
+                    if (st.executeUpdate() == 0) {
+                        return false;
+                    }
+                }
+                if (upgrades == null || Island.upgradeTierIn(upgrades, p.upgradeKey()) >= p.targetTier()) {
+                    return true;
+                }
+                String sql = "UPDATE islands SET upgrades = ?" + (radius != null ? ", radius = ?" : "")
+                        + ", version = version + 1 WHERE id = ?";
+                try (PreparedStatement st = c.prepareStatement(sql)) {
+                    int i = 1;
+                    st.setString(i++, Island.withUpgradeTier(upgrades, p.upgradeKey(), p.targetTier()));
+                    if (radius != null) {
+                        st.setInt(i++, radius);
+                    }
+                    st.setString(i, p.islandId().toString());
+                    st.executeUpdate();
+                }
+                return true;
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not finish upgrade " + p.upgradeKey() + " on island " + p.islandId() + ": "
+                    + e.getMessage());
+            return false;
         }
     }
 
@@ -630,7 +1042,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load active profile for " + player + ": " + e.getMessage());
+            logger.severe("Could not load active profile for " + player + ": " + e.getMessage());
         }
         return null;
     }
@@ -644,7 +1056,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, profileId == null ? null : profileId.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not set active profile for " + player + ": " + e.getMessage());
+            logger.severe("Could not set active profile for " + player + ": " + e.getMessage());
         }
     }
 
@@ -663,7 +1075,7 @@ public final class SqlStorage implements Storage {
                         rs.getInt("food"), rs.getFloat("saturation"));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            logger.severe("Could not load profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
             return null;
         }
     }
@@ -689,7 +1101,7 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            logger.severe("Could not save profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
             return false;
         }
     }
@@ -704,55 +1116,79 @@ public final class SqlStorage implements Storage {
                         rs.getDouble("interest_floor")) : null;
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load bank account " + accountId + ": " + e.getMessage());
+            logger.severe("Could not load bank account " + accountId + ": " + e.getMessage());
             return null;
         }
     }
 
-    /** Upsert an account and append its ledger row in one transaction. */
-    public boolean saveBankAccountWithTxn(com.mystipixel.royalskyblock.bank.BankAccount account,
-                                          String type, double amount, double balanceAfter, String note) {
-        String upsert = mysql()
-                ? "INSERT INTO bank_accounts (account_id, balance, level, last_interest, interest_floor) VALUES (?,?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE balance=VALUES(balance), level=VALUES(level), last_interest=VALUES(last_interest), "
-                + "interest_floor=VALUES(interest_floor)"
-                : "INSERT INTO bank_accounts (account_id, balance, level, last_interest, interest_floor) VALUES (?,?,?,?,?) "
-                + "ON CONFLICT(account_id) DO UPDATE SET balance=excluded.balance, level=excluded.level, "
-                + "last_interest=excluded.last_interest, interest_floor=excluded.interest_floor";
-        String txn = "INSERT INTO bank_txns (account_id, type, amount, balance_after, created_at, note) VALUES (?,?,?,?,?,?)";
-        try (Connection c = dataSource.getConnection()) {
-            boolean auto = c.getAutoCommit();
-            c.setAutoCommit(false);
-            try {
-                try (PreparedStatement st = c.prepareStatement(upsert)) {
-                    st.setString(1, account.id());
-                    st.setDouble(2, account.balance());
-                    st.setInt(3, account.level());
-                    st.setLong(4, account.lastInterest());
-                    st.setDouble(5, account.interestFloor());
+    @Override
+    public BankOutcome bankTransaction(String accountId, int startingLevel, BankMutation work) {
+        try {
+            return bankTx.inTransaction(t -> {
+                Connection c = t.connection();
+                // lock first and create only when missing: an INSERT IGNORE on an existing row takes a shared
+                // lock, and two of those both upgrading to the FOR UPDATE lock deadlock
+                com.mystipixel.royalskyblock.bank.BankAccount locked = lockBankAccount(t, accountId);
+                if (locked == null) {
+                    try (PreparedStatement st = c.prepareStatement(t.dialect().insertIgnore() + " INTO bank_accounts "
+                            + "(account_id, balance, level, last_interest, interest_floor) VALUES (?, 0, ?, 0, -1)")) {
+                        st.setString(1, accountId);
+                        st.setInt(2, startingLevel);
+                        st.executeUpdate();
+                    }
+                    locked = lockBankAccount(t, accountId);
+                    if (locked == null) {
+                        throw new SQLException("bank account " + accountId + " vanished after it was created");
+                    }
+                }
+                BankOutcome outcome = work.apply(locked);
+                if (!outcome.written()) {
+                    return outcome;
+                }
+                com.mystipixel.royalskyblock.bank.BankAccount updated = outcome.account();
+                try (PreparedStatement st = c.prepareStatement("UPDATE bank_accounts SET balance = ?, level = ?, "
+                        + "last_interest = ?, interest_floor = ? WHERE account_id = ?")) {
+                    st.setDouble(1, updated.balance());
+                    st.setInt(2, updated.level());
+                    st.setLong(3, updated.lastInterest());
+                    st.setDouble(4, updated.interestFloor());
+                    st.setString(5, accountId);
                     st.executeUpdate();
                 }
-                try (PreparedStatement st = c.prepareStatement(txn)) {
-                    st.setString(1, account.id());
-                    st.setString(2, type);
-                    st.setDouble(3, amount);
-                    st.setDouble(4, balanceAfter);
+                try (PreparedStatement st = c.prepareStatement("INSERT INTO bank_txns "
+                        + "(account_id, type, amount, balance_after, created_at, note) VALUES (?,?,?,?,?,?)")) {
+                    st.setString(1, accountId);
+                    st.setString(2, outcome.type());
+                    st.setDouble(3, outcome.amount());
+                    st.setDouble(4, updated.balance());
                     st.setLong(5, java.time.Instant.now().getEpochSecond());
-                    st.setString(6, note == null ? "" : note);
+                    st.setString(6, outcome.note() == null ? "" : outcome.note());
                     st.executeUpdate();
                 }
-                c.commit();
-                return true;
-            } catch (SQLException e) {
-                try { c.rollback(); } catch (SQLException ignored) { }
-                plugin.getLogger().severe("Could not save bank account " + account.id() + ": " + e.getMessage());
-                return false;
-            } finally {
-                try { c.setAutoCommit(auto); } catch (SQLException ignored) { }
-            }
+                return outcome;
+            });
         } catch (SQLException e) {
-            plugin.getLogger().severe("Bank DB connection error: " + e.getMessage());
-            return false;
+            if (e.getErrorCode() == MYSQL_LOCK_WAIT_TIMEOUT) {
+                logger.warning("Bank account " + accountId + " is busy on another server; refused: " + e.getMessage());
+            } else {
+                logger.severe("Could not save bank account " + accountId + ": " + e.getMessage());
+            }
+            return BankOutcome.failure();
+        }
+    }
+
+    private static final int MYSQL_LOCK_WAIT_TIMEOUT = 1205;
+
+    // null when the account has no row yet
+    private static com.mystipixel.royalskyblock.bank.BankAccount lockBankAccount(
+            com.mystipixel.royalcommon.storage.Tx t, String accountId) throws SQLException {
+        try (PreparedStatement st = t.connection().prepareStatement("SELECT balance, level, last_interest, "
+                + "interest_floor FROM bank_accounts WHERE account_id = ?" + t.dialect().forUpdate())) {
+            st.setString(1, accountId);
+            try (ResultSet rs = st.executeQuery()) {
+                return rs.next() ? new com.mystipixel.royalskyblock.bank.BankAccount(accountId, rs.getDouble(1),
+                        rs.getInt(2), rs.getLong(3), rs.getDouble(4)) : null;
+            }
         }
     }
 
@@ -770,7 +1206,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load bank transactions " + accountId + ": " + e.getMessage());
+            logger.severe("Could not load bank transactions " + accountId + ": " + e.getMessage());
         }
         return out;
     }
@@ -784,7 +1220,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, fromProfile.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not record coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
+            logger.severe("Could not record coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
         }
     }
 
@@ -800,7 +1236,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load coop payouts for " + player + ": " + e.getMessage());
+            logger.severe("Could not load coop payouts for " + player + ": " + e.getMessage());
         }
         return out;
     }
@@ -814,7 +1250,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, fromProfile.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not clear coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
+            logger.severe("Could not clear coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
         }
     }
 
@@ -827,7 +1263,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, playerUuid.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().warning("Could not delete profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            logger.warning("Could not delete profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
         }
     }
 
@@ -837,7 +1273,7 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("DB update failed (" + sql + "): " + e.getMessage());
+            logger.severe("DB update failed (" + sql + "): " + e.getMessage());
             return false;
         }
     }

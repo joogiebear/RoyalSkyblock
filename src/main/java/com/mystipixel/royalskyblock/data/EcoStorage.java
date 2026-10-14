@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -216,7 +217,7 @@ public final class EcoStorage implements Storage {
         return out;
     }
 
-    @Override
+    // a whole-row upsert: the SqliteMigration target, and what the targeted writes below go through
     public boolean saveIsland(Island island) {
         Config row = Configs.empty();
         row.set("v", SCHEMA);
@@ -241,6 +242,148 @@ public final class EcoStorage implements Storage {
         write(island.profileId(), islandOfKey, island.id().toString());
         addToIndex(islandIndexKey, island.id().toString());
         return true;
+    }
+
+    @Override
+    public boolean insertIsland(Island island) {
+        return saveIsland(island);
+    }
+
+    // One server only (see the class comment), so a read-modify-write under one lock is as good as targeted SQL.
+    // The version stays 0: nothing polls it on this store.
+    private synchronized long updateIsland(UUID id, java.util.function.Consumer<Island> change) {
+        Island island = getIsland(id);
+        if (island == null) {
+            return -1;
+        }
+        change.accept(island);
+        return saveIsland(island) ? 0 : -1;
+    }
+
+    @Override
+    public long updateIslandHome(UUID id, double x, double y, double z, float yaw, float pitch) {
+        return updateIsland(id, island -> island.setHome(x, y, z, yaw, pitch));
+    }
+
+    @Override
+    public long updateIslandGuestHome(UUID id, String serializedGuestHome) {
+        return updateIsland(id, island -> island.loadGuestHome(serializedGuestHome));
+    }
+
+    @Override
+    public long updateIslandLevel(UUID id, double level, int rewardLevel) {
+        return updateIsland(id, island -> {
+            island.setLevel(level);
+            island.setRewardLevel(Math.max(island.rewardLevel(), rewardLevel));
+        });
+    }
+
+    @Override
+    public long updateIslandPerkLevel(UUID id, int perkLevel) {
+        return updateIsland(id, island -> island.setPerkLevel(Math.max(island.perkLevel(), perkLevel)));
+    }
+
+    @Override
+    public long updateIslandUnloadedAt(UUID id, long unloadedAt) {
+        return updateIsland(id, island -> island.setUnloadedAt(unloadedAt));
+    }
+
+    @Override
+    public synchronized long claimUnloadStamp(UUID id) {
+        Island island = getIsland(id);
+        if (island == null || island.unloadedAt() <= 0) {
+            return 0;
+        }
+        long stamp = island.unloadedAt();
+        island.setUnloadedAt(0);
+        return saveIsland(island) ? stamp : 0;
+    }
+
+    @Override
+    public long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius) {
+        return updateIsland(id, island -> {
+            island.setUpgradeTier(upgradeKey, tier);
+            if (radius != null) {
+                island.setRadius(radius);
+            }
+        });
+    }
+
+    @Override
+    public long updateIslandSetting(UUID id, String settingKey, boolean enabled) {
+        return updateIsland(id, island -> island.loadSettings(Island.withSetting(island.serializeSettings(),
+                settingKey, enabled)));
+    }
+
+    @Override
+    public boolean insertProfile(Profile profile) {
+        return saveProfile(profile);
+    }
+
+    private synchronized boolean updateProfile(UUID id, java.util.function.Predicate<Profile> change) {
+        Profile profile = getProfile(id);
+        return profile != null && change.test(profile) && saveProfile(profile);
+    }
+
+    @Override
+    public synchronized AddMemberResult addMember(UUID profileId, ProfileMember member, int maxMembers) {
+        Profile profile = getProfile(profileId);
+        if (profile == null) {
+            return AddMemberResult.FAILED;
+        }
+        if (profile.isMember(member.uuid())) {
+            return AddMemberResult.ALREADY;
+        }
+        if (profile.memberCount() >= maxMembers) {
+            return AddMemberResult.FULL;
+        }
+        profile.putMember(member);
+        return saveProfile(profile) ? AddMemberResult.ADDED : AddMemberResult.FAILED;
+    }
+
+    @Override
+    public boolean removeMember(UUID profileId, UUID member) {
+        return updateProfile(profileId, profile -> {
+            profile.removeMember(member);
+            return true;
+        });
+    }
+
+    @Override
+    public boolean setMemberRole(UUID profileId, UUID member, IslandRole role) {
+        return updateProfile(profileId, profile -> {
+            ProfileMember current = profile.member(member);
+            if (current == null) {
+                return false;
+            }
+            profile.putMember(new ProfileMember(member, current.name(), role, current.joinedAt()));
+            return true;
+        });
+    }
+
+    @Override
+    public boolean transferOwner(UUID profileId, UUID newOwner, UUID oldOwner) {
+        return updateProfile(profileId, profile -> {
+            ProfileMember next = profile.member(newOwner);
+            if (next == null) {
+                return false;
+            }
+            profile.putMember(new ProfileMember(newOwner, next.name(), IslandRole.OWNER, next.joinedAt()));
+            ProfileMember previous = profile.member(oldOwner);
+            if (previous != null) {
+                profile.putMember(new ProfileMember(oldOwner, previous.name(), IslandRole.CO_OWNER, previous.joinedAt()));
+            }
+            profile.setOwner(newOwner);
+            return true;
+        });
+    }
+
+    @Override
+    public long updateProfileRewardLevel(UUID id, int rewardLevel) {
+        return updateProfile(id, profile -> {
+            profile.setRewardLevel(Math.max(profile.rewardLevel(), rewardLevel));
+            return true;
+        }) ? 0 : -1;
     }
 
     @Override
@@ -311,7 +454,6 @@ public final class EcoStorage implements Storage {
      * Save a profile and reconcile the lookups that point at it. The roster is replaced wholesale, so the
      * previous row is read first to drop removed members' {@code member_profiles} entries.
      */
-    @Override
     public boolean saveProfile(Profile profile) {
         List<String> previousMembers = orEmpty(read(profile.id(), profileKey).getStringsOrNull("members"));
 
@@ -445,7 +587,7 @@ public final class EcoStorage implements Storage {
         return derived("rsb-data", profileId + ":" + playerUuid);
     }
 
-    @Override
+    /** Every pending upgrade; the SQLite import checks its copy with it. */
     public List<PendingUpgrade> getAllPending() {
         List<PendingUpgrade> out = new ArrayList<>();
         for (String id : readIndex(pendingIndexKey)) {
@@ -469,8 +611,8 @@ public final class EcoStorage implements Storage {
         return out;
     }
 
-    @Override
-    public boolean savePending(PendingUpgrade p) {
+    /** Writes a pending upgrade as is; the SQLite import uses it. */
+    public synchronized boolean savePending(PendingUpgrade p) {
         List<PendingUpgrade> current = readPending(p.islandId());
         current.removeIf(existing -> existing.upgradeKey().equals(p.upgradeKey()));
         current.add(p);
@@ -479,11 +621,64 @@ public final class EcoStorage implements Storage {
     }
 
     @Override
-    public void deletePending(UUID islandId, String upgradeKey) {
+    public synchronized ReserveResult reservePending(PendingUpgrade p, int expectedTier) {
+        Island island = getIsland(p.islandId());
+        if (island == null) {
+            return ReserveResult.FAILED;
+        }
+        if (island.upgradeTier(p.upgradeKey()) != expectedTier) {
+            return ReserveResult.TIER_CHANGED;
+        }
+        List<PendingUpgrade> current = readPending(p.islandId());
+        if (current.stream().anyMatch(existing -> existing.upgradeKey().equals(p.upgradeKey()))) {
+            return ReserveResult.IN_PROGRESS;
+        }
+        current.add(p);
+        writePending(p.islandId(), current);
+        return ReserveResult.RESERVED;
+    }
+
+    @Override
+    public List<PendingUpgrade> getPending(UUID islandId) {
+        return readPending(islandId);
+    }
+
+    @Override
+    public List<PendingUpgrade> duePending(long now, Collection<UUID> islandIds) {
+        List<PendingUpgrade> out = new ArrayList<>();
+        for (UUID islandId : islandIds) {
+            for (PendingUpgrade p : readPending(islandId)) {
+                if (p.isDone(now)) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    @Override
+    public synchronized int deletePending(UUID islandId, String upgradeKey) {
         List<PendingUpgrade> current = readPending(islandId);
         if (current.removeIf(existing -> existing.upgradeKey().equals(upgradeKey))) {
             writePending(islandId, current);
+            return 1;
         }
+        return 0;
+    }
+
+    @Override
+    public synchronized boolean completePending(PendingUpgrade p, @Nullable Integer radius) {
+        List<PendingUpgrade> current = readPending(p.islandId());
+        if (!current.removeIf(existing -> existing.upgradeKey().equals(p.upgradeKey())
+                && existing.targetTier() == p.targetTier())) {
+            return false;
+        }
+        writePending(p.islandId(), current);
+        Island island = getIsland(p.islandId());
+        if (island != null && island.upgradeTier(p.upgradeKey()) < p.targetTier()) {
+            updateIslandUpgradeTier(p.islandId(), p.upgradeKey(), p.targetTier(), radius);
+        }
+        return true;
     }
 
     private void writePending(UUID islandId, List<PendingUpgrade> pending) {
@@ -519,8 +714,20 @@ public final class EcoStorage implements Storage {
      * Write the balance and append the ledger entry. eco has no transactions, so these are two writes;
      * the balance goes first, so a crash between them loses a ledger line, never the balance.
      */
+    // one server only, so a read-mutate-write under one lock is enough
     @Override
-    public boolean saveBankAccountWithTxn(BankAccount account, String type, double amount,
+    public synchronized BankOutcome bankTransaction(String accountId, int startingLevel, BankMutation work) {
+        BankAccount stored = getBankAccount(accountId);
+        BankOutcome outcome = work.apply(stored != null ? stored : new BankAccount(accountId, 0.0, startingLevel, 0L));
+        if (!outcome.written()) {
+            return outcome;
+        }
+        BankAccount updated = outcome.account();
+        return saveBankAccountWithTxn(updated, outcome.type(), outcome.amount(), updated.balance(), outcome.note())
+                ? outcome : BankOutcome.failure();
+    }
+
+    private boolean saveBankAccountWithTxn(BankAccount account, String type, double amount,
                                           double balanceAfter, String note) {
         UUID id = bankUuid(account.id());
 
