@@ -25,6 +25,7 @@ import com.mystipixel.royalskyblock.hooks.IslandPlaceholders
 import com.mystipixel.royalskyblock.hooks.RoyalSkyblockExpansion
 import com.mystipixel.royalskyblock.hooks.VaultHook
 import com.mystipixel.royalskyblock.island.GeneratorService
+import com.mystipixel.royalskyblock.island.Island
 import com.mystipixel.royalskyblock.island.IslandManager
 import com.mystipixel.royalskyblock.island.IslandMobSpawnService
 import com.mystipixel.royalskyblock.island.IslandUnloadService
@@ -823,6 +824,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     fun borders(): BorderService = borderService!!
 
     fun islands(): IslandManager = islandManager!!
+
+    // the leaderboard's last snapshot of every island by level; empty until its first refresh
+    fun rankedIslands(): List<Island> = placeholders?.ranked() ?: emptyList()
 
     fun worldRules(): IslandWorldRules = worldRules!!
 

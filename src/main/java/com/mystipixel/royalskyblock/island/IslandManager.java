@@ -14,6 +14,7 @@ import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.ConfigurationSection;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.jetbrains.annotations.Nullable;
 
@@ -52,6 +53,10 @@ public final class IslandManager {
     private volatile @Nullable VersionPoller<UUID> poller;
     // islands this server is claiming or loading right now, with how many loads are in flight for each
     private final Map<UUID, Integer> claiming = new ConcurrentHashMap<>();
+    // world uid to the island id its name carries, or NOT_ISLAND; cleared when the config (and so the prefix) changes
+    private final Map<UUID, UUID> worldToIsland = new ConcurrentHashMap<>();
+    private static final UUID NOT_ISLAND = new UUID(0L, 0L);
+    private volatile @Nullable FileConfiguration prefixFrom;
 
     public IslandManager(RoyalSkyblockPlugin plugin, Storage storage, IslandWorldService worlds) {
         this.plugin = plugin;
@@ -96,6 +101,11 @@ public final class IslandManager {
             markMissing(profileId);
         }
         return island;
+    }
+
+    /** The island if it is cached here, never touching the store. */
+    public @Nullable Island cachedIsland(UUID islandId) {
+        return byId.get(islandId);
     }
 
     /** As {@link #getIslandByProfile}, but asks the store even when the profile was recently seen with no island. */
@@ -165,15 +175,24 @@ public final class IslandManager {
         if (world == null) {
             return null;
         }
-        String prefix = plugin.conf().getString("world.world-name-prefix", "island_");
-        String name = world.getName();
-        if (!name.startsWith(prefix)) {
-            return null;
+        FileConfiguration conf = plugin.conf();
+        if (conf != prefixFrom || worldToIsland.size() > 4096) {
+            worldToIsland.clear();
+            prefixFrom = conf;
+        }
+        UUID islandId = worldToIsland.computeIfAbsent(world.getUID(),
+                uid -> islandIdOf(world.getName(), conf.getString("world.world-name-prefix", "island_")));
+        return NOT_ISLAND.equals(islandId) ? null : getIsland(islandId);
+    }
+
+    private static UUID islandIdOf(String worldName, String prefix) {
+        if (!worldName.startsWith(prefix)) {
+            return NOT_ISLAND;
         }
         try {
-            return getIsland(UUID.fromString(name.substring(prefix.length())));
+            return UUID.fromString(worldName.substring(prefix.length()));
         } catch (IllegalArgumentException notAnIslandWorld) {
-            return null;
+            return NOT_ISLAND;
         }
     }
 
@@ -434,6 +453,32 @@ public final class IslandManager {
         if (current != null) {
             current.seen(island.id(), version);
         }
+    }
+
+    /**
+     * Drops the profile's island from the cache unless its world is loaded or being loaded or created here.
+     * False when it was kept. Main thread.
+     */
+    public boolean forgetIfUnloaded(UUID profileId) {
+        noIsland.remove(profileId);
+        if (creating.containsKey(profileId)) {
+            return false;
+        }
+        UUID id = profileToIsland.get(profileId);
+        if (id == null) {
+            return true;
+        }
+        Island island = byId.get(id);
+        if (island != null && (worlds.isLoaded(island.worldName()) || claiming.containsKey(id))) {
+            return false;
+        }
+        byId.remove(id);
+        profileToIsland.remove(profileId, id);
+        VersionPoller<UUID> current = poller;
+        if (current != null) {
+            current.forget(id);
+        }
+        return true;
     }
 
     /** Ids of the islands whose world is loaded here. Main thread. */

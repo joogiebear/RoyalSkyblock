@@ -626,18 +626,17 @@ public final class GuiManager implements Listener {
         List<Integer> slots = template.contentSlots();
         java.util.UUID viewerId = player.getUniqueId();
 
-        // Gathered off-thread: getAllIslands() is a full table read, and profiles and owner names can miss
-        // their caches.
+        // Gathered off-thread: profiles and owner names can miss their caches.
         List<BrowseRow> rows = browseRowsOrFetch(player, VISIT, () -> {
             List<BrowseRow> found = new ArrayList<>();
-            for (Island island : plugin.storage().getAllIslands()) {
+            for (Island island : islandsByLevel()) {
                 if (found.size() >= slots.size()) {
                     break;
                 }
                 if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) || !island.isEnabled(IslandSetting.LISTED)) {
                     continue;
                 }
-                Profile prof = plugin.profiles().getProfile(island.profileId());
+                Profile prof = plugin.profiles().peekProfile(island.profileId());
                 if (prof == null || prof.gamemode() != mode || prof.isMember(viewerId)) {
                     continue; // gamemode must match; don't list your own
                 }
@@ -657,6 +656,18 @@ public final class GuiManager implements Listener {
                 visitFromBrowser(v, row.island(), row.profile(), row.ownerName());
             });
         }
+    }
+
+    // Off the main thread. The leaderboard's snapshot, so opening a browser menu doesn't read the whole islands
+    // table each time; a full read only before the snapshot's first refresh.
+    private List<Island> islandsByLevel() {
+        List<Island> ranked = plugin.rankedIslands();
+        if (!ranked.isEmpty()) {
+            return ranked;
+        }
+        List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
+        all.sort((a, b) -> Double.compare(b.level(), a.level()));
+        return all;
     }
 
     // The rows for an async-filled menu, or null while still being fetched. The fill runs inside eco's
@@ -688,7 +699,20 @@ public final class GuiManager implements Listener {
         browseRows.remove(viewer + ":" + TOP);
     }
 
-    private void visitFromBrowser(Player viewer, Island island, Profile prof, String ownerName) {
+    private void visitFromBrowser(Player viewer, Island listed, Profile prof, String ownerName) {
+        // the listing can be a minute old and is shared between viewers; visit with the island's own copy
+        Island island = plugin.islands().cachedIsland(listed.id());
+        if (island == null) {
+            island = plugin.islands().getIsland(listed.id());
+        }
+        if (island == null) {
+            island = listed;
+        }
+        if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) && !prof.isMember(viewer.getUniqueId())
+                && !viewer.hasPermission("royalskyblock.bypass")) {
+            plugin.messages().send(viewer, "visit.private", "player", ownerName);
+            return;
+        }
         org.bukkit.World world = plugin.getServer().getWorld(island.worldName());
         if (world != null && !viewer.hasPermission("royalskyblock.bypass")) {
             int visitors = 0;
@@ -1182,14 +1206,12 @@ public final class GuiManager implements Listener {
 
         // same as fillVisit: read and rank off-thread, paint on the refresh
         List<BrowseRow> rows = browseRowsOrFetch(player, TOP, () -> {
-            List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
-            all.sort((a, b) -> Double.compare(b.level(), a.level()));
             List<BrowseRow> found = new ArrayList<>();
-            for (Island island : all) {
+            for (Island island : islandsByLevel()) {
                 if (found.size() >= slots.size()) {
                     break;
                 }
-                Profile prof = plugin.profiles().getProfile(island.profileId());
+                Profile prof = plugin.profiles().peekProfile(island.profileId());
                 if (prof == null) {
                     continue;
                 }

@@ -6,7 +6,6 @@ import com.mystipixel.royalskyblock.api.IslandCatchupEvent;
 import com.mystipixel.royalskyblock.api.SimBlock;
 import com.mystipixel.royalskyblock.api.SimulationContext;
 import com.mystipixel.royalskyblock.island.Island;
-import org.bukkit.Chunk;
 import org.bukkit.ChunkSnapshot;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -15,15 +14,18 @@ import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.scheduler.BukkitRunnable;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -40,6 +42,7 @@ public final class IslandScanner implements Listener {
 
     // how long a catch-up waits for the island's chunks before dropping the offline time
     private static final long CHUNK_LOAD_TIMEOUT_SECONDS = 120;
+    private static final int CHANGES_PER_TICK = 2_000;
 
 
     private final RoyalSkyblockPlugin plugin;
@@ -94,35 +97,32 @@ public final class IslandScanner implements Listener {
         int centreZ = plugin.conf().getInt("island.paste.z", 0);
         int radius = Math.max(16, island.radius());
 
-        // Loaded asynchronously, then snapshotted, to avoid a lag spike when an island wakes up. gen=false:
-        // an ungenerated chunk is empty void, so it is skipped rather than created.
-        List<long[]> coords = new ArrayList<>();
-        List<CompletableFuture<Chunk>> loads = new ArrayList<>();
+        // Loaded asynchronously and each snapshotted as it arrives (Paper completes the load on the main thread),
+        // so an island waking up never snapshots its whole footprint in one tick. gen=false: an ungenerated chunk
+        // is empty void, so it is skipped rather than created.
+        Map<Long, ChunkSnapshot> snapshots = new ConcurrentHashMap<>();
+        List<CompletableFuture<Void>> loads = new ArrayList<>();
         for (int cx = (centreX - radius) >> 4; cx <= (centreX + radius) >> 4; cx++) {
             for (int cz = (centreZ - radius) >> 4; cz <= (centreZ + radius) >> 4; cz++) {
-                coords.add(new long[]{cx, cz});
-                loads.add(world.getChunkAtAsync(cx, cz, false));
+                long key = key(cx, cz);
+                loads.add(world.getChunkAtAsync(cx, cz, false).thenAccept(chunk -> {
+                    if (chunk != null) {
+                        // includeMaxblocky must be true: the scan uses getHighestBlockYAt, which throws without the height map
+                        snapshots.put(key, chunk.getChunkSnapshot(true, false, false));
+                    }
+                }));
             }
         }
         CompletableFuture.allOf(loads.toArray(CompletableFuture[]::new))
                 .orTimeout(CHUNK_LOAD_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-                // back on the main thread either way: a timeout completes on a timer thread, and snapshots need the main thread
+                // back on the main thread either way: a timeout completes on a timer thread
                 .whenComplete((ignored, error) -> plugin.getServer().getScheduler().runTask(plugin, () -> {
                     if (error != null) {
                         plugin.getLogger().warning("Catch-up: chunks of " + world.getName() + " did not load ("
                                 + error + "): " + offline + "s of offline progress is being dropped.");
                         return;
                     }
-                    Map<Long, ChunkSnapshot> snapshots = new HashMap<>();
-                    for (int i = 0; i < loads.size(); i++) {
-                        Chunk chunk = loads.get(i).join();
-                        if (chunk != null) {
-                            // includeMaxblocky must be true: the scan uses getHighestBlockYAt, which throws without the height map
-                            snapshots.put(key((int) coords.get(i)[0], (int) coords.get(i)[1]),
-                                    chunk.getChunkSnapshot(true, false, false));
-                        }
-                    }
-                    scanSnapshots(world, offline, radius, loY, hiY, snapshots, debug);
+                    scanSnapshots(world, offline, radius, loY, hiY, new HashMap<>(snapshots), debug);
                 }));
     }
 
@@ -195,19 +195,38 @@ public final class IslandScanner implements Listener {
         return seen;
     }
 
+    // a farm offline for a day can queue tens of thousands of changes, so they go in a slice per tick
     private void apply(Context ctx, int blocksSeen, boolean debug) {
-        int changed = 0;
-        for (Map.Entry<Pos, BlockData> e : ctx.queued.entrySet()) {
-            Pos p = e.getKey();
-            Block block = ctx.world.getBlockAt(p.x(), p.y(), p.z());
-            // re-check against the snapshot: the player may already have harvested; never overwrite a changed block
-            BlockData was = ctx.snapshotDataAt(p.x(), p.y(), p.z());
-            if (was == null || !block.getBlockData().matches(was)) {
-                continue;
+        Iterator<Map.Entry<Pos, BlockData>> queued = ctx.queued.entrySet().iterator();
+        int[] changed = {0};
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (plugin.getServer().getWorld(ctx.world.getUID()) == null) {
+                    cancel();                    // unloaded meanwhile: the rest is dropped with it
+                    return;
+                }
+                for (int n = 0; n < CHANGES_PER_TICK && queued.hasNext(); n++) {
+                    Map.Entry<Pos, BlockData> e = queued.next();
+                    Pos p = e.getKey();
+                    Block block = ctx.world.getBlockAt(p.x(), p.y(), p.z());
+                    // re-check against the snapshot: the player may already have harvested; never overwrite a changed block
+                    BlockData was = ctx.snapshotDataAt(p.x(), p.y(), p.z());
+                    if (was == null || !block.getBlockData().matches(was)) {
+                        continue;
+                    }
+                    block.setBlockData(e.getValue(), false);   // no physics: don't pop a whole farm off its soil
+                    changed[0]++;
+                }
+                if (!queued.hasNext()) {
+                    cancel();
+                    report(ctx, blocksSeen, changed[0], debug);
+                }
             }
-            block.setBlockData(e.getValue(), false);   // no physics: don't pop a whole farm off its soil
-            changed++;
-        }
+        }.runTaskTimer(plugin, 0L, 1L);
+    }
+
+    private void report(Context ctx, int blocksSeen, int changed, boolean debug) {
         if (debug) {
             // Report the zero case too, per simulator: "cane seen but didn't grow" and "cane never seen" are
             // different problems.
