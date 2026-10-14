@@ -7,6 +7,7 @@ import com.mystipixel.royalskyblock.profile.Profile;
 import org.bukkit.OfflinePlayer;
 
 import java.text.NumberFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -55,6 +56,8 @@ public final class IslandPlaceholders {
 
     // islandId to 1-based rank by level; replaced wholesale by refreshLeaderboard()
     private volatile Map<UUID, Integer> rankCache = Map.of();
+    // every island, highest level first, as of the last refresh; the visit and top menus browse it
+    private volatile List<Island> ranked = List.of();
 
     public IslandPlaceholders(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -62,7 +65,7 @@ public final class IslandPlaceholders {
 
     /** Recompute the level leaderboard. Runs off the main thread on a timer (DB read + sort). */
     public void refreshLeaderboard() {
-        List<Island> all = plugin.storage().getAllIslands();
+        List<Island> all = new ArrayList<>(plugin.storage().getAllIslands());
         all.sort((a, b) -> Double.compare(b.level(), a.level()));
         Map<UUID, Integer> ranks = new HashMap<>(all.size() * 2);
         int rank = 1;
@@ -70,6 +73,12 @@ public final class IslandPlaceholders {
             ranks.put(island.id(), rank++);
         }
         this.rankCache = ranks;
+        this.ranked = List.copyOf(all);
+    }
+
+    /** Every island by level, highest first, as of the last refresh (at most a minute old); empty before the first. */
+    public List<Island> ranked() {
+        return ranked;
     }
 
     /** Resolve one placeholder, or null when the id is not one of ours. */

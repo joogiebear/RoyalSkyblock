@@ -103,6 +103,11 @@ public final class IslandManager {
         return island;
     }
 
+    /** The island if it is cached here, never touching the store. */
+    public @Nullable Island cachedIsland(UUID islandId) {
+        return byId.get(islandId);
+    }
+
     /** As {@link #getIslandByProfile}, but asks the store even when the profile was recently seen with no island. */
     public @Nullable Island getIslandByProfileFresh(UUID profileId) {
         noIsland.remove(profileId);
