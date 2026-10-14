@@ -8,6 +8,7 @@ import com.mystipixel.royalskyblock.command.CommandIsland
 import com.mystipixel.royalskyblock.config.ConfigValidator
 import com.mystipixel.royalskyblock.currency.CurrencyService
 import com.mystipixel.royalskyblock.data.EcoStorage
+import com.mystipixel.royalskyblock.data.SqlSettings
 import com.mystipixel.royalskyblock.data.SqlStorage
 import com.mystipixel.royalskyblock.data.SqliteMigration
 import com.mystipixel.royalskyblock.data.Storage
@@ -182,7 +183,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             warnIfEcoStorageShared()
             return EcoStorage(this)
         }
-        return SqlStorage(this)
+        return SqlStorage(SqlSettings.fromConfig(conf().getConfigurationSection("storage"), dataFolder), logger)
     }
 
     // ECO storage is single-server: eco caches non-player data for the whole uptime and has no atomic

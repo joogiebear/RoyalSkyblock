@@ -8,8 +8,6 @@ import com.mystipixel.royalskyblock.profile.ProfileData;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
-import org.bukkit.configuration.ConfigurationSection;
-import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
@@ -23,9 +21,9 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * The SQL-backed {@link Storage}: SQLite by default, MySQL for a network, behind a HikariCP pool.
@@ -36,54 +34,39 @@ public final class SqlStorage implements Storage {
 
     public enum Type { SQLITE, MYSQL }
 
-    private final RoyalSkyblockPlugin plugin;
+    private final SqlSettings settings;
+    private final Logger logger;
 
     private Type type;
     private HikariDataSource dataSource;
 
-    public SqlStorage(RoyalSkyblockPlugin plugin) {
-        this.plugin = plugin;
+    public SqlStorage(SqlSettings settings, Logger logger) {
+        this.settings = settings;
+        this.logger = logger;
     }
 
     public boolean connect() {
         try {
-            ConfigurationSection storage = plugin.conf().getConfigurationSection("storage");
-            if (storage == null) {
-                storage = plugin.conf().createSection("storage");
-            }
-            String rawType = storage.getString("type", "SQLITE").toUpperCase(Locale.ROOT);
-            this.type = "MYSQL".equals(rawType) ? Type.MYSQL : Type.SQLITE;
-
+            this.type = settings.type();
             HikariConfig hikari = new HikariConfig();
             hikari.setPoolName("RoyalSkyblock");
-
-            if (type == Type.MYSQL) {
-                ConfigurationSection my = storage.getConfigurationSection("mysql");
-                if (my == null) {
-                    my = storage.createSection("mysql");
-                }
-                String host = my.getString("host", "localhost");
-                int port = my.getInt("port", 3306);
-                String database = my.getString("database", "royalskyblock");
-                String props = my.getString("properties", "useSSL=false");
-                loadDriver("com.mysql.cj.jdbc.Driver");
-                hikari.setJdbcUrl("jdbc:mysql://" + host + ":" + port + "/" + database + "?" + props);
-                hikari.setDriverClassName("com.mysql.cj.jdbc.Driver");
-                hikari.setUsername(my.getString("username", "root"));
-                hikari.setPassword(my.getString("password", ""));
-                hikari.setMaximumPoolSize(Math.max(1, my.getInt("pool-size", 10)));
-            } else {
-                File dataFolder = plugin.getDataFolder();
+            if (type == Type.SQLITE) {
+                File dataFolder = settings.dataFolder();
                 if (!dataFolder.exists() && !dataFolder.mkdirs()) {
-                    plugin.getLogger().severe("Could not create plugin data folder: " + dataFolder.getAbsolutePath());
+                    logger.severe("Could not create plugin data folder: " + dataFolder.getAbsolutePath());
                     return false;
                 }
-                File databaseFile = new File(dataFolder, storage.getString("sqlite-file", "islands.db"));
-                loadDriver("org.sqlite.JDBC");
-                hikari.setJdbcUrl("jdbc:sqlite:" + databaseFile.getAbsolutePath());
-                hikari.setDriverClassName("org.sqlite.JDBC");
-                hikari.setMaximumPoolSize(SqliteSettings.POOL_SIZE);
-                hikari.setDataSourceProperties(SqliteSettings.properties());
+            }
+            loadDriver(settings.driver());
+            hikari.setJdbcUrl(settings.jdbcUrl());
+            hikari.setDriverClassName(settings.driver());
+            if (settings.username() != null) {
+                hikari.setUsername(settings.username());
+                hikari.setPassword(settings.password());
+            }
+            hikari.setMaximumPoolSize(settings.poolSize());
+            if (!settings.dataSourceProps().isEmpty()) {
+                hikari.setDataSourceProperties(settings.dataSourceProps());
             }
             // fail the call rather than hold the server thread; Hikari's 30s default could freeze the server
             // behind one stuck query
@@ -91,10 +74,10 @@ public final class SqlStorage implements Storage {
 
             this.dataSource = new HikariDataSource(hikari);
             createTables();
-            plugin.getLogger().info("RoyalSkyblock connected to " + type + " storage.");
+            logger.info("RoyalSkyblock connected to " + type + " storage.");
             return true;
         } catch (Exception exception) {
-            plugin.getLogger().severe("RoyalSkyblock storage init failed: " + exception.getMessage());
+            logger.severe("RoyalSkyblock storage init failed: " + exception.getMessage());
             return false;
         }
     }
@@ -103,7 +86,7 @@ public final class SqlStorage implements Storage {
         try {
             Class.forName(driverClass, true, getClass().getClassLoader());
         } catch (ClassNotFoundException exception) {
-            plugin.getLogger().log(Level.WARNING, "JDBC driver not found on classpath: " + driverClass, exception);
+            logger.log(Level.WARNING, "JDBC driver not found on classpath: " + driverClass, exception);
         }
     }
 
@@ -207,11 +190,11 @@ public final class SqlStorage implements Storage {
             }
             try (Statement s = c.createStatement()) {
                 s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
-                plugin.getLogger().info("Migrated " + table + ": added column " + column + ".");
+                logger.info("Migrated " + table + ": added column " + column + ".");
             }
         } catch (SQLException e) {
             // a half-migrated schema breaks every read, so fail loudly
-            plugin.getLogger().severe("Migration failed: could not add " + table + "." + column
+            logger.severe("Migration failed: could not add " + table + "." + column
                     + " (" + e.getMessage() + ")");
         }
     }
@@ -284,7 +267,7 @@ public final class SqlStorage implements Storage {
                 out.add(readIsland(rs));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load islands: " + e.getMessage());
+            logger.severe("Could not load islands: " + e.getMessage());
         }
         return out;
     }
@@ -320,7 +303,7 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save island " + island.id() + ": " + e.getMessage());
+            logger.severe("Could not save island " + island.id() + ": " + e.getMessage());
             return false;
         }
     }
@@ -344,7 +327,7 @@ public final class SqlStorage implements Storage {
                 loadMembers(c, profile);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profile " + id + ": " + e.getMessage());
+            logger.severe("Could not load profile " + id + ": " + e.getMessage());
             return null;
         }
         Island island = getIslandByProfile(profile.id());
@@ -372,7 +355,7 @@ public final class SqlStorage implements Storage {
                 loadMembersFor(c, byId);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profiles for " + owner + ": " + e.getMessage());
+            logger.severe("Could not load profiles for " + owner + ": " + e.getMessage());
         }
         // island lookup after the connection above is released (see getProfile)
         if (!byId.isEmpty()) {
@@ -421,7 +404,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load island ids for " + profiles.size()
+            logger.severe("Could not load island ids for " + profiles.size()
                     + " profile(s): " + e.getMessage());
         }
     }
@@ -449,7 +432,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load member profiles for " + uuid + ": " + e.getMessage());
+            logger.severe("Could not load member profiles for " + uuid + ": " + e.getMessage());
         }
         return out;
     }
@@ -523,13 +506,13 @@ public final class SqlStorage implements Storage {
                 return true;
             } catch (SQLException e) {
                 c.rollback();
-                plugin.getLogger().severe("Could not save profile " + profile.id() + ": " + e.getMessage());
+                logger.severe("Could not save profile " + profile.id() + ": " + e.getMessage());
                 return false;
             } finally {
                 c.setAutoCommit(auto);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Profile DB connection error (save): " + e.getMessage());
+            logger.severe("Profile DB connection error (save): " + e.getMessage());
             return false;
         }
     }
@@ -560,13 +543,13 @@ public final class SqlStorage implements Storage {
                 return true;
             } catch (SQLException e) {
                 c.rollback();
-                plugin.getLogger().severe("Could not delete profile " + id + ": " + e.getMessage());
+                logger.severe("Could not delete profile " + id + ": " + e.getMessage());
                 return false;
             } finally {
                 c.setAutoCommit(auto);
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Profile DB connection error (delete): " + e.getMessage());
+            logger.severe("Profile DB connection error (delete): " + e.getMessage());
             return false;
         }
     }
@@ -583,7 +566,7 @@ public final class SqlStorage implements Storage {
                         rs.getInt("target_tier"), rs.getLong("complete_at")));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load pending upgrades: " + e.getMessage());
+            logger.severe("Could not load pending upgrades: " + e.getMessage());
         }
         return out;
     }
@@ -602,7 +585,7 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save pending upgrade: " + e.getMessage());
+            logger.severe("Could not save pending upgrade: " + e.getMessage());
             return false;
         }
     }
@@ -615,7 +598,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, upgradeKey);
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not delete pending upgrade: " + e.getMessage());
+            logger.severe("Could not delete pending upgrade: " + e.getMessage());
         }
     }
 
@@ -630,7 +613,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load active profile for " + player + ": " + e.getMessage());
+            logger.severe("Could not load active profile for " + player + ": " + e.getMessage());
         }
         return null;
     }
@@ -644,7 +627,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, profileId == null ? null : profileId.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not set active profile for " + player + ": " + e.getMessage());
+            logger.severe("Could not set active profile for " + player + ": " + e.getMessage());
         }
     }
 
@@ -663,7 +646,7 @@ public final class SqlStorage implements Storage {
                         rs.getInt("food"), rs.getFloat("saturation"));
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            logger.severe("Could not load profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
             return null;
         }
     }
@@ -689,7 +672,7 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not save profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            logger.severe("Could not save profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
             return false;
         }
     }
@@ -704,7 +687,7 @@ public final class SqlStorage implements Storage {
                         rs.getDouble("interest_floor")) : null;
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load bank account " + accountId + ": " + e.getMessage());
+            logger.severe("Could not load bank account " + accountId + ": " + e.getMessage());
             return null;
         }
     }
@@ -745,13 +728,13 @@ public final class SqlStorage implements Storage {
                 return true;
             } catch (SQLException e) {
                 try { c.rollback(); } catch (SQLException ignored) { }
-                plugin.getLogger().severe("Could not save bank account " + account.id() + ": " + e.getMessage());
+                logger.severe("Could not save bank account " + account.id() + ": " + e.getMessage());
                 return false;
             } finally {
                 try { c.setAutoCommit(auto); } catch (SQLException ignored) { }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Bank DB connection error: " + e.getMessage());
+            logger.severe("Bank DB connection error: " + e.getMessage());
             return false;
         }
     }
@@ -770,7 +753,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load bank transactions " + accountId + ": " + e.getMessage());
+            logger.severe("Could not load bank transactions " + accountId + ": " + e.getMessage());
         }
         return out;
     }
@@ -784,7 +767,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, fromProfile.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not record coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
+            logger.severe("Could not record coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
         }
     }
 
@@ -800,7 +783,7 @@ public final class SqlStorage implements Storage {
                 }
             }
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not load coop payouts for " + player + ": " + e.getMessage());
+            logger.severe("Could not load coop payouts for " + player + ": " + e.getMessage());
         }
         return out;
     }
@@ -814,7 +797,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, fromProfile.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().severe("Could not clear coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
+            logger.severe("Could not clear coop payout " + fromProfile + " -> " + player + ": " + e.getMessage());
         }
     }
 
@@ -827,7 +810,7 @@ public final class SqlStorage implements Storage {
             st.setString(2, playerUuid.toString());
             st.executeUpdate();
         } catch (SQLException e) {
-            plugin.getLogger().warning("Could not delete profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
+            logger.warning("Could not delete profile data " + profileId + "/" + playerUuid + ": " + e.getMessage());
         }
     }
 
@@ -837,7 +820,7 @@ public final class SqlStorage implements Storage {
             st.executeUpdate();
             return true;
         } catch (SQLException e) {
-            plugin.getLogger().severe("DB update failed (" + sql + "): " + e.getMessage());
+            logger.severe("DB update failed (" + sql + "): " + e.getMessage());
             return false;
         }
     }
