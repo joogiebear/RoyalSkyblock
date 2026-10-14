@@ -35,8 +35,8 @@ effects:
 #   - "eco give %owner% 5000"
 unlock-commands: []
 
-# Requires EcoMinions, which registers minion_collect, and RoyalSkyblock's EcoMinions
-# extension, which registers minion_count_above. Install both, then uncomment; without
+# Requires EcoMinions and RoyalSkyblock's EcoMinions extension, which registers
+# minion_owner_mine and minion_count_above. Install both, then uncomment; without
 # them libreforge reports both as unknown ids.
 #
 # overseer:
@@ -58,5 +58,5 @@ unlock-commands: []
 #         cooldown: 60
 #         send_cooldown_message: false
 #       triggers:
-#         - minion_collect
+#         - minion_owner_mine
 #   unlock-commands: []
