@@ -45,6 +45,12 @@ public final class ProfileManager {
     private final Map<UUID, OfflineActive> offlineActive = new ConcurrentHashMap<>();
     private static final long OFFLINE_ACTIVE_TTL_MILLIS = 10_000L;
     private static final int OFFLINE_ACTIVE_MAX = 5_000;
+    // online players' profile ids in list order, until when that list is trusted; menus and tab-complete
+    private final Map<UUID, ProfileList> profileLists = new ConcurrentHashMap<>();
+    private final java.util.Set<UUID> listing = ConcurrentHashMap.newKeySet();
+    // raised whenever a list is dropped, so a read that started before the change is not kept
+    private final java.util.concurrent.atomic.AtomicLong listChanges = new java.util.concurrent.atomic.AtomicLong();
+    private static final long PROFILE_LIST_TTL_MILLIS = 30_000L;
     private final SaveRequests saveRequests = new SaveRequests(SAVE_REQUEST_COOLDOWN_MILLIS);
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
     // null on stores nothing else writes to (eco storage)
@@ -56,6 +62,9 @@ public final class ProfileManager {
     private final java.util.Set<UUID> deleting = ConcurrentHashMap.newKeySet();
 
     private record OfflineActive(@Nullable UUID profileId, long until) {
+    }
+
+    private record ProfileList(List<UUID> ids, long until) {
     }
 
     private record Invite(UUID profileId, String inviterName, long expiresAt) {
@@ -162,8 +171,99 @@ public final class ProfileManager {
         }), db.mainThread());
     }
 
-    /** All profiles a player can access: the ones they own, plus coop profiles they're a member of. */
+    /**
+     * All profiles a player can access: the ones they own, plus coop profiles they're a member of. Served from
+     * a list kept for a short while, which create, delete and coop changes made here drop at once.
+     */
     public List<Profile> getProfiles(UUID player) {
+        List<Profile> cached = cachedProfiles(player);
+        if (cached != null) {
+            return cached;
+        }
+        List<Profile> profiles = readProfiles(player);
+        rememberProfiles(player, profiles);
+        return profiles;
+    }
+
+    /**
+     * As {@link #getProfiles}, but never touches the store: null when no recent list is cached, and a read
+     * starts on the database thread so a later call has one. For tab-complete. Main thread.
+     */
+    public @Nullable List<Profile> peekProfiles(UUID player) {
+        List<Profile> cached = cachedProfiles(player);
+        DbExecutor db = plugin.db();
+        if (cached != null || db == null || !listing.add(player)) {
+            return cached;
+        }
+        long changesBefore = listChanges.get();
+        db.submit("list profiles of " + player, () -> {
+            List<Profile> found = new java.util.ArrayList<>(storage.getProfilesByOwner(player));
+            java.util.Set<UUID> owned = new java.util.HashSet<>();
+            found.forEach(p -> owned.add(p.id()));
+            for (UUID pid : storage.getProfileIdsByMember(player)) {
+                if (owned.contains(pid)) {
+                    continue;
+                }
+                Profile p = profileCache.get(pid);
+                if (p == null) {
+                    p = storage.getProfile(pid);
+                }
+                if (p != null) {
+                    found.add(p);
+                }
+            }
+            return found;
+        }).whenCompleteAsync((found, error) -> {
+            listing.remove(player);
+            if (error != null || listChanges.get() != changesBefore) {
+                return;
+            }
+            List<Profile> profiles = new java.util.ArrayList<>(found.size());
+            for (Profile read : found) {
+                Profile here = profileCache.get(read.id());
+                if (here == null) {
+                    cacheProfile(read);
+                    here = read;
+                }
+                profiles.add(here);
+            }
+            rememberProfiles(player, profiles);
+        }, db.mainThread());
+        return null;
+    }
+
+    private @Nullable List<Profile> cachedProfiles(UUID player) {
+        ProfileList list = profileLists.get(player);
+        if (list == null || list.until() <= System.currentTimeMillis()) {
+            return null;
+        }
+        List<Profile> profiles = new java.util.ArrayList<>(list.ids().size());
+        for (UUID id : list.ids()) {
+            Profile profile = profileCache.get(id);
+            if (profile == null) {
+                return null;
+            }
+            // the version poll may have taken them off a coop since
+            if (canUse(player, profile)) {
+                profiles.add(profile);
+            }
+        }
+        return profiles;
+    }
+
+    private void forgetProfiles(UUID player) {
+        profileLists.remove(player);
+        listChanges.incrementAndGet();
+    }
+
+    private void rememberProfiles(UUID player, List<Profile> profiles) {
+        if (Bukkit.getPlayer(player) != null) {
+            profileLists.put(player, new ProfileList(profiles.stream().map(Profile::id).toList(),
+                    System.currentTimeMillis() + PROFILE_LIST_TTL_MILLIS));
+        }
+    }
+
+    private List<Profile> readProfiles(UUID player) {
         java.util.LinkedHashMap<UUID, Profile> byId = new java.util.LinkedHashMap<>();
         for (Profile p : storage.getProfilesByOwner(player)) {
             byId.put(p.id(), p);
@@ -514,6 +614,7 @@ public final class ProfileManager {
         saveRequests.forget(player.getUniqueId());
         activeProfile.remove(player.getUniqueId());
         offlineActive.remove(player.getUniqueId());
+        forgetProfiles(player.getUniqueId());
         // A second login may have preloaded before this session's save above; applying it on join would hand
         // back items given away since.
         preloaded.remove(player.getUniqueId());
@@ -565,6 +666,7 @@ public final class ProfileManager {
         Profile profile = buildProfile(player, Gamemode.SOLO, null, List.of());
         storage.insertProfile(profile);
         cacheProfile(profile);
+        forgetProfiles(player.getUniqueId());
         return profile;
     }
 
@@ -629,6 +731,7 @@ public final class ProfileManager {
         Profile profile = buildProfile(player, gamemode, name, existing);
         storage.insertProfile(profile);
         cacheProfile(profile);
+        forgetProfiles(player.getUniqueId());
         return switchProfile(player, profile.id()).thenApply(ok -> profile);
     }
 
@@ -735,6 +838,7 @@ public final class ProfileManager {
             deleting.add(targetId);
             pendingInvites.values().removeIf(invite -> invite.profileId().equals(targetId));
             profileCache.remove(targetId);
+            forgetProfiles(uuid);
             CompletableFuture<Void> worldDelete = island != null
                     ? plugin.islands().deleteIsland(island.id())
                     : CompletableFuture.completedFuture(null);
@@ -848,6 +952,7 @@ public final class ProfileManager {
             }
             case ALREADY, ADDED -> profile.putMember(joining);
         }
+        forgetProfiles(target.getUniqueId());
         notifyJoin(profile, target);
         return new AcceptResult(profile, null);
     }
@@ -1028,6 +1133,7 @@ public final class ProfileManager {
     // A member is off the coop: move them off it if they are on it, then pay out what was theirs. Their row
     // and bank account on the coop are kept until the payout lands.
     private void owePayout(UUID member, UUID coop) {
+        forgetProfiles(member);
         storage.addCoopPayout(member, coop);
         moveOffProfileIfActive(member, coop);   // saves what they carry into the coop row first
         Player online = Bukkit.getPlayer(member);

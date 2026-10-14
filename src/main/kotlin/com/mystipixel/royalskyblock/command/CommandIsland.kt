@@ -144,7 +144,9 @@ class CommandIsland(private val plugin: RoyalSkyblockPlugin) :
             "create" -> startingWith(listOf("solo", "coop", "ironman"), args[1])
             "switch", "delete" -> {
                 val player = sender as? Player ?: return emptyList()
-                startingWith(plugin.profiles().getProfiles(player.uniqueId).map(Profile::name), args[1])
+                // cache only: a database read per keystroke would stall the server
+                val profiles = plugin.profiles().peekProfiles(player.uniqueId) ?: return emptyList()
+                startingWith(profiles.map(Profile::name), args[1])
             }
             else -> emptyList()
         }
