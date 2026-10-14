@@ -438,6 +438,35 @@ public final class SqlStorage implements Storage {
     }
 
     @Override
+    public long claimUnloadStamp(UUID id) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                long stamp;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT unloaded_at FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, id.toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        stamp = rs.next() ? rs.getLong(1) : 0;
+                    }
+                }
+                if (stamp <= 0) {
+                    return 0L;
+                }
+                try (PreparedStatement st = c.prepareStatement("UPDATE islands SET unloaded_at = 0, "
+                        + "version = version + 1 WHERE id = ? AND unloaded_at = ?")) {
+                    st.setString(1, id.toString());
+                    st.setLong(2, stamp);
+                    return st.executeUpdate() > 0 ? stamp : 0L;
+                }
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not read the unload time of island " + id + ": " + e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
     public long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius) {
         return mergeIslandColumn(id, "upgrades", current -> Island.withUpgradeTier(current, upgradeKey, tier),
                 radius);

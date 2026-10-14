@@ -683,7 +683,11 @@ public final class GuiManager implements Listener {
         }
         plugin.islands().teleportVisitor(viewer, island).whenComplete((ok, error) ->
                 Bukkit.getScheduler().runTask(plugin, () -> {
-                    if (error != null) {
+                    var hosted = com.mystipixel.royalskyblock.island.IslandHostedElsewhereException.find(error);
+                    if (hosted != null) {
+                        plugin.messages().send(viewer, "visit.hosted-elsewhere", "player", ownerName,
+                                "server", hosted.holder());
+                    } else if (error != null) {
                         plugin.messages().send(viewer, "visit.failed", "error", error.getMessage());
                     } else {
                         plugin.messages().send(viewer, "visit.visiting", "player", ownerName);

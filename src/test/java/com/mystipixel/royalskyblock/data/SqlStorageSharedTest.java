@@ -71,6 +71,16 @@ class SqlStorageSharedTest {
         return storage;
     }
 
+    final SqlStorage open(String serverId, java.time.Duration hostTtl) {
+        SqlStorage storage = new SqlStorage(settings(serverId), Logger.getLogger("rsb-test-" + serverId));
+        storage.hostTtl(hostTtl);
+        assertTrue(storage.connect(), "storage " + serverId + " connects");
+        synchronized (opened) {
+            opened.add(storage);
+        }
+        return storage;
+    }
+
     // null when connect() refused
     final SqlStorage tryOpen(String serverId, Logger logger) {
         SqlStorage storage = new SqlStorage(settings(serverId), logger);
@@ -355,5 +365,61 @@ class SqlStorageSharedTest {
         BankOutcome outcome = a.bankTransaction("p:" + UUID.randomUUID(), 3, locked -> BankOutcome.refuse(locked, null));
         assertEquals(3, outcome.account().level());
         assertEquals(0, outcome.account().balance());
+    }
+
+    @Test
+    void onlyOneServerClaimsTheUnloadStamp() {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        Island island = newIsland(a);
+        a.updateIslandUnloadedAt(island.id(), 12345L);
+        assertEquals(12345L, b.claimUnloadStamp(island.id()));
+        assertEquals(0L, a.claimUnloadStamp(island.id()));
+        assertEquals(0L, a.getIsland(island.id()).unloadedAt());
+    }
+
+    @Test
+    void hostLockIsExclusiveUntilReleasedOrExpired() throws Exception {
+        SqlStorage a = open("a", java.time.Duration.ofMillis(500));
+        SqlStorage b = open("b", java.time.Duration.ofMillis(500));
+        UUID island = UUID.randomUUID();
+        assertTrue(a.hosts().tryAcquireOrRenew(island));
+        assertTrue(a.hosts().tryAcquireOrRenew(island), "the holder may renew");
+        assertFalse(b.hosts().tryAcquireOrRenew(island));
+        a.hosts().release(island);
+        assertTrue(b.hosts().tryAcquireOrRenew(island), "a released island is free at once");
+        assertFalse(a.hosts().tryAcquireOrRenew(island));
+        Thread.sleep(900);
+        assertTrue(a.hosts().tryAcquireOrRenew(island), "an expired claim can be taken");
+    }
+
+    @Test
+    void renewAllReportsLostIslands() throws Exception {
+        SqlStorage a = open("a", java.time.Duration.ofMillis(500));
+        SqlStorage b = open("b", java.time.Duration.ofMillis(500));
+        UUID kept = UUID.randomUUID();
+        UUID taken = UUID.randomUUID();
+        assertTrue(a.hosts().tryAcquireOrRenew(kept));
+        assertTrue(a.hosts().tryAcquireOrRenew(taken));
+        Thread.sleep(900);
+        // a stopped renewing; b takes one of the two, the other is still a's for the asking
+        assertTrue(b.hosts().tryAcquireOrRenew(taken));
+        assertEquals(1, a.hosts().renewAll());
+        assertEquals(java.util.Set.of(kept), a.hosts().heldBy());
+        assertFalse(b.hosts().tryAcquireOrRenew(kept));
+        assertEquals(1, a.hosts().releaseAll());
+        assertTrue(a.hosts().heldBy().isEmpty());
+    }
+
+    @Test
+    void holderOfNamesTheServer() throws Exception {
+        SqlStorage a = open("alpha");
+        SqlStorage b = open("beta");
+        UUID island = UUID.randomUUID();
+        assertEquals(null, b.hosts().holderOf(island));
+        a.hosts().tryAcquireOrRenew(island);
+        assertEquals("alpha", b.hosts().holderOf(island));
+        a.hosts().release(island);
+        assertEquals(null, b.hosts().holderOf(island));
     }
 }

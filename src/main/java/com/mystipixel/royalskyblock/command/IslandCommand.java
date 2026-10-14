@@ -5,6 +5,7 @@ import com.mystipixel.royalskyblock.config.ContentSplitter;
 import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.gui.GuiManager;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.island.IslandHostedElsewhereException;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.listener.CommandGateListener;
 import com.mystipixel.royalskyblock.message.Reason;
@@ -150,7 +151,11 @@ public final class IslandCommand {
             }
         }
         plugin.islands().teleportVisitor(player, island).whenComplete((ok, error) -> onMain(() -> {
-            if (error != null) {
+            IslandHostedElsewhereException hosted = IslandHostedElsewhereException.find(error);
+            if (hosted != null) {
+                plugin.messages().send(player, "visit.hosted-elsewhere", "player", targetName,
+                        "server", hosted.holder());
+            } else if (error != null) {
                 plugin.messages().send(player, "visit.failed", "error", rootMessage(error));
             } else {
                 plugin.messages().send(player, "visit.visiting", "player", targetName);
@@ -847,6 +852,9 @@ public final class IslandCommand {
                     } catch (IllegalArgumentException notOurs) {
                         continue;
                     }
+                    if (hostedSomewhere(islandId)) {
+                        continue;   // mid-creation on another server sharing the store: its row comes next
+                    }
                     if (plugin.storage().getIsland(islandId) == null) {
                         orphans.add(name);
                     }
@@ -892,6 +900,18 @@ public final class IslandCommand {
                     ? plugin.messages().raw("admin.orphans.purged-failures", "count", String.valueOf(finalFailed))
                     : "", "count", String.valueOf(finalMoved)));
         });
+    }
+
+    // whether a server sharing the database holds the island right now; off the main thread
+    private boolean hostedSomewhere(UUID islandId) {
+        if (!(plugin.storage() instanceof com.mystipixel.royalskyblock.data.SqlStorage sql)) {
+            return false;
+        }
+        try {
+            return sql.hosts().holderOf(islandId) != null;
+        } catch (java.sql.SQLException e) {
+            throw new StorageException("Could not read the island host table: " + e.getMessage(), e);
+        }
     }
 
     // /is admin split-content [confirm]: preview unless confirm is passed
@@ -1300,8 +1320,13 @@ public final class IslandCommand {
         }
     }
 
-    // the deepest cause's message, or the player-facing text of a ReasonException
+    // the deepest cause's message, or the player-facing text of a ReasonException or of an island hosted on
+    // another server
     private String rootMessage(Throwable t) {
+        IslandHostedElsewhereException hosted = IslandHostedElsewhereException.find(t);
+        if (hosted != null) {
+            return plugin.messages().raw("island.hosted-elsewhere", "server", hosted.holder());
+        }
         Throwable cause = t;
         while (cause.getCause() != null) {
             cause = cause.getCause();

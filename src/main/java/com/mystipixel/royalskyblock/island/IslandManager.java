@@ -4,6 +4,7 @@ import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.api.IslandCatchupEvent;
 import com.mystipixel.royalcommon.storage.DbExecutor;
 import com.mystipixel.royalcommon.storage.VersionPoller;
+import com.mystipixel.royalskyblock.data.IslandHostLock;
 import com.mystipixel.royalskyblock.data.SqlStorage;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.data.StorageException;
@@ -44,6 +45,8 @@ public final class IslandManager {
     private final Map<UUID, CompletableFuture<Island>> creating = new ConcurrentHashMap<>();
     // null on stores nothing else writes to (eco storage)
     private volatile @Nullable VersionPoller<UUID> poller;
+    // islands this server is claiming or loading right now, with how many loads are in flight for each
+    private final Map<UUID, Integer> claiming = new ConcurrentHashMap<>();
 
     public IslandManager(RoyalSkyblockPlugin plugin, Storage storage, IslandWorldService worlds) {
         this.plugin = plugin;
@@ -198,7 +201,9 @@ public final class IslandManager {
         int startingRadius = plugin.conf().getInt("island.starting-radius", 50);
         long now = Instant.now().toEpochMilli();
 
-        return worlds.createIsland(worldName)
+        beginClaim(islandId);
+        return claimHost(islandId, false)
+                .thenCompose(claim -> worlds.createIsland(worldName))
                 .thenCompose(world -> onMain(() -> {
                     // prefer a WorldEdit/FAWE schematic; fall back to the code-generated starter
                     String schematic = plugin.conf().getString("island.starter.schematic", "default");
@@ -234,29 +239,130 @@ public final class IslandManager {
                     }).exceptionallyCompose(error -> worlds.deleteIsland(worldName)
                             .handle((ignored, cleanupError) -> null)
                             .thenCompose(ignored -> CompletableFuture.<Island>failedFuture(error)));
-                });
+                })
+                .whenComplete((island, error) -> endClaim(islandId, worldName, error));
     }
 
     // Every path that loads an island must go through here, not worlds.loadIsland directly, or the
-    // island loses its offline catch-up.
+    // island loses its offline catch-up and is not claimed for this server.
     private CompletableFuture<World> loadWithCatchup(Island island) {
-        return worlds.loadIsland(island.worldName()).thenCompose(world -> onMain(() -> {
-            plugin.unloads().forget(island.worldName());
-            plugin.worldRules().applyGameRules(world);
-            fireCatchup(island, world);
-            return world;
-        }));
+        if (worlds.isLoaded(island.worldName())) {
+            // already hosted here; the heartbeat keeps the claim alive
+            return worlds.loadIsland(island.worldName()).thenCompose(world -> onMain(() -> {
+                plugin.unloads().forget(island.worldName());
+                return world;
+            }));
+        }
+        UUID id = island.id();
+        beginClaim(id);
+        return claimHost(id, true)
+                .thenCompose(claim -> worlds.loadIsland(island.worldName()).thenCompose(world -> onMain(() -> {
+                    if (claim.fresh() != null) {
+                        island.copyFrom(claim.fresh());   // what the last host saved, not this server's old copy
+                    }
+                    plugin.unloads().forget(island.worldName());
+                    plugin.worldRules().applyGameRules(world);
+                    fireCatchup(island, world, claim.unloadedAt());
+                    return world;
+                })))
+                .whenComplete((world, error) -> endClaim(id, island.worldName(), error));
     }
 
-    // fire IslandCatchupEvent, then clear the stamp so a second load can't pay the same time twice; main thread
-    private void fireCatchup(Island island, World world) {
-        long unloadedAt = island.unloadedAt();
-        if (unloadedAt <= 0) {
-            return;                             // never unloaded, or already settled
-        }
-        island.setUnloadedAt(0);
-        runAsync(() -> storage.updateIslandUnloadedAt(island.id(), 0));
+    private record Claim(long unloadedAt, @Nullable Island fresh, @Nullable String hostedOn) {
+    }
 
+    // Claims the island for this server on the database thread. When loading, also takes the unload stamp
+    // (so only this load pays that catch-up) and rereads the row.
+    private CompletableFuture<Claim> claimHost(UUID islandId, boolean loading) {
+        DbExecutor db = plugin.db();
+        if (db == null) {
+            return CompletableFuture.failedFuture(new IllegalStateException("RoyalSkyblock is shutting down"));
+        }
+        IslandHostLock hosts = storage instanceof SqlStorage sql ? sql.hosts() : null;
+        return db.submit("claim island " + islandId, () -> {
+            if (hosts != null && !hosts.tryAcquireOrRenew(islandId)) {
+                String holder = hosts.holderOf(islandId);
+                return new Claim(0, null, holder != null ? holder : "?");
+            }
+            if (!loading) {
+                return new Claim(0, null, null);
+            }
+            return new Claim(storage.claimUnloadStamp(islandId), storage.getIsland(islandId), null);
+        }).thenCompose(claim -> claim.hostedOn() == null ? CompletableFuture.completedFuture(claim)
+                : CompletableFuture.failedFuture(new IslandHostedElsewhereException(islandId, claim.hostedOn())));
+    }
+
+    private void beginClaim(UUID islandId) {
+        claiming.merge(islandId, 1, Integer::sum);
+    }
+
+    // a failed load or create gives the island back, unless another load here got it loaded meanwhile
+    private void endClaim(UUID islandId, String worldName, @Nullable Throwable error) {
+        claiming.computeIfPresent(islandId, (id, loads) -> loads > 1 ? loads - 1 : null);
+        if (error != null && IslandHostedElsewhereException.find(error) == null) {
+            onMain(() -> {
+                if (!worlds.isLoaded(worldName) && !claiming.containsKey(islandId)) {
+                    releaseHost(islandId);
+                }
+                return null;
+            });
+        }
+    }
+
+    /** Lets another server host the island at once. Call after its world is unloaded here. */
+    public void releaseHost(UUID islandId) {
+        if (!(storage instanceof SqlStorage sql)) {
+            return;
+        }
+        plugin.writeAsync(() -> {
+            try {
+                sql.hosts().release(islandId);
+            } catch (java.sql.SQLException e) {
+                plugin.getLogger().warning("Could not release island " + islandId + "; another server can host it"
+                        + " once the claim expires: " + e.getMessage());
+            }
+        });
+    }
+
+    /** Ids of the islands whose world is loaded here. Main thread. */
+    public Set<UUID> hostedIslandIds() {
+        Set<UUID> hosted = new java.util.HashSet<>();
+        for (Island island : byId.values()) {
+            if (worlds.isLoaded(island.worldName())) {
+                hosted.add(island.id());
+            }
+        }
+        return hosted;
+    }
+
+    /**
+     * Another server took these islands while this one still had them loaded (its claims lapsed, e.g. during a
+     * database outage). The other host's copy wins: move everyone off and unload without saving. Main thread.
+     */
+    public void hostLost(Set<UUID> islandIds) {
+        for (UUID id : islandIds) {
+            Island island = byId.get(id);
+            if (island == null || !worlds.isLoaded(island.worldName()) || claiming.containsKey(id)) {
+                continue;
+            }
+            plugin.getLogger().severe("Island " + id + " was taken over by another server while loaded here;"
+                    + " unloading it without saving, so changes made here since the last save are lost.");
+            evacuate(island.worldName(), plugin.messages().raw("island.host-lost"));
+            worlds.unloadIsland(island.worldName(), false).whenComplete((ignored, error) -> {
+                if (error != null) {
+                    plugin.getLogger().severe("Could not unload lost island " + island.worldName() + ": "
+                            + error.getMessage());
+                }
+            });
+        }
+    }
+
+    // fire IslandCatchupEvent for the downtime since unloadedAt, the stamp this load claimed; main thread
+    private void fireCatchup(Island island, World world, long unloadedAt) {
+        island.setUnloadedAt(0);
+        if (unloadedAt <= 0) {
+            return;                             // never unloaded, or another load already paid it
+        }
         if (!plugin.conf().getBoolean("simulation.enabled", true)) {
             return;
         }
@@ -339,10 +445,13 @@ public final class IslandManager {
         }
         String worldName = island.worldName();
 
-        return onMain(() -> {
+        // claimed first: deleting an island another server has loaded would let that server save it back
+        CompletableFuture<?> claimed = worlds.isLoaded(worldName) ? CompletableFuture.completedFuture(null)
+                : claimHost(islandId, false);
+        return claimed.thenCompose(c -> onMain(() -> {
             evacuate(worldName, plugin.messages().raw("delete.evicted"));
             return (Void) null;
-        }).thenCompose(ignored -> worlds.unloadIsland(worldName, true))   // final save, then a fresh archive
+        })).thenCompose(ignored -> worlds.unloadIsland(worldName, true))   // final save, then a fresh archive
                 .thenCompose(ignored -> runAsyncFuture(() -> {
                     try {
                         trash.archive(worldName, false);
@@ -368,7 +477,12 @@ public final class IslandManager {
                             + " could not be removed (" + error.getMessage() + "). It is archived in the trash;"
                             + " /is admin orphans purge will clear it.");
                     return null;
-                }));
+                }))
+                .whenComplete((ignored, error) -> {
+                    if (error == null || !worlds.isLoaded(worldName)) {
+                        releaseHost(islandId);
+                    }
+                });
     }
 
     /**

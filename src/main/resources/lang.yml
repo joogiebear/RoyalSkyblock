@@ -43,6 +43,9 @@ messages:
     spawn-set: "&aIsland spawn set to where you're standing."
     guest-spawn-set: "&aGuest spawn set to where you're standing."
     kicked-guests: "&aKicked &e%count% &aguest(s) from your island."
+    # Fills %error% of the failure messages when the island is open on another server sharing the database.
+    hosted-elsewhere: "the island is open on server &e%server%&7 right now; join that server, or try again once everyone has left it"
+    host-lost: "&cAnother server took over this island, so you were moved off it. Rejoin it from there."
 
   home:
     no-island: "&cYou don't have an island yet. Use &e/is create&c."
@@ -55,6 +58,7 @@ messages:
     private: "&e%player%&c's island is private: only members can visit."
     full: "&e%player%&c's island is full: try again later."
     failed: "&cCouldn't take you there: &7%error%"
+    hosted-elsewhere: "&e%player%&c's island is open on server &e%server%&c: visit it there."
 
   delete:
     warning: "&c&lWarning: &7this permanently deletes your island and everything on it."

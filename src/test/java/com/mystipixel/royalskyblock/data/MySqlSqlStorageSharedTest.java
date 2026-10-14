@@ -20,6 +20,7 @@ import java.util.logging.LogRecord;
 import java.util.logging.Logger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * The shared-storage cases on MariaDB/MySQL, each "server" with its own pool. Runs when RSB_TEST_MYSQL_PORT
@@ -106,5 +107,21 @@ class MySqlSqlStorageSharedTest extends SqlStorageSharedTest {
         assertEquals(4, started.stream().filter(java.util.Objects::nonNull).count());
         assertEquals(1, migrations.get());
         assertEquals(SqlStorage.SCHEMA_VERSION, schemaVersion());
+    }
+
+    @Test
+    void hostLockFailsOverAfterTheTtl() throws Exception {
+        SqlStorage a = open("a", java.time.Duration.ofSeconds(1));
+        SqlStorage b = open("b", java.time.Duration.ofSeconds(1));
+        UUID island = UUID.randomUUID();
+        assertTrue(a.hosts().tryAcquireOrRenew(island));
+        long start = System.nanoTime();
+        while (!b.hosts().tryAcquireOrRenew(island)) {
+            Thread.sleep(50);
+            assertTrue(System.nanoTime() - start < 5_000_000_000L, "b never took over");
+        }
+        assertTrue(System.nanoTime() - start >= 700_000_000L, "b took over before the claim expired");
+        assertEquals(0, a.hosts().renewAll());
+        assertEquals("b", a.hosts().holderOf(island));
     }
 }

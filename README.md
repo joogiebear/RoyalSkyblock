@@ -74,9 +74,36 @@ levels, bank, and menus).
 - **Island worlds** (`world.slime-data-source`): `file` (default), `mysql` or `mongo`. RoyalSkyblock ships
   its own `SlimeLoader`s, so no ASP companion plugin is required.
 
-MySQL is supported, but each server needs its own database for now. Sharing one database between
-servers (a hub and island servers, say) is planned and not safe yet, because two servers can overwrite
-each other's data.
+### Several servers, one database
+
+Servers may share one MySQL or MariaDB database. Set on every server:
+
+- `storage.type: mysql` and the same `storage.mysql` block.
+- `world.slime-data-source: mysql`, so island blocks live in the shared database too. With `file`, each
+  server keeps its own copy of the blocks and the plugin warns at startup.
+- `storage.server-id`: a name of your choosing per server (`hub`, `islands-1`). Players see it when an
+  island is open somewhere else. Left blank, an id is generated and kept in `server-id.txt`; a copied
+  server folder copies that file too, so give copies their own id.
+
+How it behaves:
+
+- **One host per island.** The server that loads an island holds a claim on it in `rsb_island_hosts`
+  and renews it every 30 seconds. Another server refuses to load it while the claim stands and tells
+  the player which server has it (`island.hosted-elsewhere`, `visit.hosted-elsewhere`). The claim is
+  released when the island unloads (after `world.unload-grace-seconds`) or the server stops. A crashed
+  server's claims expire after 90 seconds.
+- **Player hand-off.** A player joining one server while the last one is still saving them is held at
+  the login screen for up to 5 seconds, then turned away with `profile.still-saving` if the save hasn't
+  landed. Proxy (Velocity, BungeeCord) server switches are not supported yet.
+- **Shared data.** Island and profile changes are written column by column, so a change on one server
+  never undoes one made on another; other servers pick it up within 5 seconds. Bank movements lock the
+  account row, so a coop balance can't be spent twice from two servers.
+- **Upgrade timers** finish on the server hosting the island, or when it next loads.
+- **Schema.** The first server to start on a new plugin version migrates the database; the others wait
+  for it. A server running an older plugin version than the database refuses to start.
+- Coop invites must be accepted on the server they were sent from, and the island trash stays on the
+  disk of the server that deleted the island.
+- Keep the servers' clocks in sync: offline catch-up and upgrade timers use the server clock.
 
 ## Commands
 

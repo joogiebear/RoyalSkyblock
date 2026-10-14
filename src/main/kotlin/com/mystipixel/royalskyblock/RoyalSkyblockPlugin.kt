@@ -293,6 +293,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             server.pluginManager.disablePlugin(this)
             return
         }
+        if (store is SqlStorage) {
+            releaseIslandClaims(store, "left from the last run")
+        }
         if (store is EcoStorage && !migrateSqliteIfPresent(store)) {
             logger.severe("Disabling RoyalSkyblock rather than running on incomplete data.")
             server.pluginManager.disablePlugin(this)
@@ -461,23 +464,44 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
     @Volatile
     private var heartbeatQueued = false
 
-    // on the database thread; a heartbeat still queued there makes the next one skip
+    // On the database thread; a heartbeat still queued there makes the next one skip. Renews this server's
+    // island claims, and unloads any island another server took meanwhile (its claim lapsed while the database
+    // was unreachable). On an error everything stays loaded and the next beat tries again.
     private fun submitHeartbeat() {
         val sql = storage as? SqlStorage ?: return
         val executor = dbExecutor ?: return
+        val islands = islandManager ?: return
         if (heartbeatQueued) {
             return
         }
         heartbeatQueued = true
+        val hosted = islands.hostedIslandIds()
         executor.submit("heartbeat", Runnable {
             try {
                 sql.handoff().heartbeat()
+                sql.hosts().renewAll()
+                val lost = hosted - sql.hosts().heldBy()
+                if (lost.isNotEmpty()) {
+                    executor.mainThread().execute { islands.hostLost(lost) }
+                }
             } catch (e: SQLException) {
-                logger.warning("Heartbeat failed: ${e.message}")
+                logger.warning("Heartbeat failed, island claims not renewed: ${e.message}")
             } finally {
                 heartbeatQueued = false
             }
         })
+    }
+
+    private fun releaseIslandClaims(sql: SqlStorage, why: String) {
+        val hosts = sql.hosts() ?: return // never connected
+        try {
+            val released = hosts.releaseAll()
+            if (released > 0) {
+                logger.info("Released $released island claim(s) $why.")
+            }
+        } catch (e: SQLException) {
+            logger.warning("Could not release this server's island claims ($why); they expire on their own: ${e.message}")
+        }
     }
 
     // one-glance boot summary: which dependencies are active and what to configure first
@@ -567,6 +591,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             }
         }
         dbExecutor = null
+        (storage as? SqlStorage)?.let { releaseIslandClaims(it, "at shutdown") }
 
         worldService?.shutdown()
         storage?.close()

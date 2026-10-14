@@ -60,6 +60,12 @@ public interface Storage {
 
     long updateIslandUnloadedAt(UUID id, long unloadedAt);
 
+    /**
+     * Clears the island's unload stamp and returns what it was (0 when it was already clear), so exactly one
+     * load pays the offline catch-up for that downtime.
+     */
+    long claimUnloadStamp(UUID id);
+
     /** Sets one upgrade tier, keeping the others, and the radius too when it is not null. */
     long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius);
 

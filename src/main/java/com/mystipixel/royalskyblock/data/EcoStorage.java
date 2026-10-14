@@ -288,6 +288,17 @@ public final class EcoStorage implements Storage {
     }
 
     @Override
+    public synchronized long claimUnloadStamp(UUID id) {
+        Island island = getIsland(id);
+        if (island == null || island.unloadedAt() <= 0) {
+            return 0;
+        }
+        long stamp = island.unloadedAt();
+        island.setUnloadedAt(0);
+        return saveIsland(island) ? stamp : 0;
+    }
+
+    @Override
     public long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius) {
         return updateIsland(id, island -> {
             island.setUpgradeTier(upgradeKey, tier);
