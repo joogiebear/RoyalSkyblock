@@ -263,6 +263,7 @@ public final class IslandManager {
                     plugin.unloads().forget(island.worldName());
                     plugin.worldRules().applyGameRules(world);
                     fireCatchup(island, world, claim.unloadedAt());
+                    plugin.upgrades().onIslandLoaded(island);
                     return world;
                 })))
                 .whenComplete((world, error) -> endClaim(id, island.worldName(), error));

@@ -10,6 +10,7 @@ import com.mystipixel.royalskyblock.profile.ProfileMember;
 import com.mystipixel.royalskyblock.upgrade.PendingUpgrade;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 
@@ -124,11 +125,31 @@ public interface Storage {
 
     void removeCoopPayout(UUID player, UUID fromProfile);
 
-    List<PendingUpgrade> getAllPending();
+    enum ReserveResult { RESERVED, TIER_CHANGED, IN_PROGRESS, FAILED }
 
-    boolean savePending(PendingUpgrade p);
+    /**
+     * Reserves the next tier with the island row locked: refused when the island is no longer at
+     * {@code expectedTier} or another tier of that upgrade is already cooking, so two servers never sell
+     * the same tier.
+     */
+    ReserveResult reservePending(PendingUpgrade p, int expectedTier);
 
-    void deletePending(UUID islandId, String upgradeKey);
+    /** The upgrades cooking on one island. */
+    List<PendingUpgrade> getPending(UUID islandId);
+
+    /** The upgrades on these islands whose timer ran out by {@code now}. */
+    List<PendingUpgrade> duePending(long now, Collection<UUID> islandIds);
+
+    /** @return the rows removed: 0 when there was nothing left to remove */
+    int deletePending(UUID islandId, String upgradeKey);
+
+    /**
+     * Finishes a pending upgrade in one step: removes its row and raises the tier (and radius, when given).
+     * Never lowers a tier set higher meanwhile.
+     *
+     * @return false when the row was already gone, so another server or a skip finished it
+     */
+    boolean completePending(PendingUpgrade p, @Nullable Integer radius);
 
     @Nullable BankAccount getBankAccount(String accountId);
 

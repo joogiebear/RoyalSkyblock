@@ -134,6 +134,44 @@ class MySqlSqlStorageSharedTest extends SqlStorageSharedTest {
     }
 
     @Test
+    void reservationsFromFourServersSellATierOnceAndOneFinishesIt() throws Exception {
+        SqlStorage[] servers = {open("a"), open("b"), open("c"), open("d")};
+        com.mystipixel.royalskyblock.island.Island island = newIsland(servers[0]);
+        AtomicInteger reserved = new AtomicInteger();
+        List<Thread> threads = new ArrayList<>();
+        for (SqlStorage server : servers) {
+            threads.add(new Thread(() -> {
+                var p = new com.mystipixel.royalskyblock.upgrade.PendingUpgrade(island.id(), "size", 1, 0L);
+                if (server.reservePending(p, 0) == Storage.ReserveResult.RESERVED) {
+                    reserved.incrementAndGet();
+                }
+            }));
+        }
+        threads.forEach(Thread::start);
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        assertEquals(1, reserved.get());
+        AtomicInteger completed = new AtomicInteger();
+        threads.clear();
+        for (SqlStorage server : servers) {
+            threads.add(new Thread(() -> {
+                for (var due : server.duePending(System.currentTimeMillis(), List.of(island.id()))) {
+                    if (server.completePending(due, 75)) {
+                        completed.incrementAndGet();
+                    }
+                }
+            }));
+        }
+        threads.forEach(Thread::start);
+        for (Thread thread : threads) {
+            thread.join();
+        }
+        assertEquals(1, completed.get());
+        assertEquals(1, servers[3].getIsland(island.id()).upgradeTier("size"));
+    }
+
+    @Test
     void theNextServerWaitsUntilTheLastOneSaved() throws Exception {
         SqlStorage a = open("a");
         SqlStorage b = open("b");

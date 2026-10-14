@@ -1,7 +1,9 @@
 package com.mystipixel.royalskyblock.upgrade;
 
+import com.mystipixel.royalcommon.storage.DbExecutor;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.currency.Cost;
+import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.profile.Profile;
@@ -20,7 +22,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -31,23 +36,26 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class UpgradeManager {
 
     /** Outcome of a start/skip purchase attempt. */
-    public enum PurchaseResult { STARTED, COMPLETED, MAXED, IN_PROGRESS, NOT_IN_PROGRESS, CANT_AFFORD }
+    public enum PurchaseResult {
+        STARTED, COMPLETED, MAXED, IN_PROGRESS, NOT_IN_PROGRESS, CANT_AFFORD, TIER_CHANGED, FAILED
+    }
+
+    // An instant tier is reserved like a timed one while the purchase is charged. Its row must not look
+    // finished to a hosting server's tick in that window; if this server dies there, it completes after this.
+    private static final long INSTANT_HOLD_MS = 5 * 60_000L;
+    // how often an open upgrade menu rereads the timers of its island
+    private static final long PENDING_REFRESH_MS = 5_000L;
 
     private final RoyalSkyblockPlugin plugin;
     private final Map<String, UpgradeDef> upgrades = new LinkedHashMap<>();
-    private final Map<String, PendingUpgrade> pending = new ConcurrentHashMap<>(); // islandId:key to pending
+    // islandId:key to pending: the countdowns menus draw, not the source of truth (that is the database)
+    private final Map<String, PendingUpgrade> pending = new ConcurrentHashMap<>();
+    private final Map<UUID, Long> pendingFetchedAt = new ConcurrentHashMap<>();
+    private boolean ticking;
 
     public UpgradeManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
         reload();
-    }
-
-    /** Load in-progress upgrades from storage (call after storage connects). */
-    public void loadPending() {
-        pending.clear();
-        for (PendingUpgrade p : plugin.storage().getAllPending()) {
-            pending.put(pkey(p.islandId(), p.upgradeKey()), p);
-        }
     }
 
     private static String pkey(UUID islandId, String upgradeKey) {
@@ -58,92 +66,217 @@ public final class UpgradeManager {
         return pending.get(pkey(island.id(), def.key()));
     }
 
-    /** Whether anything is cooking anywhere: a cheap guard so idle ticks do no work. */
+    /** Whether any countdown is known here: a cheap guard so idle menu ticks do no work. */
     public boolean hasAnyPending() {
         return !pending.isEmpty();
     }
 
-    /** Start the next tier: charge the base cost and begin the timer (or finish instantly). */
-    public PurchaseResult start(Player player, Island island, UpgradeDef def) {
+    /** Rereads an island's timers when the copy here is older than a few seconds. Main thread. */
+    public void refreshPendingIfStale(UUID islandId) {
+        Long fetched = pendingFetchedAt.get(islandId);
+        if (fetched == null || System.currentTimeMillis() - fetched >= PENDING_REFRESH_MS) {
+            refreshPending(islandId);
+        }
+    }
+
+    /** Rereads an island's timers, e.g. after it loaded here or a purchase on another server. Main thread. */
+    public void refreshPending(UUID islandId) {
+        pendingFetchedAt.put(islandId, System.currentTimeMillis());
+        onDb("read upgrade timers", () -> plugin.storage().getPending(islandId)).thenAccept(rows -> {
+            pending.values().removeIf(p -> p.islandId().equals(islandId));
+            for (PendingUpgrade p : rows) {
+                pending.put(pkey(p.islandId(), p.upgradeKey()), p);
+            }
+        });
+    }
+
+    /** Called when an island world loads here: its timers now finish on this server. */
+    public void onIslandLoaded(Island island) {
+        refreshPending(island.id());
+    }
+
+    // runs work on the database thread and hands the result back on the main thread; inline at shutdown
+    private <T> CompletableFuture<T> onDb(String name, Callable<T> work) {
+        DbExecutor db = plugin.db();
+        if (db == null) {
+            try {
+                return CompletableFuture.completedFuture(work.call());
+            } catch (Exception e) {
+                return CompletableFuture.failedFuture(e);
+            }
+        }
+        return db.submit(name, work).thenApplyAsync(result -> result, db.mainThread());
+    }
+
+    private static CompletableFuture<PurchaseResult> done(PurchaseResult result) {
+        return CompletableFuture.completedFuture(result);
+    }
+
+    /**
+     * Start the next tier. The tier is reserved in the database first (so a purchase on another server
+     * can't sell it again), then the base cost is charged; an instant tier is applied at once. The future
+     * completes on the main thread.
+     */
+    public CompletableFuture<PurchaseResult> start(Player player, Island island, UpgradeDef def) {
         int current = island.upgradeTier(def.key());
-        if (current >= def.maxTier()) {
-            return PurchaseResult.MAXED;
+        UpgradeTier next = current >= def.maxTier() ? null : def.tier(current + 1);
+        if (next == null) {
+            return done(PurchaseResult.MAXED);
         }
         if (pendingFor(island, def) != null) {
-            return PurchaseResult.IN_PROGRESS;
+            return done(PurchaseResult.IN_PROGRESS);
         }
-        UpgradeTier next = def.tier(current + 1);
-        if (next == null) {
-            return PurchaseResult.MAXED;
+        if (!plugin.currency().canAfford(player, next.cost())) {
+            return done(PurchaseResult.CANT_AFFORD);
         }
-        if (!plugin.currency().canAfford(player, next.cost()) || !plugin.currency().charge(player, next.cost())) {
-            return PurchaseResult.CANT_AFFORD;
+        long now = System.currentTimeMillis();
+        PendingUpgrade reservation = new PendingUpgrade(island.id(), def.key(), current + 1,
+                now + (next.isInstant() ? INSTANT_HOLD_MS : next.timeSeconds() * 1000L));
+        return onDb("reserve upgrade", () -> plugin.storage().reservePending(reservation, current))
+                .thenCompose(reserved -> switch (reserved) {
+                    case RESERVED -> chargeReserved(player, island, def, next, reservation);
+                    case IN_PROGRESS -> {
+                        refreshPending(island.id());
+                        yield done(PurchaseResult.IN_PROGRESS);
+                    }
+                    case TIER_CHANGED -> done(PurchaseResult.TIER_CHANGED);
+                    case FAILED -> done(PurchaseResult.FAILED);
+                });
+    }
+
+    // main thread, with the tier reserved: charge, then start the timer or finish an instant tier
+    private CompletableFuture<PurchaseResult> chargeReserved(Player player, Island island, UpgradeDef def,
+                                                             UpgradeTier next, PendingUpgrade reservation) {
+        if (!player.isOnline() || !plugin.currency().canAfford(player, next.cost())
+                || !plugin.currency().charge(player, next.cost())) {
+            plugin.writeAsync(() -> plugin.storage().deletePending(island.id(), def.key()));
+            return done(PurchaseResult.CANT_AFFORD);
         }
-        if (next.isInstant()) {
-            setTier(island, def, current + 1);
+        if (!next.isInstant()) {
+            pending.put(pkey(island.id(), def.key()), reservation);
             // fired on purchase, not completion: a timed upgrade can finish with nobody online, and a trigger
             // needs a player
             com.mystipixel.royalskyblock.libreforge.IslandTriggers.upgradePurchased(
-                    player, def.key(), current + 1);
-            return PurchaseResult.COMPLETED;
+                    player, def.key(), reservation.targetTier());
+            return done(PurchaseResult.STARTED);
         }
-        PendingUpgrade pu = new PendingUpgrade(island.id(), def.key(), current + 1,
-                System.currentTimeMillis() + next.timeSeconds() * 1000L);
-        pending.put(pkey(island.id(), def.key()), pu);
-        plugin.storage().savePending(pu);
-        com.mystipixel.royalskyblock.libreforge.IslandTriggers.upgradePurchased(
-                player, def.key(), current + 1);
-        return PurchaseResult.STARTED;
+        Integer radius = radiusFor(def, reservation.targetTier());
+        return onDb("finish upgrade", () -> plugin.storage().completePending(reservation, radius))
+                .thenApply(completed -> {
+                    if (!completed) {
+                        plugin.currency().refund(player, next.cost());
+                        return PurchaseResult.FAILED;
+                    }
+                    applyTier(island, def, reservation.targetTier());
+                    com.mystipixel.royalskyblock.libreforge.IslandTriggers.upgradePurchased(
+                            player, def.key(), reservation.targetTier());
+                    return PurchaseResult.COMPLETED;
+                });
     }
 
-    /** Pay the skip cost to finish an in-progress upgrade immediately. */
-    public PurchaseResult skip(Player player, Island island, UpgradeDef def) {
-        PendingUpgrade pu = pendingFor(island, def);
-        if (pu == null) {
-            return PurchaseResult.NOT_IN_PROGRESS;
-        }
-        UpgradeTier target = def.tier(pu.targetTier());
-        Cost skipCost = target != null ? target.skipCost() : new Cost("", 0);
-        if (!plugin.currency().canAfford(player, skipCost) || !plugin.currency().charge(player, skipCost)) {
-            return PurchaseResult.CANT_AFFORD;
-        }
-        completePending(island, def, pu);
-        return PurchaseResult.COMPLETED;
+    /** Pay the skip cost to finish an in-progress upgrade now. The future completes on the main thread. */
+    public CompletableFuture<PurchaseResult> skip(Player player, Island island, UpgradeDef def) {
+        UUID islandId = island.id();
+        return onDb("read upgrade timer", () -> plugin.storage().getPending(islandId)).thenCompose(rows -> {
+            PendingUpgrade pu = rows.stream().filter(p -> p.upgradeKey().equals(def.key())).findFirst().orElse(null);
+            if (pu == null) {
+                pending.remove(pkey(islandId, def.key()));
+                return done(PurchaseResult.NOT_IN_PROGRESS);
+            }
+            UpgradeTier target = def.tier(pu.targetTier());
+            Cost skipCost = target != null ? target.skipCost() : new Cost("", 0);
+            if (!player.isOnline() || !plugin.currency().canAfford(player, skipCost)
+                    || !plugin.currency().charge(player, skipCost)) {
+                return done(PurchaseResult.CANT_AFFORD);
+            }
+            Integer radius = radiusFor(def, pu.targetTier());
+            return onDb("finish upgrade", () -> plugin.storage().completePending(pu, radius)).thenApply(completed -> {
+                if (!completed) {
+                    // the timer ran out and the hosting server finished it meanwhile
+                    plugin.currency().refund(player, skipCost);
+                    refreshPending(islandId);
+                    return PurchaseResult.NOT_IN_PROGRESS;
+                }
+                finished(pu);
+                return PurchaseResult.COMPLETED;
+            });
+        });
     }
 
-    private void completePending(Island island, UpgradeDef def, PendingUpgrade pu) {
-        pending.remove(pkey(island.id(), def.key()));
-        plugin.storage().deletePending(island.id(), def.key());
-        setTier(island, def, pu.targetTier());
+    // main thread: an upgrade finished in the database; apply it to the cached island and tell its members
+    private void finished(PendingUpgrade pu) {
+        pending.remove(pkey(pu.islandId(), pu.upgradeKey()));
+        UpgradeDef def = get(pu.upgradeKey());
+        Island island;
+        try {
+            island = plugin.islands().getIsland(pu.islandId());
+        } catch (StorageException e) {
+            // the tier is saved; the version poll brings it into the cache once the store answers
+            plugin.getLogger().warning("Finished upgrade " + pu.upgradeKey() + " on " + pu.islandId()
+                    + " could not be applied here yet: " + e.getMessage());
+            return;
+        }
+        if (def == null || island == null) {
+            return;
+        }
+        applyTier(island, def, pu.targetTier());
         notifyMembers(island, def, pu.targetTier());
     }
 
-    /** Called on a repeating task: finish any upgrades whose timer has elapsed. Main thread. */
+    /**
+     * Called on a repeating task: finishes the elapsed upgrades of the islands loaded here, on the database
+     * thread. An island loaded nowhere keeps its row until a server loads it. Main thread.
+     */
     public void tick() {
-        if (pending.isEmpty()) {
+        long now = System.currentTimeMillis();
+        // countdowns well past their end were finished somewhere (or will be when their island loads)
+        pending.values().removeIf(p -> p.completeAt() < now - 10_000L);
+        Set<UUID> hosted = plugin.islands().hostedIslandIds();
+        if (ticking || hosted.isEmpty()) {
             return;
         }
-        long now = System.currentTimeMillis();
-        for (PendingUpgrade pu : new ArrayList<>(pending.values())) {
-            if (!pu.isDone(now)) {
-                continue;
-            }
-            UpgradeDef def = get(pu.upgradeKey());
-            Island island;
-            try {
-                island = plugin.islands().getIsland(pu.islandId());
-            } catch (StorageException e) {
-                // the store can't answer right now; keep the paid upgrade and retry next tick
-                plugin.getLogger().warning("Deferring finished upgrades: " + e.getMessage());
+        ticking = true;
+        Map<String, UpgradeDef> defs = Map.copyOf(upgrades);
+        Storage storage = plugin.storage();
+        onDb("finish upgrades", () -> claimDue(storage, now, hosted, defs)).whenComplete((completed, error) -> {
+            ticking = false;
+            if (error != null) {
+                plugin.getLogger().warning("Could not finish elapsed upgrades: " + error.getMessage());
                 return;
             }
-            if (def == null || island == null) {
-                pending.remove(pkey(pu.islandId(), pu.upgradeKey()));
-                plugin.storage().deletePending(pu.islandId(), pu.upgradeKey());
+            completed.forEach(this::finished);
+        });
+    }
+
+    /**
+     * Database thread: finishes every elapsed upgrade of the given islands. Only the server that removes a
+     * row applies it, so an upgrade finishes (and notifies) once even when two servers race.
+     *
+     * @return the upgrades this call finished
+     */
+    static List<PendingUpgrade> claimDue(Storage storage, long now, Collection<UUID> hosted,
+                                        Map<String, UpgradeDef> defs) {
+        List<PendingUpgrade> completed = new ArrayList<>();
+        for (PendingUpgrade p : storage.duePending(now, hosted)) {
+            UpgradeDef def = defs.get(p.upgradeKey());
+            if (def == null) {
+                // the track was removed from the config: drop the timer, there is no tier to apply
+                storage.deletePending(p.islandId(), p.upgradeKey());
                 continue;
             }
-            completePending(island, def, pu);
+            if (storage.completePending(p, radiusFor(def, p.targetTier()))) {
+                completed.add(p);
+            }
         }
+        return completed;
+    }
+
+    static @Nullable Integer radiusFor(UpgradeDef def, int tier) {
+        if (def.effect() != UpgradeEffect.RADIUS) {
+            return null;
+        }
+        double value = def.valueAt(tier);
+        return value > 0 ? (int) value : null;
     }
 
     private void notifyMembers(Island island, UpgradeDef def, int tier) {
@@ -231,23 +364,24 @@ public final class UpgradeManager {
         return upgrades.values();
     }
 
-    /** Set an island's tier for an upgrade, persist it, and apply the effect. */
+    /** Set an island's tier for an upgrade (an admin command), persist it, and apply the effect. */
     public void setTier(Island island, UpgradeDef def, int tier) {
-        island.setUpgradeTier(def.key(), tier);
-        Integer radius = null;
-        if (def.effect() == UpgradeEffect.RADIUS) {
-            double value = def.valueAt(tier);
-            if (value > 0) {
-                radius = (int) value;
-                island.setRadius(radius);
-                reapplyBorder(island);
-            }
+        applyTier(island, def, tier);
+        Integer radius = radiusFor(def, tier);
+        plugin.writeAsync(() -> plugin.storage().updateIslandUpgradeTier(island.id(), def.key(), tier, radius));
+    }
+
+    // a tier already saved: set it on the cached island and run its effects here
+    private void applyTier(Island island, UpgradeDef def, int tier) {
+        island.setUpgradeTier(def.key(), Math.max(tier, island.upgradeTier(def.key())));
+        Integer radius = radiusFor(def, tier);
+        if (radius != null) {
+            island.setRadius(radius);
+            reapplyBorder(island);
         }
         // the new tier may carry a libreforge effect chain, and libreforge caches a player's holders
         refreshHoldersOnIsland(island);
         runUnlockCommands(island, def, tier);
-        Integer newRadius = radius;
-        plugin.writeAsync(() -> plugin.storage().updateIslandUpgradeTier(island.id(), def.key(), tier, newRadius));
     }
 
     // The owner's real player name, or "" if unresolved. Never the profile name: that's a label the

@@ -221,6 +221,13 @@ public final class Island {
         return merged.serializeUpgrades();
     }
 
+    /** One tier read from a serialized upgrades value, 0 when the key is absent. */
+    public static int upgradeTierIn(String serialized, String key) {
+        Island parsed = new Island(new UUID(0, 0), new UUID(0, 0), "", 0);
+        parsed.loadUpgrades(serialized);
+        return parsed.upgradeTier(key);
+    }
+
     /** Load overrides from the serialized {@code settings} column value. */
     public void loadSettings(String serialized) {
         settings.clear();

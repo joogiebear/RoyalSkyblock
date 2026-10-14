@@ -362,9 +362,6 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             papiRegistered = RoyalSkyblockExpansion(this, resolver).register()
         }
 
-        // resume in-progress upgrade timers and complete any that elapsed while offline
-        upgradeManager!!.loadPending()
-
         // Offline simulation: the scanner dispatches a returning island's blocks to registered
         // BlockSimulators. Non-block things (minions) listen to IslandCatchupEvent instead.
         val scanner = islandScanner!!

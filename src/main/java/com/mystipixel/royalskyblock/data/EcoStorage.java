@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.LinkedHashSet;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -586,7 +587,7 @@ public final class EcoStorage implements Storage {
         return derived("rsb-data", profileId + ":" + playerUuid);
     }
 
-    @Override
+    /** Every pending upgrade; the SQLite import checks its copy with it. */
     public List<PendingUpgrade> getAllPending() {
         List<PendingUpgrade> out = new ArrayList<>();
         for (String id : readIndex(pendingIndexKey)) {
@@ -610,8 +611,8 @@ public final class EcoStorage implements Storage {
         return out;
     }
 
-    @Override
-    public boolean savePending(PendingUpgrade p) {
+    /** Writes a pending upgrade as is; the SQLite import uses it. */
+    public synchronized boolean savePending(PendingUpgrade p) {
         List<PendingUpgrade> current = readPending(p.islandId());
         current.removeIf(existing -> existing.upgradeKey().equals(p.upgradeKey()));
         current.add(p);
@@ -620,11 +621,64 @@ public final class EcoStorage implements Storage {
     }
 
     @Override
-    public void deletePending(UUID islandId, String upgradeKey) {
+    public synchronized ReserveResult reservePending(PendingUpgrade p, int expectedTier) {
+        Island island = getIsland(p.islandId());
+        if (island == null) {
+            return ReserveResult.FAILED;
+        }
+        if (island.upgradeTier(p.upgradeKey()) != expectedTier) {
+            return ReserveResult.TIER_CHANGED;
+        }
+        List<PendingUpgrade> current = readPending(p.islandId());
+        if (current.stream().anyMatch(existing -> existing.upgradeKey().equals(p.upgradeKey()))) {
+            return ReserveResult.IN_PROGRESS;
+        }
+        current.add(p);
+        writePending(p.islandId(), current);
+        return ReserveResult.RESERVED;
+    }
+
+    @Override
+    public List<PendingUpgrade> getPending(UUID islandId) {
+        return readPending(islandId);
+    }
+
+    @Override
+    public List<PendingUpgrade> duePending(long now, Collection<UUID> islandIds) {
+        List<PendingUpgrade> out = new ArrayList<>();
+        for (UUID islandId : islandIds) {
+            for (PendingUpgrade p : readPending(islandId)) {
+                if (p.isDone(now)) {
+                    out.add(p);
+                }
+            }
+        }
+        return out;
+    }
+
+    @Override
+    public synchronized int deletePending(UUID islandId, String upgradeKey) {
         List<PendingUpgrade> current = readPending(islandId);
         if (current.removeIf(existing -> existing.upgradeKey().equals(upgradeKey))) {
             writePending(islandId, current);
+            return 1;
         }
+        return 0;
+    }
+
+    @Override
+    public synchronized boolean completePending(PendingUpgrade p, @Nullable Integer radius) {
+        List<PendingUpgrade> current = readPending(p.islandId());
+        if (!current.removeIf(existing -> existing.upgradeKey().equals(p.upgradeKey())
+                && existing.targetTier() == p.targetTier())) {
+            return false;
+        }
+        writePending(p.islandId(), current);
+        Island island = getIsland(p.islandId());
+        if (island != null && island.upgradeTier(p.upgradeKey()) < p.targetTier()) {
+            updateIslandUpgradeTier(p.islandId(), p.upgradeKey(), p.targetTier(), radius);
+        }
+        return true;
     }
 
     private void writePending(UUID islandId, List<PendingUpgrade> pending) {

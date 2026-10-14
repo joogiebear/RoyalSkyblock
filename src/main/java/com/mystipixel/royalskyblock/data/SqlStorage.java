@@ -6,6 +6,7 @@ import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileData;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
+import com.mystipixel.royalskyblock.upgrade.PendingUpgrade;
 import com.mystipixel.royalcommon.storage.PlayerHandoff;
 import com.mystipixel.royalcommon.storage.SchemaTooNewException;
 import com.mystipixel.royalcommon.storage.SchemaVersion;
@@ -859,51 +860,149 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    public List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> getAllPending() {
-        List<com.mystipixel.royalskyblock.upgrade.PendingUpgrade> out = new ArrayList<>();
+    private static final String PENDING_COLUMNS = "island_id, upgrade_key, target_tier, complete_at";
+
+    @Override
+    public ReserveResult reservePending(PendingUpgrade p, int expectedTier) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                String upgrades;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT upgrades FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, p.islandId().toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        if (!rs.next()) {
+                            return ReserveResult.FAILED;
+                        }
+                        upgrades = rs.getString(1);
+                    }
+                }
+                if (Island.upgradeTierIn(upgrades, p.upgradeKey()) != expectedTier) {
+                    return ReserveResult.TIER_CHANGED;
+                }
+                try (PreparedStatement st = c.prepareStatement(t.dialect().insertIgnore()
+                        + " INTO pending_upgrades (" + PENDING_COLUMNS + ") VALUES (?,?,?,?)")) {
+                    st.setString(1, p.islandId().toString());
+                    st.setString(2, p.upgradeKey());
+                    st.setInt(3, p.targetTier());
+                    st.setLong(4, p.completeAt());
+                    return st.executeUpdate() > 0 ? ReserveResult.RESERVED : ReserveResult.IN_PROGRESS;
+                }
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not reserve upgrade " + p.upgradeKey() + " on island " + p.islandId() + ": "
+                    + e.getMessage());
+            return ReserveResult.FAILED;
+        }
+    }
+
+    @Override
+    public List<PendingUpgrade> getPending(UUID islandId) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(
-                     "SELECT island_id, upgrade_key, target_tier, complete_at FROM pending_upgrades");
-             ResultSet rs = st.executeQuery()) {
-            while (rs.next()) {
-                out.add(new com.mystipixel.royalskyblock.upgrade.PendingUpgrade(
-                        UUID.fromString(rs.getString("island_id")), rs.getString("upgrade_key"),
-                        rs.getInt("target_tier"), rs.getLong("complete_at")));
+                     "SELECT " + PENDING_COLUMNS + " FROM pending_upgrades WHERE island_id = ?")) {
+            st.setString(1, islandId.toString());
+            return readPendingRows(st);
+        } catch (SQLException e) {
+            logger.severe("Could not load the upgrades cooking on island " + islandId + ": " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    @Override
+    public List<PendingUpgrade> duePending(long now, Collection<UUID> islandIds) {
+        List<PendingUpgrade> out = new ArrayList<>();
+        List<UUID> ids = List.copyOf(islandIds);
+        try (Connection c = dataSource.getConnection()) {
+            for (int from = 0; from < ids.size(); from += 500) {
+                List<UUID> chunk = ids.subList(from, Math.min(ids.size(), from + 500));
+                String sql = "SELECT " + PENDING_COLUMNS + " FROM pending_upgrades WHERE complete_at <= ?"
+                        + " AND island_id IN (" + String.join(",", java.util.Collections.nCopies(chunk.size(), "?"))
+                        + ")";
+                try (PreparedStatement st = c.prepareStatement(sql)) {
+                    st.setLong(1, now);
+                    for (int i = 0; i < chunk.size(); i++) {
+                        st.setString(i + 2, chunk.get(i).toString());
+                    }
+                    out.addAll(readPendingRows(st));
+                }
             }
         } catch (SQLException e) {
-            logger.severe("Could not load pending upgrades: " + e.getMessage());
+            logger.severe("Could not load finished upgrades: " + e.getMessage());
+            return List.of();
         }
         return out;
     }
 
-    public boolean savePending(com.mystipixel.royalskyblock.upgrade.PendingUpgrade p) {
-        String sql = mysql()
-                ? "INSERT INTO pending_upgrades (island_id, upgrade_key, target_tier, complete_at) VALUES (?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE target_tier=VALUES(target_tier), complete_at=VALUES(complete_at)"
-                : "INSERT INTO pending_upgrades (island_id, upgrade_key, target_tier, complete_at) VALUES (?,?,?,?) "
-                + "ON CONFLICT(island_id, upgrade_key) DO UPDATE SET target_tier=excluded.target_tier, complete_at=excluded.complete_at";
-        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
-            st.setString(1, p.islandId().toString());
-            st.setString(2, p.upgradeKey());
-            st.setInt(3, p.targetTier());
-            st.setLong(4, p.completeAt());
-            st.executeUpdate();
-            return true;
-        } catch (SQLException e) {
-            logger.severe("Could not save pending upgrade: " + e.getMessage());
-            return false;
+    private static List<PendingUpgrade> readPendingRows(PreparedStatement st) throws SQLException {
+        List<PendingUpgrade> out = new ArrayList<>();
+        try (ResultSet rs = st.executeQuery()) {
+            while (rs.next()) {
+                out.add(new PendingUpgrade(UUID.fromString(rs.getString("island_id")), rs.getString("upgrade_key"),
+                        rs.getInt("target_tier"), rs.getLong("complete_at")));
+            }
         }
+        return out;
     }
 
-    public void deletePending(UUID islandId, String upgradeKey) {
+    @Override
+    public int deletePending(UUID islandId, String upgradeKey) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(
                      "DELETE FROM pending_upgrades WHERE island_id = ? AND upgrade_key = ?")) {
             st.setString(1, islandId.toString());
             st.setString(2, upgradeKey);
-            st.executeUpdate();
+            return st.executeUpdate();
         } catch (SQLException e) {
             logger.severe("Could not delete pending upgrade: " + e.getMessage());
+            return 0;
+        }
+    }
+
+    @Override
+    public boolean completePending(PendingUpgrade p, @Nullable Integer radius) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                // the island row first, in the same order as reservePending, so the two never deadlock
+                String upgrades;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT upgrades FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, p.islandId().toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        upgrades = rs.next() ? rs.getString(1) : null;
+                    }
+                }
+                try (PreparedStatement st = c.prepareStatement("DELETE FROM pending_upgrades"
+                        + " WHERE island_id = ? AND upgrade_key = ? AND target_tier = ?")) {
+                    st.setString(1, p.islandId().toString());
+                    st.setString(2, p.upgradeKey());
+                    st.setInt(3, p.targetTier());
+                    if (st.executeUpdate() == 0) {
+                        return false;
+                    }
+                }
+                if (upgrades == null || Island.upgradeTierIn(upgrades, p.upgradeKey()) >= p.targetTier()) {
+                    return true;
+                }
+                String sql = "UPDATE islands SET upgrades = ?" + (radius != null ? ", radius = ?" : "")
+                        + ", version = version + 1 WHERE id = ?";
+                try (PreparedStatement st = c.prepareStatement(sql)) {
+                    int i = 1;
+                    st.setString(i++, Island.withUpgradeTier(upgrades, p.upgradeKey(), p.targetTier()));
+                    if (radius != null) {
+                        st.setInt(i++, radius);
+                    }
+                    st.setString(i, p.islandId().toString());
+                    st.executeUpdate();
+                }
+                return true;
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not finish upgrade " + p.upgradeKey() + " on island " + p.islandId() + ": "
+                    + e.getMessage());
+            return false;
         }
     }
 

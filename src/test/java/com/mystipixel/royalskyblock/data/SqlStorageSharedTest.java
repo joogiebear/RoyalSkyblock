@@ -7,6 +7,7 @@ import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
+import com.mystipixel.royalskyblock.upgrade.PendingUpgrade;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -224,6 +225,69 @@ class SqlStorageSharedTest {
         assertEquals(75, read.radius());
         assertTrue(read.serializeSettings().contains("pvp=1"));
         assertTrue(read.serializeSettings().contains("listed=0"));
+    }
+
+    @Test
+    void reservePendingRefusesASecondReservationAndAStaleTier() {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        Island island = newIsland(a);
+        PendingUpgrade first = new PendingUpgrade(island.id(), "size", 1, 1_000L);
+        assertEquals(Storage.ReserveResult.RESERVED, a.reservePending(first, 0));
+        assertEquals(Storage.ReserveResult.IN_PROGRESS,
+                b.reservePending(new PendingUpgrade(island.id(), "size", 1, 2_000L), 0));
+        assertEquals(Storage.ReserveResult.RESERVED,
+                b.reservePending(new PendingUpgrade(island.id(), "generator", 1, 2_000L), 0));
+        assertTrue(b.completePending(first, 75));
+        assertFalse(a.completePending(first, 75));
+        Island read = a.getIsland(island.id());
+        assertEquals(1, read.upgradeTier("size"));
+        assertEquals(75, read.radius());
+        // a server that still sees tier 0 can't sell tier 1 again
+        assertEquals(Storage.ReserveResult.TIER_CHANGED,
+                b.reservePending(new PendingUpgrade(island.id(), "size", 1, 3_000L), 0));
+        assertEquals(Storage.ReserveResult.FAILED,
+                a.reservePending(new PendingUpgrade(UUID.randomUUID(), "size", 1, 3_000L), 0));
+    }
+
+    @Test
+    void completePendingNeverLowersATier() {
+        SqlStorage a = open("a");
+        Island island = newIsland(a);
+        PendingUpgrade p = new PendingUpgrade(island.id(), "size", 1, 0L);
+        assertEquals(Storage.ReserveResult.RESERVED, a.reservePending(p, 0));
+        a.updateIslandUpgradeTier(island.id(), "size", 3, 90);
+        assertTrue(a.completePending(p, 75));
+        Island read = a.getIsland(island.id());
+        assertEquals(3, read.upgradeTier("size"));
+        assertEquals(90, read.radius());
+        assertTrue(a.getPending(island.id()).isEmpty());
+    }
+
+    @Test
+    void duePendingOnlyListsTheGivenIslands() {
+        SqlStorage a = open("a");
+        Island hosted = newIsland(a);
+        Island elsewhere = newIsland(a);
+        a.reservePending(new PendingUpgrade(hosted.id(), "size", 1, 100L), 0);
+        a.reservePending(new PendingUpgrade(hosted.id(), "generator", 1, 900L), 0);
+        a.reservePending(new PendingUpgrade(elsewhere.id(), "size", 1, 100L), 0);
+        List<PendingUpgrade> due = a.duePending(500L, List.of(hosted.id()));
+        assertEquals(List.of(new PendingUpgrade(hosted.id(), "size", 1, 100L)), due);
+        assertEquals(2, a.duePending(1_000L, List.of(hosted.id())).size());
+        assertEquals(3, a.duePending(1_000L, List.of(hosted.id(), elsewhere.id())).size());
+        assertTrue(a.duePending(1_000L, List.of()).isEmpty());
+        assertEquals(2, a.getPending(hosted.id()).size());
+    }
+
+    @Test
+    void deletePendingReportsWhetherItRemovedAnything() {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        Island island = newIsland(a);
+        a.reservePending(new PendingUpgrade(island.id(), "size", 1, 100L), 0);
+        assertEquals(1, b.deletePending(island.id(), "size"));
+        assertEquals(0, a.deletePending(island.id(), "size"));
     }
 
     @Test
