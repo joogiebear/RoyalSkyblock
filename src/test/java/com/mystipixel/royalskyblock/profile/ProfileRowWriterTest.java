@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -216,5 +217,60 @@ class ProfileRowWriterTest {
         mainThread.join(5000);
 
         assertEquals(List.of(periodic, quit), storage.saved());
+    }
+
+    @Test
+    @DisplayName("a queued save is readable until it is written")
+    void pendingUntilWritten() {
+        Recorder storage = new Recorder();
+        HeldExecutor background = new HeldExecutor();
+        ProfileRowWriter writer = new ProfileRowWriter(storage.storage(), background);
+        ProfileData first = row(1);
+        ProfileData second = row(2);
+
+        writer.saveLater(PROFILE, PLAYER, first);
+        writer.saveLater(PROFILE, PLAYER, second);
+        assertSame(second, writer.pending(PROFILE, PLAYER));
+        assertNull(writer.pending(OTHER_PROFILE, PLAYER));
+
+        background.runAll();
+        assertNull(writer.pending(PROFILE, PLAYER));
+    }
+
+    @Test
+    @DisplayName("a queued quit save is written, then the player's rows are dropped behind it")
+    void queuedQuitThenForget() {
+        Recorder storage = new Recorder();
+        HeldExecutor background = new HeldExecutor();
+        ProfileRowWriter writer = new ProfileRowWriter(storage.storage(), background);
+        ProfileData stale = row(1);
+        ProfileData quit = row(2);
+
+        writer.saveLater(PROFILE, PLAYER, stale);
+        writer.saveLater(PROFILE, PLAYER, quit);
+        writer.forgetQueued(PLAYER);
+        assertEquals(1, writer.trackedRows(), "dropped only once the storage thread gets there");
+
+        background.runAll();
+        assertEquals(List.of(quit), storage.saved());
+        assertEquals(0, writer.trackedRows());
+    }
+
+    @Test
+    @DisplayName("a rejoin before a queued quit is written keeps the new session's row")
+    void rejoinBeforeQueuedForget() {
+        Recorder storage = new Recorder();
+        HeldExecutor background = new HeldExecutor();
+        ProfileRowWriter writer = new ProfileRowWriter(storage.storage(), background);
+        ProfileData quit = row(1);
+        ProfileData nextSession = row(2);
+
+        writer.saveLater(PROFILE, PLAYER, quit);
+        writer.forgetQueued(PLAYER);
+        writer.saveLater(PROFILE, PLAYER, nextSession);
+        background.runAll();
+
+        assertEquals(List.of(nextSession), storage.saved());
+        assertEquals(1, writer.trackedRows(), "the new session's row is still tracked");
     }
 }

@@ -324,11 +324,11 @@ public final class ProfileManager {
             Profile coop = joinedCoop(uuid, active, profiles, storage::getProfile);
             ProfileData data = null;
             if (coop != null) {
-                data = storage.getProfileData(coop.id(), uuid);
+                data = state.savedData(coop.id(), uuid);
             } else if (!profiles.isEmpty()) {
                 UUID resolved = active != null && profiles.stream().anyMatch(p -> p.id().equals(active))
                         ? active : profiles.get(0).id();
-                data = storage.getProfileData(resolved, uuid);
+                data = state.savedData(resolved, uuid);
             }
             preloaded.put(uuid, new Preloaded(profiles, active, coop, data, storage.getCoopPayouts(uuid)));
         } catch (Exception e) {
@@ -454,13 +454,32 @@ public final class ProfileManager {
         state.load(player, active, ready.data());
     }
 
-    /** On quit: save the player's live state into their active profile. Main thread. */
+    /**
+     * On quit: save the player's live state into their active profile. The row is written on the database thread,
+     * ahead of the handoff release queued after it. Main thread.
+     */
     public void handleQuit(Player player) {
+        quit(player, false);
+    }
+
+    /** As {@link #handleQuit}, but the row is written before this returns. For plugin disable. */
+    public void handleShutdown(Player player) {
+        quit(player, true);
+    }
+
+    private void quit(Player player, boolean shuttingDown) {
         UUID active = getActiveProfileId(player.getUniqueId());
-        if (active != null) {
-            state.save(player, active);
+        if (shuttingDown) {
+            if (active != null) {
+                state.save(player, active);
+            }
+            state.rows().forget(player.getUniqueId());
+        } else {
+            if (active != null) {
+                state.saveQueued(player, active);
+            }
+            state.rows().forgetQueued(player.getUniqueId());
         }
-        state.rows().forget(player.getUniqueId());
         saveRequests.forget(player.getUniqueId());
         activeProfile.remove(player.getUniqueId());
         // A second login may have preloaded before this session's save above; applying it on join would hand
@@ -598,7 +617,7 @@ public final class ProfileManager {
         }
 
         if (current != null) {
-            state.save(player, current);
+            state.saveQueued(player, current);
         }
         storage.setActiveProfile(uuid, targetId);
         activeProfile.put(uuid, targetId);
@@ -1024,7 +1043,7 @@ public final class ProfileManager {
                 plugin.messages().send(player, "coop.payout-coins", "amount", plugin.bank().money(paid), "profile", name);
             }
 
-            ProfileData row = storage.getProfileData(from, uuid);
+            ProfileData row = state.savedData(from, uuid);
             if (row != null) {
                 List<org.bukkit.inventory.ItemStack> items = state.itemsOf(row);
                 if (items == null) {

@@ -548,7 +548,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         profileManager?.let { profiles ->
             for (player in server.onlinePlayers) {
                 try {
-                    profiles.handleQuit(player)
+                    profiles.handleShutdown(player)
                     savedPlayers++
                 } catch (e: Exception) {
                     logger.warning("Failed to save ${player.name} on shutdown: ${e.message}")
