@@ -545,6 +545,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         // normal async saves won't run.
         var savedPlayers = 0
         var savedIslands = 0
+        // bank refunds and payouts first, so what they hand back is in the inventories saved below
+        bankService?.finishPending()
         profileManager?.let { profiles ->
             for (player in server.onlinePlayers) {
                 try {
