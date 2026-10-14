@@ -90,10 +90,14 @@ final class ProfileRowWriter {
         }
         synchronized (slot) {
             if (slot.latest.get() == ticket && storage.saveProfileData(key.profileId(), key.player(), data)) {
-                Pending pending = slot.pending;
-                if (pending != null && pending.ticket() == ticket) {
-                    slot.pending = null;
-                }
+                // under the map's lock, like take(), so a save queued meanwhile is not cleared
+                slots.computeIfPresent(key, (k, current) -> {
+                    Pending pending = current.pending;
+                    if (pending != null && pending.ticket() == ticket) {
+                        current.pending = null;
+                    }
+                    return current;
+                });
             }
         }
     }

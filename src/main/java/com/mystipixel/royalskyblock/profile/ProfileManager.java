@@ -694,7 +694,8 @@ public final class ProfileManager {
 
         // The island's host claim comes first: while a member has it loaded on another server the delete is
         // refused there, and nothing below may have happened by then.
-        Island island = plugin.islands().getIslandByProfile(targetId);
+        // fresh: a coop member on another server may have just created the island
+        Island island = plugin.islands().getIslandByProfileFresh(targetId);
         CompletableFuture<Void> claimed = island != null
                 ? plugin.islands().claimForDelete(island.id())
                 : CompletableFuture.completedFuture(null);

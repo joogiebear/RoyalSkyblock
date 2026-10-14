@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -364,6 +365,7 @@ public final class BankService {
         }
         // items are taken now, not after: the player could log out (their inventory already saved) before it ends
         List<ItemStack> taken = removeItems(purse, next.itemRequirements());
+        UUID profile = plugin.profiles().getActiveProfileId(purse.getUniqueId());
         String note = note("upgrade", "level", next.name());
         return transact(id, locked -> {
             BankLevel now = levels.getNextLevel(locked.level()).orElse(null);
@@ -375,7 +377,7 @@ public final class BankService {
         }).thenApply(outcome -> {
             if (!outcome.written()) {
                 vault.deposit(purse, next.upgradeMoneyCost());
-                giveBack(purse, taken);
+                giveBack(purse, profile, taken);
                 return outcome.failed() ? result("upgrade.refunded") : outcome.refusal();
             }
             return null;
@@ -383,13 +385,14 @@ public final class BankService {
     }
 
     // the items of a refused upgrade; whatever no longer fits is dropped at the player's feet
-    private void giveBack(Player player, List<ItemStack> items) {
+    private void giveBack(Player player, @Nullable UUID profile, List<ItemStack> items) {
         if (items.isEmpty()) {
             return;
         }
-        if (!player.isOnline()) {
+        // a switched profile has its own inventory, so the items must not land in that one
+        if (!player.isOnline() || !Objects.equals(profile, plugin.profiles().getActiveProfileId(player.getUniqueId()))) {
             plugin.getLogger().severe("A bank upgrade for " + player.getName() + " (" + player.getUniqueId()
-                    + ") was refused after they logged out; give back by hand: " + items);
+                    + ") was refused after they logged out or switched profile; give back by hand: " + items);
             return;
         }
         for (ItemStack left : player.getInventory().addItem(items.toArray(new ItemStack[0])).values()) {
