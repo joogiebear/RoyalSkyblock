@@ -54,6 +54,10 @@ public final class UpgradeManager {
     private final Map<UUID, Long> pendingFetchedAt = new ConcurrentHashMap<>();
     // set and cleared on the main thread only
     private volatile boolean ticking;
+    // ticks since the last pass; with no timer known to be due, the database is asked only every few seconds
+    // (for timers started on other servers)
+    private int idleTicks;
+    private static final int IDLE_PASS_EVERY = 5;
 
     public UpgradeManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -243,6 +247,12 @@ public final class UpgradeManager {
         if (ticking || hosted.isEmpty()) {
             return;
         }
+        boolean knownDue = pending.values().stream()
+                .anyMatch(p -> p.completeAt() <= now && hosted.contains(p.islandId()));
+        if (!knownDue && ++idleTicks < IDLE_PASS_EVERY) {
+            return;
+        }
+        idleTicks = 0;
         ticking = true;
         Map<String, UpgradeDef> defs = Map.copyOf(upgrades);
         Storage storage = plugin.storage();
