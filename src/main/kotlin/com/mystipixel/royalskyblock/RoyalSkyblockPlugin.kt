@@ -479,6 +479,7 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         executor.submit("heartbeat", Runnable {
             try {
                 sql.handoff().heartbeat()
+                profileManager?.retryReleases()
                 sql.hosts().renewAll()
                 val lost = hosted - sql.hosts().heldBy()
                 if (lost.isNotEmpty()) {

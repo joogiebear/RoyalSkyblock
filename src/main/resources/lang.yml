@@ -88,6 +88,8 @@ messages:
 
   profile:
     header: "&6&lYour Profiles &7(%count%/%max%)"
+    # Login refused: the server the player just left (shared database) hasn't finished saving them.
+    still-saving: "&cServer &e%server%&c is still saving your data. Try again in a few seconds."
     line: "&8» &e%name% &7(%gamemode%)%active% &8- &7island: %has_island%"
     active-tag: " &a(active)"
     hint: "&7Use &e/is profile switch <name> &7or &e/is profile create <mode>&7."

@@ -422,4 +422,13 @@ class SqlStorageSharedTest {
         a.hosts().release(island);
         assertEquals(null, b.hosts().holderOf(island));
     }
+
+    @Test
+    void sqliteHandoffNeverWaits() throws Exception {
+        SqlStorage a = open("a");
+        UUID player = UUID.randomUUID();
+        a.handoff().markActive(player);
+        assertEquals(com.mystipixel.royalcommon.storage.PlayerHandoff.Status.SINGLE_SERVER,
+                open("b").handoff().awaitSaved(player, java.time.Duration.ofSeconds(5)).status());
+    }
 }

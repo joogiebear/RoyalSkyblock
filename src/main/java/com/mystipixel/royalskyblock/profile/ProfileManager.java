@@ -3,6 +3,7 @@ package com.mystipixel.royalskyblock.profile;
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.bank.BankService;
 import com.mystipixel.royalcommon.storage.DbExecutor;
+import com.mystipixel.royalcommon.storage.PlayerHandoff;
 import com.mystipixel.royalcommon.storage.VersionPoller;
 import com.mystipixel.royalskyblock.data.SqlStorage;
 import com.mystipixel.royalskyblock.data.Storage;
@@ -187,6 +188,98 @@ public final class ProfileManager {
 
     private final Map<UUID, Preloaded> preloaded = new ConcurrentHashMap<>();
 
+    // How long a joining player waits at the login screen for the server they left to finish saving them.
+    private static final java.time.Duration HANDOFF_WAIT = java.time.Duration.ofSeconds(5);
+
+    // players this server has marked ACTIVE in the hand-off table; guarded by itself, together with the
+    // markActive / markSaved call that changes it
+    private final java.util.Set<UUID> claimed = new java.util.HashSet<>();
+    // players whose release (markSaved) failed; the heartbeat retries them
+    private final java.util.Set<UUID> releasing = ConcurrentHashMap.newKeySet();
+
+    private @Nullable PlayerHandoff handoff() {
+        return storage instanceof SqlStorage sql ? sql.handoff() : null;
+    }
+
+    /**
+     * Before a login loads anything: waits for the server the player came from to finish saving them, then
+     * records that this server has them. Returns the server still holding them when the wait timed out (the
+     * login should be refused), else null. Off the main thread ({@code AsyncPlayerPreLoginEvent}).
+     */
+    public @Nullable String claimForLogin(UUID uuid) {
+        PlayerHandoff handoff = handoff();
+        if (handoff == null) {
+            return null;
+        }
+        try {
+            PlayerHandoff.Result wait = handoff.awaitSaved(uuid, HANDOFF_WAIT);
+            switch (wait.status()) {
+                case TIMED_OUT -> {
+                    plugin.getLogger().info("Refused " + uuid + ": server " + wait.holder()
+                            + " has not finished saving them yet.");
+                    return wait.holder() != null ? wait.holder() : "?";
+                }
+                case STALE -> plugin.getLogger().warning("Previous server " + wait.holder() + " of " + uuid
+                        + " stopped heartbeating; loading what it last saved.");
+                default -> {
+                }
+            }
+            markActive(handoff, uuid);
+        } catch (java.sql.SQLException e) {
+            plugin.getLogger().warning("Could not check where " + uuid + " was last saved; loading anyway: "
+                    + e.getMessage());
+        }
+        return null;
+    }
+
+    private void markActive(PlayerHandoff handoff, UUID uuid) throws java.sql.SQLException {
+        synchronized (claimed) {
+            handoff.markActive(uuid);
+            claimed.add(uuid);
+            releasing.remove(uuid);
+        }
+    }
+
+    // After the player's last write is queued: the database thread runs this after it, so the next server
+    // only loads once everything has landed. Skipped if they logged back in here meanwhile.
+    private void releaseHandoff(UUID uuid) {
+        PlayerHandoff handoff = handoff();
+        if (handoff == null) {
+            return;
+        }
+        synchronized (claimed) {
+            if (!claimed.remove(uuid)) {
+                return;
+            }
+        }
+        plugin.writeAsync(() -> markSaved(handoff, uuid));
+    }
+
+    private void markSaved(PlayerHandoff handoff, UUID uuid) {
+        synchronized (claimed) {
+            if (claimed.contains(uuid)) {
+                return;                         // back on this server already
+            }
+            try {
+                handoff.markSaved(uuid);
+                releasing.remove(uuid);
+            } catch (java.sql.SQLException e) {
+                releasing.add(uuid);
+                plugin.getLogger().warning("Could not record that " + uuid + " was saved; retrying: " + e.getMessage());
+            }
+        }
+    }
+
+    /** Retries releases that failed. On the database thread, from the heartbeat. */
+    public void retryReleases() {
+        PlayerHandoff handoff = handoff();
+        if (handoff != null) {
+            for (UUID uuid : List.copyOf(releasing)) {
+                markSaved(handoff, uuid);
+            }
+        }
+    }
+
     /**
      * Read a joining player's profiles and saved state before they enter the world. Called from
      * {@code AsyncPlayerPreLoginEvent}, off the main thread. Best-effort: if it fails or never runs,
@@ -217,9 +310,12 @@ public final class ProfileManager {
         return plugin.conf().getBoolean("settings.debug", false);
     }
 
-    /** Drop a preload for a player who never joined (failed login, kick at the door). */
+    /** Drop a preload for a player who never joined (failed login, kick at the door), and let them go. */
     public void discardPreload(UUID uuid) {
         preloaded.remove(uuid);
+        if (Bukkit.getPlayer(uuid) == null) {
+            releaseHandoff(uuid);               // never joined; after a normal quit this is already done
+        }
     }
 
     /** On join: ensure the player has a profile, then load its state onto them. Main thread. */
@@ -235,6 +331,19 @@ public final class ProfileManager {
                 deliverCoopPayouts(player);
             }
             return;
+        }
+        PlayerHandoff handoff = handoff();
+        boolean marked;
+        synchronized (claimed) {
+            marked = claimed.contains(uuid);
+        }
+        if (handoff != null && !marked) {
+            try {
+                markActive(handoff, uuid);
+            } catch (java.sql.SQLException e) {
+                plugin.getLogger().warning("Could not record that " + player.getName() + " is on this server: "
+                        + e.getMessage());
+            }
         }
         loadOnJoin(player);
         deliverCoopPayouts(player);
@@ -319,6 +428,7 @@ public final class ProfileManager {
         // A second login may have preloaded before this session's save above; applying it on join would hand
         // back items given away since.
         preloaded.remove(player.getUniqueId());
+        releaseHandoff(player.getUniqueId());
     }
 
     /**

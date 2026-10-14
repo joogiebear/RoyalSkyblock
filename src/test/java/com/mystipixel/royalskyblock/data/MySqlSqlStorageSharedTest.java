@@ -1,5 +1,6 @@
 package com.mystipixel.royalskyblock.data;
 
+import com.mystipixel.royalcommon.storage.PlayerHandoff;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -9,6 +10,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -123,5 +125,39 @@ class MySqlSqlStorageSharedTest extends SqlStorageSharedTest {
         assertTrue(System.nanoTime() - start >= 700_000_000L, "b took over before the claim expired");
         assertEquals(0, a.hosts().renewAll());
         assertEquals("b", a.hosts().holderOf(island));
+    }
+
+    @Override
+    @Test
+    void sqliteHandoffNeverWaits() {
+        // SQLite only
+    }
+
+    @Test
+    void theNextServerWaitsUntilTheLastOneSaved() throws Exception {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        UUID player = UUID.randomUUID();
+        assertEquals(PlayerHandoff.Status.NO_RECORD, b.handoff().awaitSaved(player, Duration.ofMillis(300)).status());
+        a.handoff().markActive(player);
+        long start = System.nanoTime();
+        PlayerHandoff.Result busy = b.handoff().awaitSaved(player, Duration.ofMillis(300));
+        assertEquals(PlayerHandoff.Status.TIMED_OUT, busy.status());
+        assertEquals("a", busy.holder());
+        assertTrue(System.nanoTime() - start < 2_000_000_000L);
+        assertTrue(a.handoff().markSaved(player));
+        assertEquals(PlayerHandoff.Status.SAVED, b.handoff().awaitSaved(player, Duration.ofMillis(300)).status());
+    }
+
+    @Test
+    void aDeadServersPlayersBecomeStale() throws Exception {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        UUID player = UUID.randomUUID();
+        a.handoff().markActive(player);
+        PlayerHandoff impatient = new PlayerHandoff(b.tx(), "rsb", "b", Duration.ofMillis(1500));
+        assertEquals(PlayerHandoff.Status.TIMED_OUT, impatient.awaitSaved(player, Duration.ofMillis(200)).status());
+        Thread.sleep(1700);
+        assertEquals(PlayerHandoff.Status.STALE, impatient.awaitSaved(player, Duration.ofMillis(200)).status());
     }
 }
