@@ -98,7 +98,9 @@ How it behaves:
 - **Shared data.** Island and profile changes are written column by column, so a change on one server
   never undoes one made on another; other servers pick it up within 5 seconds. Bank movements lock the
   account row, so a coop balance can't be spent twice from two servers.
-- **Upgrade timers** finish on the server hosting the island, or when it next loads.
+- **Upgrade timers** finish on the server hosting the island, or when it next loads. A purchase reserves
+  the tier before charging for it; if a server crashes in that instant, an instant tier is granted
+  unpaid about 5 minutes later.
 - **Schema.** The first server to start on a new plugin version migrates the database; the others wait
   for it. A server running an older plugin version than the database refuses to start.
 - Coop invites must be accepted on the server they were sent from, and the island trash stays on the
