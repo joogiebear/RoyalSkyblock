@@ -71,6 +71,11 @@ public final class ConfigValidator {
         if (!Set.of("file", "mysql", "mongo").contains(worldSrc)) {
             warnings.add("world.slime-data-source '" + worldSrc + "' is invalid; use 'file', 'mysql', or 'mongo'.");
         }
+        if (storage.equals("mysql") && worldSrc.equals("file")) {
+            warnings.add("storage.type is mysql but world.slime-data-source is file: island blocks stay on this"
+                    + " server's disk. If several servers share this database, set world.slime-data-source to"
+                    + " mysql too, or an island hosted on another server opens there with its blocks missing.");
+        }
 
         String borderColor = cfg.getString("island.border.color", "blue").toLowerCase(Locale.ROOT);
         if (!Set.of("off", "blue", "red", "green").contains(borderColor)) {

@@ -6,6 +6,10 @@ import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileData;
 import com.mystipixel.royalskyblock.profile.ProfileMember;
+import com.mystipixel.royalcommon.storage.PlayerHandoff;
+import com.mystipixel.royalcommon.storage.SchemaTooNewException;
+import com.mystipixel.royalcommon.storage.SchemaVersion;
+import com.mystipixel.royalcommon.storage.TxRunner;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.jetbrains.annotations.Nullable;
@@ -16,12 +20,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import javax.sql.DataSource;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
 import java.util.UUID;
+import java.time.Duration;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -37,12 +43,25 @@ public final class SqlStorage implements Storage {
     private final SqlSettings settings;
     private final Logger logger;
 
+    static final int SCHEMA_VERSION = 1;
+    // a player's row may sit ACTIVE this long without a heartbeat before another server treats it as abandoned
+    public static final Duration HANDOFF_STALE = Duration.ofSeconds(60);
+
     private Type type;
     private HikariDataSource dataSource;
+    private TxRunner tx;
+    private PlayerHandoff handoff;
+    private IslandHostLock hosts;
+    private Duration hostTtl = IslandHostLock.DEFAULT_TTL;
 
     public SqlStorage(SqlSettings settings, Logger logger) {
         this.settings = settings;
         this.logger = logger;
+    }
+
+    /** For tests: a shorter island host claim. Call before {@link #connect}. */
+    void hostTtl(Duration ttl) {
+        this.hostTtl = ttl;
     }
 
     public boolean connect() {
@@ -73,13 +92,62 @@ public final class SqlStorage implements Storage {
             hikari.setConnectionTimeout(10_000);
 
             this.dataSource = new HikariDataSource(hikari);
-            createTables();
-            logger.info("RoyalSkyblock connected to " + type + " storage.");
+            this.tx = new TxRunner(dataSource);
+            migrate();
+            this.handoff = new PlayerHandoff(tx, "rsb", settings.serverId(), HANDOFF_STALE);
+            handoff.createTable();
+            this.hosts = new IslandHostLock(tx, settings.serverId(), hostTtl);
+            hosts.createTable();
+            logger.info("RoyalSkyblock connected to " + type + " storage as server " + settings.serverId() + ".");
             return true;
+        } catch (SchemaTooNewException tooNew) {
+            logger.severe(tooNew.getMessage());
+            closePool();
+            return false;
         } catch (Exception exception) {
-            logger.severe("RoyalSkyblock storage init failed: " + exception.getMessage());
+            logger.log(Level.SEVERE, "RoyalSkyblock storage init failed: " + exception.getMessage(), exception);
+            closePool();
             return false;
         }
+    }
+
+    private void closePool() {
+        if (dataSource != null) {
+            dataSource.close();
+            dataSource = null;
+        }
+    }
+
+    // servers sharing a MySQL database that start together take turns here; the later ones find nothing to do
+    private void migrate() throws SQLException {
+        int before = new SchemaVersion(tx, "rsb").ensure(SCHEMA_VERSION, (c, dialect, from, to) -> {
+            if (from < 1) {
+                createTables(c);
+            }
+        });
+        if (before < SCHEMA_VERSION) {
+            logger.info("Database schema migrated from version " + before + " to " + SCHEMA_VERSION + ".");
+        }
+    }
+
+    public TxRunner tx() {
+        return tx;
+    }
+
+    public DataSource dataSource() {
+        return dataSource;
+    }
+
+    public PlayerHandoff handoff() {
+        return handoff;
+    }
+
+    public IslandHostLock hosts() {
+        return hosts;
+    }
+
+    public String serverId() {
+        return settings.serverId();
     }
 
     private void loadDriver(String driverClass) {
@@ -94,7 +162,9 @@ public final class SqlStorage implements Storage {
         return type == Type.MYSQL;
     }
 
-    private void createTables() throws SQLException {
+    // Every step is safe to repeat: on MySQL the migration runs in autocommit, so a server that dies half way
+    // leaves some steps done.
+    private void createTables(Connection c) throws SQLException {
         String blob = mysql() ? "MEDIUMBLOB" : "BLOB";
         String big = mysql() ? "BIGINT" : "INTEGER";
         String dbl = mysql() ? "DOUBLE" : "REAL";
@@ -152,50 +222,50 @@ public final class SqlStorage implements Storage {
                         + ", account_id " + txt + " NOT NULL, type " + txt32 + " NOT NULL, amount " + dbl + " NOT NULL, "
                         + "balance_after " + dbl + " NOT NULL, created_at " + big + " NOT NULL, note " + txt + " NOT NULL DEFAULT '')"
         };
-        try (Connection c = dataSource.getConnection(); Statement s = c.createStatement()) {
+        try (Statement s = c.createStatement()) {
             for (String q : ddl) {
                 s.executeUpdate(q);
             }
-            createIndexIfMissing(c, "idx_islands_profile", "islands", "profile_id");
-            createIndexIfMissing(c, "idx_profiles_owner", "profiles", "owner");
-            createIndexIfMissing(c, "idx_profile_members_uuid", "profile_members", "uuid");
-            // serves getBankTransactions (WHERE account_id = ? ORDER BY created_at DESC) without a full scan
-            createIndexIfMissing(c, "idx_bank_txns_account_created", "bank_txns", "account_id, created_at");
         }
+        createIndexIfMissing(c, "idx_islands_profile", "islands", "profile_id");
+        createIndexIfMissing(c, "idx_profiles_owner", "profiles", "owner");
+        createIndexIfMissing(c, "idx_profile_members_uuid", "profile_members", "uuid");
+        // serves getBankTransactions (WHERE account_id = ? ORDER BY created_at DESC) without a full scan
+        createIndexIfMissing(c, "idx_bank_txns_account_created", "bank_txns", "account_id, created_at");
+        createIndexIfMissing(c, "idx_pending_complete", "pending_upgrades", "complete_at");
         // migrations for tables that predate a column
-        addColumnIfMissing("islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
-        addColumnIfMissing("islands", "guest_home", (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT ''");
-        addColumnIfMissing("islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
-        addColumnIfMissing("islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "islands", "settings", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing(c, "islands", "guest_home", (mysql() ? "VARCHAR(128)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing(c, "islands", "upgrades", (mysql() ? "VARCHAR(512)" : "TEXT") + " NOT NULL DEFAULT ''");
+        addColumnIfMissing(c, "islands", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "islands", "perk_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "islands", "unloaded_at", (mysql() ? "BIGINT" : "INTEGER") + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profiles", "reward_level", (mysql() ? "INT" : "INTEGER") + " NOT NULL DEFAULT 0");
         // -1 = not recorded yet, read as the balance (BankAccount.interestBase).
-        addColumnIfMissing("bank_accounts", "interest_floor", dbl + " NOT NULL DEFAULT -1");
+        addColumnIfMissing(c, "bank_accounts", "interest_floor", dbl + " NOT NULL DEFAULT -1");
         // Unused: left from the RoyalBank-backed personal bank; balances now live in bank_accounts.
-        addColumnIfMissing("profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profile_data", "bank_level", integer + " NOT NULL DEFAULT 1");
-        addColumnIfMissing("profile_data", "bank_last_interest", big + " NOT NULL DEFAULT 0");
-        addColumnIfMissing("profile_data", "bank_bonus", integer + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_saved", integer + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_balance", dbl + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_level", integer + " NOT NULL DEFAULT 1");
+        addColumnIfMissing(c, "profile_data", "bank_last_interest", big + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profile_data", "bank_bonus", integer + " NOT NULL DEFAULT 0");
+        // raised by every write, so other servers sharing the database notice the row changed
+        addColumnIfMissing(c, "islands", "version", big + " NOT NULL DEFAULT 0");
+        addColumnIfMissing(c, "profiles", "version", big + " NOT NULL DEFAULT 0");
     }
 
-    // ADD COLUMN unless the metadata says it exists, so it is safe to run every boot
-    private void addColumnIfMissing(String table, String column, String definition) {
-        try (Connection c = dataSource.getConnection()) {
-            try (ResultSet rs = c.getMetaData().getColumns(null, null, table, column)) {
-                if (rs.next()) {
-                    return;                     // already there
-                }
+    // ADD COLUMN unless the metadata says it exists. Throws: a half-migrated schema breaks every read, and the
+    // schema version must only be stamped once every step worked.
+    private void addColumnIfMissing(Connection c, String table, String column, String definition)
+            throws SQLException {
+        try (ResultSet rs = c.getMetaData().getColumns(c.getCatalog(), null, table, column)) {
+            if (rs.next()) {
+                return;
             }
-            try (Statement s = c.createStatement()) {
-                s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
-                logger.info("Migrated " + table + ": added column " + column + ".");
-            }
-        } catch (SQLException e) {
-            // a half-migrated schema breaks every read, so fail loudly
-            logger.severe("Migration failed: could not add " + table + "." + column
-                    + " (" + e.getMessage() + ")");
+        }
+        try (Statement s = c.createStatement()) {
+            s.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+            logger.info("Migrated " + table + ": added column " + column + ".");
         }
     }
 
@@ -203,7 +273,7 @@ public final class SqlStorage implements Storage {
     // before the index existed.
     private void createIndexIfMissing(Connection c, String name, String table, String columns)
             throws SQLException {
-        try (ResultSet rs = c.getMetaData().getIndexInfo(null, null, table, false, true)) {
+        try (ResultSet rs = c.getMetaData().getIndexInfo(c.getCatalog(), null, table, false, true)) {
             while (rs.next()) {
                 if (name.equalsIgnoreCase(rs.getString("INDEX_NAME"))) {
                     return;

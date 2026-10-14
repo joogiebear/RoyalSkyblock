@@ -12,14 +12,15 @@ import java.util.Properties;
  * can open storages without a plugin.
  *
  * @param dataSourceProps extra Hikari data source properties (the SQLite pragmas), possibly empty
+ * @param serverId this server's name in leases and hand-off rows ({@code ServerId.resolve})
  */
 public record SqlSettings(SqlStorage.Type type, String jdbcUrl, String driver, String username, String password,
-                          int poolSize, Properties dataSourceProps, File dataFolder) {
+                          int poolSize, Properties dataSourceProps, String serverId, File dataFolder) {
 
     public static final String MYSQL_DRIVER = "com.mysql.cj.jdbc.Driver";
     public static final String SQLITE_DRIVER = "org.sqlite.JDBC";
 
-    public static SqlSettings fromConfig(ConfigurationSection storage, File dataFolder) {
+    public static SqlSettings fromConfig(ConfigurationSection storage, String serverId, File dataFolder) {
         if (storage == null) {
             storage = new YamlConfiguration();
         }
@@ -33,10 +34,10 @@ public record SqlSettings(SqlStorage.Type type, String jdbcUrl, String driver, S
                     + "/" + my.getString("database", "royalskyblock") + "?" + my.getString("properties", "useSSL=false");
             return new SqlSettings(SqlStorage.Type.MYSQL, url, MYSQL_DRIVER, my.getString("username", "root"),
                     my.getString("password", ""), Math.max(1, my.getInt("pool-size", 10)), new Properties(),
-                    dataFolder);
+                    serverId, dataFolder);
         }
         File databaseFile = new File(dataFolder, storage.getString("sqlite-file", "islands.db"));
         return new SqlSettings(SqlStorage.Type.SQLITE, "jdbc:sqlite:" + databaseFile.getAbsolutePath(),
-                SQLITE_DRIVER, null, null, SqliteSettings.POOL_SIZE, SqliteSettings.properties(), dataFolder);
+                SQLITE_DRIVER, null, null, SqliteSettings.POOL_SIZE, SqliteSettings.properties(), serverId, dataFolder);
     }
 }

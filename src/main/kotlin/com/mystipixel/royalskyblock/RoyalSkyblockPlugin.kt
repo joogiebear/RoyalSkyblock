@@ -60,6 +60,9 @@ import com.mystipixel.royalskyblock.world.IslandWorldRules
 import com.mystipixel.royalskyblock.world.IslandWorldService
 import com.mystipixel.royalskyblock.world.NoOpIslandWorldService
 import com.mystipixel.royalskyblock.world.asp.AspIslandWorldService
+import com.mystipixel.royalcommon.storage.DbExecutor
+import com.mystipixel.royalcommon.storage.MainThread
+import com.mystipixel.royalcommon.storage.ServerId
 import com.willfp.eco.core.bstats.EcoMetricsChart
 import com.willfp.libreforge.loader.LibreforgePlugin
 import com.willfp.libreforge.loader.configs.ConfigCategory
@@ -68,6 +71,8 @@ import org.bukkit.configuration.file.YamlConfiguration
 import org.bukkit.entity.Player
 import java.io.File
 import java.io.IOException
+import java.sql.SQLException
+import java.time.Duration
 import java.util.Locale
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
@@ -183,7 +188,8 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             warnIfEcoStorageShared()
             return EcoStorage(this)
         }
-        return SqlStorage(SqlSettings.fromConfig(conf().getConfigurationSection("storage"), dataFolder), logger)
+        val serverId = ServerId.resolve(conf().getString("storage.server-id", ""), dataFolder.toPath())
+        return SqlStorage(SqlSettings.fromConfig(conf().getConfigurationSection("storage"), serverId, dataFolder), logger)
     }
 
     // ECO storage is single-server: eco caches non-player data for the whole uptime and has no atomic
@@ -251,31 +257,36 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
     // Background metadata writes go to one thread this plugin owns, so they run in order and can be
     // drained at shutdown (Bukkit cancels a disabling plugin's queued async tasks).
-    private var storageWriter: java.util.concurrent.ExecutorService? = null
+    private var dbExecutor: DbExecutor? = null
 
-    /** Run [task] (a storage write) on the storage thread; inline if that thread is gone (shutdown). */
+    /** Run [task] (a storage write) on the database thread; inline if that thread is gone (shutdown). */
     fun writeAsync(task: Runnable) {
-        val writer = storageWriter
-        if (writer == null || writer.isShutdown) {
+        val executor = dbExecutor
+        if (executor == null) {
             task.run()
             return
         }
-        writer.execute {
-            try {
-                task.run()
-            } catch (e: Exception) {
-                logger.warning("A background save failed: ${e.message}")
-            }
-        }
+        executor.submit("write", task)
     }
+
+    /** The plugin's database thread. Null before enable finished and after shutdown. */
+    fun db(): DbExecutor? = dbExecutor
 
     override fun handleEnable() {
         this.messageManager = MessageManager(this)
-        this.storageWriter = java.util.concurrent.Executors.newSingleThreadExecutor { runnable ->
-            Thread(runnable, "RoyalSkyblock-storage").apply { isDaemon = true }
-        }
+        this.dbExecutor = DbExecutor("RoyalSkyblock", MainThread.bukkit(this), logger)
 
-        val store = createStorage()
+        val store = try {
+            createStorage()
+        } catch (e: IllegalArgumentException) {
+            logger.severe("${e.message}: disabling RoyalSkyblock.")
+            server.pluginManager.disablePlugin(this)
+            return
+        } catch (e: IOException) {
+            logger.severe("Could not read or write ${ServerId.FILE_NAME}: ${e.message}. Disabling RoyalSkyblock.")
+            server.pluginManager.disablePlugin(this)
+            return
+        }
         this.storage = store
         if (!store.connect()) {
             logger.severe("Storage failed to initialise: disabling RoyalSkyblock.")
@@ -396,6 +407,11 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
         val upgrades = upgradeManager ?: return // enable aborted (storage failure); nothing to tick
 
         server.scheduler.runTaskTimer(this, Runnable { upgrades.tick() }, 40L, 20L)
+        // keeps this server's player and island claims alive for the other servers on a shared database
+        if (storage is SqlStorage) {
+            val period = SqlStorage.HANDOFF_STALE.toMillis() / 4 / 50
+            server.scheduler.runTaskTimer(this, Runnable { submitHeartbeat() }, period, period)
+        }
         // live upgrade-menu countdowns (no-op when nothing is cooking)
         server.scheduler.runTaskTimer(this, Runnable { guiManager?.tickOpenMenus() }, 20L, 20L)
         // background level refresh for occupied islands (0 = off)
@@ -437,6 +453,28 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                 logger.warning("Placeholder leaderboard refresh failed: ${ex.message}")
             }
         }, 20L, 60L * 20L)
+    }
+
+    @Volatile
+    private var heartbeatQueued = false
+
+    // on the database thread; a heartbeat still queued there makes the next one skip
+    private fun submitHeartbeat() {
+        val sql = storage as? SqlStorage ?: return
+        val executor = dbExecutor ?: return
+        if (heartbeatQueued) {
+            return
+        }
+        heartbeatQueued = true
+        executor.submit("heartbeat", Runnable {
+            try {
+                sql.handoff().heartbeat()
+            } catch (e: SQLException) {
+                logger.warning("Heartbeat failed: ${e.message}")
+            } finally {
+                heartbeatQueued = false
+            }
+        })
     }
 
     // one-glance boot summary: which dependencies are active and what to configure first
@@ -517,13 +555,14 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
 
         // Let queued background writes finish before the pool they write to is closed. Queued autosaves taken
         // before the saves above are skipped, not written over them.
-        storageWriter?.let { writer ->
-            writer.shutdown()
-            if (!writer.awaitTermination(15, java.util.concurrent.TimeUnit.SECONDS)) {
-                logger.warning("Some background saves did not finish within 15s of shutdown and were dropped.")
+        dbExecutor?.let { executor ->
+            val report = executor.shutdown(Duration.ofSeconds(15))
+            if (!report.drained()) {
+                logger.warning("Some background saves did not finish within 15s of shutdown and were dropped: "
+                    + report.leftOver())
             }
         }
-        storageWriter = null
+        dbExecutor = null
 
         worldService?.shutdown()
         storage?.close()
