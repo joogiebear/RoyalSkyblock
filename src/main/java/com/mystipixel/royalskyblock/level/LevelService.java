@@ -78,6 +78,14 @@ public final class LevelService {
         return Math.max(0, config.cooldownSeconds() - elapsed);
     }
 
+    // a stamp whose cooldown has run out says nothing, so drop those rather than keep one per island ever scanned
+    private void forgetFinishedCooldowns() {
+        if (lastScan.size() > 256) {
+            long cutoff = nowMillis() - config.cooldownSeconds() * 1000L;
+            lastScan.values().removeIf(scanned -> scanned <= cutoff);
+        }
+    }
+
     public boolean isScanning(Island island) {
         return scanning.contains(island.id());
     }
@@ -118,6 +126,7 @@ public final class LevelService {
                     island.setLevel(level);
                     breakdowns.put(island.id(), totals.counts);
                     lastScan.put(island.id(), nowMillis());
+                    forgetFinishedCooldowns();
                     grantLevelUps(island, level);
                     int rewardLevel = island.rewardLevel();
                     plugin.islands().writeIsland(island,
