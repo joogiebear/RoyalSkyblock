@@ -412,6 +412,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
             val period = SqlStorage.HANDOFF_STALE.toMillis() / 4 / 50
             server.scheduler.runTaskTimer(this, Runnable { submitHeartbeat() }, period, period)
         }
+        // pick up island and profile changes made by other servers on a shared database
+        islandManager?.startVersionPoll(100L)
+        profileManager?.startVersionPoll(100L)
         // live upgrade-menu countdowns (no-op when nothing is cooking)
         server.scheduler.runTaskTimer(this, Runnable { guiManager?.tickOpenMenus() }, 20L, 20L)
         // background level refresh for occupied islands (0 = off)
@@ -542,8 +545,9 @@ class RoyalSkyblockPlugin : LibreforgePlugin() {
                     worlds.saveIslandNow(world.name)
                     // Its metadata too, synchronously, stamped as unloaded so the downtime is caught up on next load.
                     islands.getIslandByWorld(world)?.let { island ->
-                        island.setUnloadedAt(System.currentTimeMillis())
-                        storage?.saveIsland(island)
+                        val now = System.currentTimeMillis()
+                        island.setUnloadedAt(now)
+                        storage?.updateIslandUnloadedAt(island.id(), now)
                     }
                     savedIslands++
                 } catch (e: Exception) {

@@ -2,6 +2,9 @@ package com.mystipixel.royalskyblock.profile;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.bank.BankService;
+import com.mystipixel.royalcommon.storage.DbExecutor;
+import com.mystipixel.royalcommon.storage.VersionPoller;
+import com.mystipixel.royalskyblock.data.SqlStorage;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.island.IslandRole;
@@ -39,6 +42,8 @@ public final class ProfileManager {
     private final Map<UUID, UUID> activeProfile = new ConcurrentHashMap<>();  // player to active profile
     private final SaveRequests saveRequests = new SaveRequests(SAVE_REQUEST_COOLDOWN_MILLIS);
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
+    // null on stores nothing else writes to (eco storage)
+    private volatile @Nullable VersionPoller<UUID> poller;
     private final Map<UUID, Invite> pendingInvites = new ConcurrentHashMap<>(); // invited player to invite
 
     // Profiles part-way through deletion. Invite accepts are refused for them, or a reload of the
@@ -67,9 +72,58 @@ public final class ProfileManager {
         }
         Profile loaded = storage.getProfile(id);
         if (loaded != null) {
-            profileCache.put(id, loaded);
+            cacheProfile(loaded);
         }
         return loaded;
+    }
+
+    private void cacheProfile(Profile profile) {
+        profileCache.put(profile.id(), profile);
+        VersionPoller<UUID> current = poller;
+        if (current != null) {
+            current.seen(profile.id(), profile.version());
+        }
+    }
+
+    /**
+     * Polls the cached profiles' versions, so a roster or owner change another server made shows up here within
+     * a few seconds. Called from createTasks; a no-op unless the store is SQL.
+     */
+    public void startVersionPoll(long periodTicks) {
+        DbExecutor db = plugin.db();
+        if (!(storage instanceof SqlStorage sql) || db == null) {
+            return;
+        }
+        VersionPoller<UUID> current = poller;
+        if (current == null) {
+            current = new VersionPoller<>(sql.dataSource(), db,
+                    VersionPoller.byColumn("profiles", "id", "version", UUID::fromString), this::reload);
+            poller = current;
+        }
+        current.start(plugin, periodTicks, () -> List.copyOf(profileCache.keySet()));
+    }
+
+    // main thread: reread the changed profiles on the database thread, then update the cached copies in place
+    private void reload(java.util.Set<UUID> changed) {
+        DbExecutor db = plugin.db();
+        if (db == null) {
+            return;
+        }
+        db.submit("reload profiles", () -> {
+            Map<UUID, Profile> fresh = new java.util.HashMap<>();
+            for (UUID id : changed) {
+                Profile profile = storage.getProfile(id);
+                if (profile != null) {
+                    fresh.put(id, profile);
+                }
+            }
+            return fresh;
+        }).thenAcceptAsync(fresh -> fresh.forEach((id, profile) -> {
+            Profile cached = profileCache.get(id);
+            if (cached != null) {
+                cached.copyFrom(profile);
+            }
+        }), db.mainThread());
     }
 
     /** All profiles a player can access: the ones they own, plus coop profiles they're a member of. */
@@ -77,7 +131,7 @@ public final class ProfileManager {
         java.util.LinkedHashMap<UUID, Profile> byId = new java.util.LinkedHashMap<>();
         for (Profile p : storage.getProfilesByOwner(player)) {
             byId.put(p.id(), p);
-            profileCache.put(p.id(), p);
+            cacheProfile(p);
         }
         for (UUID pid : storage.getProfileIdsByMember(player)) {
             if (!byId.containsKey(pid)) {
@@ -224,10 +278,10 @@ public final class ProfileManager {
         UUID uuid = player.getUniqueId();
         List<Profile> profiles = ready.profiles();
         for (Profile p : profiles) {
-            profileCache.put(p.id(), p);
+            cacheProfile(p);
         }
         if (ready.coop() != null) {
-            profileCache.put(ready.coop().id(), ready.coop());
+            cacheProfile(ready.coop());
         }
 
         if (profiles.isEmpty() && ready.coop() == null) {
@@ -310,8 +364,8 @@ public final class ProfileManager {
 
     private Profile createDefaultProfile(Player player) {
         Profile profile = buildProfile(player, Gamemode.SOLO, null, List.of());
-        storage.saveProfile(profile);
-        profileCache.put(profile.id(), profile);
+        storage.insertProfile(profile);
+        cacheProfile(profile);
         return profile;
     }
 
@@ -374,8 +428,8 @@ public final class ProfileManager {
             name = cleanName(name);
         }
         Profile profile = buildProfile(player, gamemode, name, existing);
-        storage.saveProfile(profile);
-        profileCache.put(profile.id(), profile);
+        storage.insertProfile(profile);
+        cacheProfile(profile);
         return switchProfile(player, profile.id()).thenApply(ok -> profile);
     }
 
@@ -477,8 +531,10 @@ public final class ProfileManager {
                 .filter(member -> !member.uuid().equals(uuid))
                 .toList();
         if (!others.isEmpty()) {
-            others.forEach(member -> target.removeMember(member.uuid()));
-            storage.saveProfile(target);
+            for (ProfileMember member : others) {
+                target.removeMember(member.uuid());
+                storage.removeMember(targetId, member.uuid());
+            }
             for (ProfileMember member : others) {
                 Player online = Bukkit.getPlayer(member.uuid());
                 if (online != null) {
@@ -561,13 +617,18 @@ public final class ProfileManager {
         Island island = plugin.islands().getIslandByProfile(profile.id());
         int max = island != null ? plugin.upgrades().coopMemberCap(island)
                 : plugin.conf().getInt("coop.max-members", 4);
-        if (profile.memberCount() >= max) {
-            return new AcceptResult(null, "full");
+        ProfileMember joining = new ProfileMember(target.getUniqueId(), target.getName(),
+                IslandRole.MEMBER, Instant.now().toEpochMilli());
+        // counted in the database: another server may have filled the roster since this copy was read
+        switch (storage.addMember(profile.id(), joining, max)) {
+            case FULL -> {
+                return new AcceptResult(null, "full");
+            }
+            case FAILED -> {
+                return new AcceptResult(null, "none");
+            }
+            case ALREADY, ADDED -> profile.putMember(joining);
         }
-        profile.putMember(new ProfileMember(target.getUniqueId(), target.getName(),
-                IslandRole.MEMBER, Instant.now().toEpochMilli()));
-        storage.saveProfile(profile);
-        profileCache.put(profile.id(), profile);
         notifyJoin(profile, target);
         return new AcceptResult(profile, null);
     }
@@ -619,9 +680,8 @@ public final class ProfileManager {
             return new Reason("coop.errors.kick-self");
         }
         active.removeMember(target.uuid());
-        storage.saveProfile(active);
-        profileCache.put(active.id(), active);
-        owePayout(target.uuid(), active.id());
+        storage.removeMember(active.id(), target.uuid());
+                owePayout(target.uuid(), active.id());
         return null;
     }
 
@@ -638,9 +698,8 @@ public final class ProfileManager {
             return new Reason("coop.errors.not-member");
         }
         active.removeMember(player.getUniqueId());
-        storage.saveProfile(active);
-        profileCache.put(active.id(), active);
-        owePayout(player.getUniqueId(), active.id());
+        storage.removeMember(active.id(), player.getUniqueId());
+                owePayout(player.getUniqueId(), active.id());
         return null;
     }
 
@@ -676,9 +735,8 @@ public final class ProfileManager {
             return wrongState;
         }
         active.putMember(new ProfileMember(target.uuid(), target.name(), to, target.joinedAt()));
-        storage.saveProfile(active);
-        profileCache.put(active.id(), active);
-        return null;
+        storage.setMemberRole(active.id(), target.uuid(), to);
+                return null;
     }
 
     /**
@@ -710,9 +768,8 @@ public final class ProfileManager {
         active.putMember(new ProfileMember(target.uuid(), target.name(), IslandRole.OWNER, target.joinedAt()));
         active.putMember(new ProfileMember(actor.getUniqueId(), actor.getName(), IslandRole.CO_OWNER, selfJoined));
         active.setOwner(target.uuid());
-        storage.saveProfile(active);
-        profileCache.put(active.id(), active);
-        // upgrade and perk grants were made to the old owner by name; give the new owner the same
+        storage.transferOwner(active.id(), target.uuid(), actor.getUniqueId());
+                // upgrade and perk grants were made to the old owner by name; give the new owner the same
         Island island = plugin.islands().getIslandByProfile(active.id());
         if (island != null) {
             plugin.upgrades().replayUnlockCommands(island);

@@ -3,8 +3,10 @@ package com.mystipixel.royalskyblock.data;
 import com.mystipixel.royalskyblock.bank.BankAccount;
 import com.mystipixel.royalskyblock.bank.BankTxn;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.profile.Profile;
 import com.mystipixel.royalskyblock.profile.ProfileData;
+import com.mystipixel.royalskyblock.profile.ProfileMember;
 import com.mystipixel.royalskyblock.upgrade.PendingUpgrade;
 import org.jetbrains.annotations.Nullable;
 
@@ -38,7 +40,31 @@ public interface Storage {
     /** Every island. A full scan: used by the level leaderboard and to warm the island cache at boot. */
     List<Island> getAllIslands();
 
-    boolean saveIsland(Island island);
+    /** Writes a new island. Never overwrites an existing row. */
+    boolean insertIsland(Island island);
+
+    /*
+     * Targeted island writes. Each changes only its own columns, so servers sharing a database don't undo
+     * each other's changes, and returns the row's new version, or -1 when nothing was written.
+     */
+
+    long updateIslandHome(UUID id, double x, double y, double z, float yaw, float pitch);
+
+    long updateIslandGuestHome(UUID id, String serializedGuestHome);
+
+    /** The reward marker only ever goes up. */
+    long updateIslandLevel(UUID id, double level, int rewardLevel);
+
+    /** Only ever goes up. */
+    long updateIslandPerkLevel(UUID id, int perkLevel);
+
+    long updateIslandUnloadedAt(UUID id, long unloadedAt);
+
+    /** Sets one upgrade tier, keeping the others, and the radius too when it is not null. */
+    long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius);
+
+    /** Sets one setting, keeping the others. */
+    long updateIslandSetting(UUID id, String settingKey, boolean enabled);
 
     boolean deleteIsland(UUID id);
 
@@ -49,7 +75,23 @@ public interface Storage {
     /** Profiles this player belongs to but does not own, i.e. coop membership. */
     List<UUID> getProfileIdsByMember(UUID uuid);
 
-    boolean saveProfile(Profile profile);
+    /** Writes a new profile and its roster. Never overwrites an existing row. */
+    boolean insertProfile(Profile profile);
+
+    enum AddMemberResult { ADDED, ALREADY, FULL, FAILED }
+
+    /** Adds a member unless the roster already has maxMembers, counted in the store, not in a cached copy. */
+    AddMemberResult addMember(UUID profileId, ProfileMember member, int maxMembers);
+
+    boolean removeMember(UUID profileId, UUID member);
+
+    boolean setMemberRole(UUID profileId, UUID member, IslandRole role);
+
+    /** Makes newOwner the owner and steps oldOwner down to co-owner, together. */
+    boolean transferOwner(UUID profileId, UUID newOwner, UUID oldOwner);
+
+    /** Only ever goes up. */
+    boolean updateProfileRewardLevel(UUID id, int rewardLevel);
 
     boolean deleteProfile(UUID id);
 

@@ -234,17 +234,20 @@ public final class UpgradeManager {
     /** Set an island's tier for an upgrade, persist it, and apply the effect. */
     public void setTier(Island island, UpgradeDef def, int tier) {
         island.setUpgradeTier(def.key(), tier);
+        Integer radius = null;
         if (def.effect() == UpgradeEffect.RADIUS) {
             double value = def.valueAt(tier);
             if (value > 0) {
-                island.setRadius((int) value);
+                radius = (int) value;
+                island.setRadius(radius);
                 reapplyBorder(island);
             }
         }
         // the new tier may carry a libreforge effect chain, and libreforge caches a player's holders
         refreshHoldersOnIsland(island);
         runUnlockCommands(island, def, tier);
-        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
+        Integer newRadius = radius;
+        plugin.writeAsync(() -> plugin.storage().updateIslandUpgradeTier(island.id(), def.key(), tier, newRadius));
     }
 
     // The owner's real player name, or "" if unresolved. Never the profile name: that's a label the
@@ -333,7 +336,8 @@ public final class UpgradeManager {
         return null;
     }
 
-    private void reapplyBorder(Island island) {
+    /** Re-apply the per-player borders on a loaded island, e.g. after its radius changed. */
+    public void reapplyBorder(Island island) {
         World world = plugin.getServer().getWorld(island.worldName());
         if (world == null) {
             return;

@@ -352,12 +352,16 @@ public final class IslandCommand {
             return;
         }
         org.bukkit.Location l = player.getLocation();
+        UUID islandId = island.id();
         if (guest) {
             island.setGuestHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
+            String serialized = island.serializeGuestHome();
+            plugin.writeAsync(() -> plugin.storage().updateIslandGuestHome(islandId, serialized));
         } else {
             island.setHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
+            plugin.writeAsync(() -> plugin.storage().updateIslandHome(islandId,
+                    l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch()));
         }
-        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
         plugin.messages().send(player, guest ? "island.guest-spawn-set" : "island.spawn-set");
     }
 

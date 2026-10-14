@@ -2,6 +2,9 @@ package com.mystipixel.royalskyblock.island;
 
 import com.mystipixel.royalskyblock.RoyalSkyblockPlugin;
 import com.mystipixel.royalskyblock.api.IslandCatchupEvent;
+import com.mystipixel.royalcommon.storage.DbExecutor;
+import com.mystipixel.royalcommon.storage.VersionPoller;
+import com.mystipixel.royalskyblock.data.SqlStorage;
 import com.mystipixel.royalskyblock.data.Storage;
 import com.mystipixel.royalskyblock.data.StorageException;
 import com.mystipixel.royalskyblock.world.IslandWorldService;
@@ -15,8 +18,10 @@ import org.jetbrains.annotations.Nullable;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,6 +42,8 @@ public final class IslandManager {
     private final Map<UUID, UUID> profileToIsland = new ConcurrentHashMap<>();
     // in-flight creations, so two rapid ensureIsland calls can't both allocate a world
     private final Map<UUID, CompletableFuture<Island>> creating = new ConcurrentHashMap<>();
+    // null on stores nothing else writes to (eco storage)
+    private volatile @Nullable VersionPoller<UUID> poller;
 
     public IslandManager(RoyalSkyblockPlugin plugin, Storage storage, IslandWorldService worlds) {
         this.plugin = plugin;
@@ -94,6 +101,68 @@ public final class IslandManager {
     private void cache(Island island) {
         byId.put(island.id(), island);
         profileToIsland.put(island.profileId(), island.id());
+        VersionPoller<UUID> poller = this.poller;
+        if (poller != null) {
+            poller.seen(island.id(), island.version());
+        }
+    }
+
+    /**
+     * Polls the cached islands' versions, so a change another server made to one shows up here within a few
+     * seconds. Called from createTasks; a no-op unless the store is SQL.
+     */
+    public void startVersionPoll(long periodTicks) {
+        DbExecutor db = plugin.db();
+        if (!(storage instanceof SqlStorage sql) || db == null) {
+            return;
+        }
+        VersionPoller<UUID> current = poller;
+        if (current == null) {
+            current = new VersionPoller<>(sql.dataSource(), db,
+                    VersionPoller.byColumn("islands", "id", "version", UUID::fromString), this::reload);
+            poller = current;
+        }
+        current.start(plugin, periodTicks, () -> List.copyOf(byId.keySet()));
+    }
+
+    // main thread: reread the changed islands on the database thread, then update the cached copies in place
+    private void reload(Set<UUID> changed) {
+        DbExecutor db = plugin.db();
+        if (db == null) {
+            return;
+        }
+        db.submit("reload islands", () -> {
+            Map<UUID, Island> fresh = new HashMap<>();
+            for (UUID id : changed) {
+                fresh.put(id, storage.getIsland(id));
+            }
+            return fresh;
+        }).thenAcceptAsync(fresh -> fresh.forEach(this::refresh), db.mainThread());
+    }
+
+    // main thread; fresh is null when another server deleted the island
+    private void refresh(UUID id, @Nullable Island fresh) {
+        Island cached = byId.get(id);
+        if (cached == null) {
+            return;
+        }
+        if (fresh == null) {
+            if (!worlds.isLoaded(cached.worldName())) {
+                byId.remove(id);
+                profileToIsland.remove(cached.profileId(), id);
+            }
+            return;
+        }
+        int radius = cached.radius();
+        UUID profile = cached.profileId();
+        cached.copyFrom(fresh);
+        if (!profile.equals(fresh.profileId())) {
+            profileToIsland.remove(profile, id);
+            profileToIsland.put(fresh.profileId(), id);
+        }
+        if (radius != fresh.radius() && worlds.isLoaded(cached.worldName())) {
+            plugin.upgrades().reapplyBorder(cached);
+        }
     }
 
     /**
@@ -156,7 +225,7 @@ public final class IslandManager {
                     // Await the row: an island only in the cache is gone after a restart and the profile would get a
                     // second one. On failure the fresh world is removed so a retry starts clean.
                     return runAsyncFuture(() -> {
-                        if (!storage.saveIsland(island)) {
+                        if (!storage.insertIsland(island)) {
                             throw new IllegalStateException("the new island could not be saved to the database");
                         }
                     }).thenApply(ignored -> {
@@ -186,7 +255,7 @@ public final class IslandManager {
             return;                             // never unloaded, or already settled
         }
         island.setUnloadedAt(0);
-        runAsync(() -> storage.saveIsland(island));
+        runAsync(() -> storage.updateIslandUnloadedAt(island.id(), 0));
 
         if (!plugin.conf().getBoolean("simulation.enabled", true)) {
             return;
@@ -336,7 +405,7 @@ public final class IslandManager {
             island.setRadius(startingRadius);
             island.setHome(hx, hy, hz, yaw, pitch);
             cache(island);
-            runAsync(() -> storage.saveIsland(island));
+            runAsync(() -> storage.insertIsland(island));
             return island;
         });
     }

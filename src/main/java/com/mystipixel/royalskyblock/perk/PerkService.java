@@ -248,7 +248,7 @@ public final class PerkService {
             }
         }
         island.setPerkLevel(level);
-        plugin.writeAsync(() -> plugin.storage().saveIsland(island));
+        plugin.writeAsync(() -> plugin.storage().updateIslandPerkLevel(island.id(), level));
     }
 
     private String ownerName(Profile profile) {

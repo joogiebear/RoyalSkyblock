@@ -27,6 +27,9 @@ public final class Profile {
 
     private final ConcurrentHashMap<UUID, ProfileMember> members = new ConcurrentHashMap<>();
 
+    // the row's version when this copy was read; every database write raises it
+    private long version;
+
     public Profile(UUID id, UUID owner, String name, Gamemode gamemode, long createdAt) {
         this.id = id;
         this.owner = owner;
@@ -74,6 +77,31 @@ public final class Profile {
 
     public void setRewardLevel(int rewardLevel) {
         this.rewardLevel = rewardLevel;
+    }
+
+    public long version() {
+        return version;
+    }
+
+    public void setVersion(long version) {
+        this.version = version;
+    }
+
+    /**
+     * Takes the stored fields and roster from a fresh read of the same profile, in place: menus and services
+     * keep references to the cached object.
+     */
+    public void copyFrom(Profile fresh) {
+        this.owner = fresh.owner;
+        this.name = fresh.name;
+        this.gamemode = fresh.gamemode;
+        this.rewardLevel = fresh.rewardLevel;
+        if (fresh.islandId != null) {
+            this.islandId = fresh.islandId;
+        }
+        members.keySet().retainAll(fresh.members.keySet());
+        members.putAll(fresh.members);
+        this.version = fresh.version;
     }
 
     public @Nullable UUID islandId() {

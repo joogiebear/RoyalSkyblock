@@ -296,7 +296,7 @@ public final class SqlStorage implements Storage {
     // the columns readIsland expects, in one place so every query asks for all of them
     private static final String ISLAND_COLUMNS =
             "id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, "
-            + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at";
+            + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at, version";
 
     private @Nullable Island queryIsland(String where, String param) {
         String sql = "SELECT " + ISLAND_COLUMNS + " FROM islands " + where;
@@ -325,6 +325,7 @@ public final class SqlStorage implements Storage {
         island.setRewardLevel(rs.getInt("reward_level"));
         island.setPerkLevel(rs.getInt("perk_level"));
         island.setUnloadedAt(rs.getLong("unloaded_at"));
+        island.setVersion(rs.getLong("version"));
         return island;
     }
 
@@ -342,16 +343,10 @@ public final class SqlStorage implements Storage {
         return out;
     }
 
-    public boolean saveIsland(Island island) {
-        String sql = mysql()
-                ? "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE profile_id=VALUES(profile_id), world_name=VALUES(world_name), "
-                + "radius=VALUES(radius), level=VALUES(level), home_x=VALUES(home_x), home_y=VALUES(home_y), home_z=VALUES(home_z), "
-                + "home_yaw=VALUES(home_yaw), home_pitch=VALUES(home_pitch), settings=VALUES(settings), guest_home=VALUES(guest_home), upgrades=VALUES(upgrades), reward_level=VALUES(reward_level), perk_level=VALUES(perk_level), unloaded_at=VALUES(unloaded_at)"
-                : "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at) "
-                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET profile_id=excluded.profile_id, world_name=excluded.world_name, "
-                + "radius=excluded.radius, level=excluded.level, home_x=excluded.home_x, home_y=excluded.home_y, home_z=excluded.home_z, "
-                + "home_yaw=excluded.home_yaw, home_pitch=excluded.home_pitch, settings=excluded.settings, guest_home=excluded.guest_home, upgrades=excluded.upgrades, reward_level=excluded.reward_level, perk_level=excluded.perk_level, unloaded_at=excluded.unloaded_at";
+    public boolean insertIsland(Island island) {
+        String sql = "INSERT INTO islands (id, profile_id, world_name, created_at, radius, level, home_x, home_y, home_z, "
+                + "home_yaw, home_pitch, settings, guest_home, upgrades, reward_level, perk_level, unloaded_at, version) "
+                + "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, island.id().toString());
             st.setString(2, island.profileId().toString());
@@ -378,12 +373,123 @@ public final class SqlStorage implements Storage {
         }
     }
 
+    private String greatest() {
+        return mysql() ? "GREATEST" : "MAX";
+    }
+
+    // UPDATE islands SET <set>, version = version + 1 WHERE id = ?, then the new version; -1 if no row or failed
+    private long updateIsland(UUID id, String what, String set, Object... values) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement(
+                        "UPDATE islands SET " + set + ", version = version + 1 WHERE id = ?")) {
+                    int i = 1;
+                    for (Object value : values) {
+                        st.setObject(i++, value);
+                    }
+                    st.setString(i, id.toString());
+                    if (st.executeUpdate() == 0) {
+                        return -1L;
+                    }
+                }
+                return versionOf(c, "islands", id);
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not save the " + what + " of island " + id + ": " + e.getMessage());
+            return -1;
+        }
+    }
+
+    private static long versionOf(Connection c, String table, UUID id) throws SQLException {
+        try (PreparedStatement st = c.prepareStatement("SELECT version FROM " + table + " WHERE id = ?")) {
+            st.setString(1, id.toString());
+            try (ResultSet rs = st.executeQuery()) {
+                return rs.next() ? rs.getLong(1) : -1;
+            }
+        }
+    }
+
+    @Override
+    public long updateIslandHome(UUID id, double x, double y, double z, float yaw, float pitch) {
+        return updateIsland(id, "home", "home_x = ?, home_y = ?, home_z = ?, home_yaw = ?, home_pitch = ?",
+                x, y, z, yaw, pitch);
+    }
+
+    @Override
+    public long updateIslandGuestHome(UUID id, String serializedGuestHome) {
+        return updateIsland(id, "guest home", "guest_home = ?", serializedGuestHome);
+    }
+
+    @Override
+    public long updateIslandLevel(UUID id, double level, int rewardLevel) {
+        return updateIsland(id, "level", "level = ?, reward_level = " + greatest() + "(reward_level, ?)",
+                level, rewardLevel);
+    }
+
+    @Override
+    public long updateIslandPerkLevel(UUID id, int perkLevel) {
+        return updateIsland(id, "perk level", "perk_level = " + greatest() + "(perk_level, ?)", perkLevel);
+    }
+
+    @Override
+    public long updateIslandUnloadedAt(UUID id, long unloadedAt) {
+        return updateIsland(id, "unload time", "unloaded_at = ?", unloadedAt);
+    }
+
+    @Override
+    public long updateIslandUpgradeTier(UUID id, String upgradeKey, int tier, @Nullable Integer radius) {
+        return mergeIslandColumn(id, "upgrades", current -> Island.withUpgradeTier(current, upgradeKey, tier),
+                radius);
+    }
+
+    @Override
+    public long updateIslandSetting(UUID id, String settingKey, boolean enabled) {
+        return mergeIslandColumn(id, "settings", current -> Island.withSetting(current, settingKey, enabled), null);
+    }
+
+    // a locked read-modify-write of one serialized map column, so a key set elsewhere meanwhile is kept
+    private long mergeIslandColumn(UUID id, String column, java.util.function.UnaryOperator<String> merge,
+                                   @Nullable Integer radius) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                String current;
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT " + column + " FROM islands WHERE id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, id.toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        if (!rs.next()) {
+                            return -1L;
+                        }
+                        current = rs.getString(1);
+                    }
+                }
+                String sql = "UPDATE islands SET " + column + " = ?" + (radius != null ? ", radius = ?" : "")
+                        + ", version = version + 1 WHERE id = ?";
+                try (PreparedStatement st = c.prepareStatement(sql)) {
+                    int i = 1;
+                    st.setString(i++, merge.apply(current));
+                    if (radius != null) {
+                        st.setInt(i++, radius);
+                    }
+                    st.setString(i, id.toString());
+                    st.executeUpdate();
+                }
+                return versionOf(c, "islands", id);
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not save the " + column + " of island " + id + ": " + e.getMessage());
+            return -1;
+        }
+    }
+
     public boolean deleteIsland(UUID id) {
         return executeUpdate("DELETE FROM islands WHERE id = ?", id.toString());
     }
 
     public @Nullable Profile getProfile(UUID id) {
-        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE id = ?";
+        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level, version FROM profiles WHERE id = ?";
         Profile profile;
         // Release this connection before looking up the island: that query opens its own, and nesting on
         // the single-connection SQLite pool would deadlock.
@@ -411,7 +517,7 @@ public final class SqlStorage implements Storage {
     public List<Profile> getProfilesByOwner(UUID owner) {
         List<Profile> out = new ArrayList<>();
         Map<UUID, Profile> byId = new HashMap<>();
-        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level FROM profiles WHERE owner = ? ORDER BY created_at";
+        String sql = "SELECT id, owner, name, gamemode, created_at, reward_level, version FROM profiles WHERE owner = ? ORDER BY created_at";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             try (ResultSet rs = st.executeQuery()) {
@@ -512,6 +618,7 @@ public final class SqlStorage implements Storage {
                 rs.getString("name"), Gamemode.fromString(rs.getString("gamemode"), Gamemode.SOLO),
                 rs.getLong("created_at"));
         profile.setRewardLevel(rs.getInt("reward_level"));
+        profile.setVersion(rs.getLong("version"));
         return profile;
     }
 
@@ -534,20 +641,13 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    /** Upsert a profile and replace its member roster in one transaction. */
-    public boolean saveProfile(Profile profile) {
-        String upsert = mysql()
-                ? "INSERT INTO profiles (id, owner, name, gamemode, created_at, reward_level) VALUES (?,?,?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE owner=VALUES(owner), name=VALUES(name), gamemode=VALUES(gamemode), "
-                + "reward_level=VALUES(reward_level)"
-                : "INSERT INTO profiles (id, owner, name, gamemode, created_at, reward_level) VALUES (?,?,?,?,?,?) "
-                + "ON CONFLICT(id) DO UPDATE SET owner=excluded.owner, name=excluded.name, gamemode=excluded.gamemode, "
-                + "reward_level=excluded.reward_level";
-        try (Connection c = dataSource.getConnection()) {
-            boolean auto = c.getAutoCommit();
-            c.setAutoCommit(false);
-            try {
-                try (PreparedStatement st = c.prepareStatement(upsert)) {
+    /** Insert a new profile and its roster in one transaction. */
+    public boolean insertProfile(Profile profile) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement("INSERT INTO profiles "
+                        + "(id, owner, name, gamemode, created_at, reward_level, version) VALUES (?,?,?,?,?,?,0)")) {
                     st.setString(1, profile.id().toString());
                     st.setString(2, profile.owner().toString());
                     st.setString(3, profile.name());
@@ -556,35 +656,141 @@ public final class SqlStorage implements Storage {
                     st.setInt(6, profile.rewardLevel());
                     st.executeUpdate();
                 }
-                try (PreparedStatement del = c.prepareStatement("DELETE FROM profile_members WHERE profile_id = ?")) {
-                    del.setString(1, profile.id().toString());
-                    del.executeUpdate();
+                for (ProfileMember m : profile.members()) {
+                    insertMember(c, profile.id(), m);
                 }
-                try (PreparedStatement ins = c.prepareStatement(
-                        "INSERT INTO profile_members (profile_id, uuid, name, role, joined_at) VALUES (?,?,?,?,?)")) {
-                    for (ProfileMember m : profile.members()) {
-                        ins.setString(1, profile.id().toString());
-                        ins.setString(2, m.uuid().toString());
-                        ins.setString(3, m.name() == null ? "" : m.name());
-                        ins.setString(4, m.role().name());
-                        ins.setLong(5, m.joinedAt());
-                        ins.addBatch();
-                    }
-                    ins.executeBatch();
-                }
-                c.commit();
                 return true;
-            } catch (SQLException e) {
-                c.rollback();
-                logger.severe("Could not save profile " + profile.id() + ": " + e.getMessage());
-                return false;
-            } finally {
-                c.setAutoCommit(auto);
-            }
+            });
         } catch (SQLException e) {
-            logger.severe("Profile DB connection error (save): " + e.getMessage());
+            logger.severe("Could not save profile " + profile.id() + ": " + e.getMessage());
             return false;
         }
+    }
+
+    private static void insertMember(Connection c, UUID profileId, ProfileMember m) throws SQLException {
+        try (PreparedStatement ins = c.prepareStatement(
+                "INSERT INTO profile_members (profile_id, uuid, name, role, joined_at) VALUES (?,?,?,?,?)")) {
+            ins.setString(1, profileId.toString());
+            ins.setString(2, m.uuid().toString());
+            ins.setString(3, m.name() == null ? "" : m.name());
+            ins.setString(4, m.role().name());
+            ins.setLong(5, m.joinedAt());
+            ins.executeUpdate();
+        }
+    }
+
+    private static void bumpProfile(Connection c, UUID id) throws SQLException {
+        try (PreparedStatement st = c.prepareStatement("UPDATE profiles SET version = version + 1 WHERE id = ?")) {
+            st.setString(1, id.toString());
+            st.executeUpdate();
+        }
+    }
+
+    // runs work with the profile row locked; false when the row is gone, the work says so, or the write failed
+    private boolean withProfileLocked(UUID id, String what, TxRunner.Work<Boolean> work) {
+        try {
+            return tx.inTransaction(t -> {
+                if (!t.lock("profiles", "id", id.toString()) || !work.run(t)) {
+                    return false;
+                }
+                bumpProfile(t.connection(), id);
+                return true;
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not " + what + " on profile " + id + ": " + e.getMessage());
+            return false;
+        }
+    }
+
+    @Override
+    public AddMemberResult addMember(UUID profileId, ProfileMember member, int maxMembers) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                if (!t.lock("profiles", "id", profileId.toString())) {
+                    return AddMemberResult.FAILED;
+                }
+                try (PreparedStatement st = c.prepareStatement(
+                        "SELECT COUNT(*), SUM(CASE WHEN uuid = ? THEN 1 ELSE 0 END) FROM profile_members WHERE profile_id = ?")) {
+                    st.setString(1, member.uuid().toString());
+                    st.setString(2, profileId.toString());
+                    try (ResultSet rs = st.executeQuery()) {
+                        rs.next();
+                        if (rs.getInt(2) > 0) {
+                            return AddMemberResult.ALREADY;
+                        }
+                        if (rs.getInt(1) >= maxMembers) {
+                            return AddMemberResult.FULL;
+                        }
+                    }
+                }
+                insertMember(c, profileId, member);
+                bumpProfile(c, profileId);
+                return AddMemberResult.ADDED;
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not add " + member.uuid() + " to profile " + profileId + ": " + e.getMessage());
+            return AddMemberResult.FAILED;
+        }
+    }
+
+    @Override
+    public boolean removeMember(UUID profileId, UUID member) {
+        return withProfileLocked(profileId, "remove member " + member, t -> {
+            try (PreparedStatement st = t.connection().prepareStatement(
+                    "DELETE FROM profile_members WHERE profile_id = ? AND uuid = ?")) {
+                st.setString(1, profileId.toString());
+                st.setString(2, member.toString());
+                st.executeUpdate();
+            }
+            return true;
+        });
+    }
+
+    private static boolean setRole(Connection c, UUID profileId, UUID member, IslandRole role) throws SQLException {
+        try (PreparedStatement st = c.prepareStatement(
+                "UPDATE profile_members SET role = ? WHERE profile_id = ? AND uuid = ?")) {
+            st.setString(1, role.name());
+            st.setString(2, profileId.toString());
+            st.setString(3, member.toString());
+            return st.executeUpdate() > 0;
+        }
+    }
+
+    @Override
+    public boolean setMemberRole(UUID profileId, UUID member, IslandRole role) {
+        return withProfileLocked(profileId, "change the role of " + member,
+                t -> setRole(t.connection(), profileId, member, role));
+    }
+
+    @Override
+    public boolean transferOwner(UUID profileId, UUID newOwner, UUID oldOwner) {
+        return withProfileLocked(profileId, "transfer ownership to " + newOwner, t -> {
+            Connection c = t.connection();
+            if (!setRole(c, profileId, newOwner, IslandRole.OWNER)) {
+                return false;                               // not on the roster any more: roll back
+            }
+            setRole(c, profileId, oldOwner, IslandRole.CO_OWNER);
+            try (PreparedStatement st = c.prepareStatement("UPDATE profiles SET owner = ? WHERE id = ?")) {
+                st.setString(1, newOwner.toString());
+                st.setString(2, profileId.toString());
+                st.executeUpdate();
+            }
+            return true;
+        });
+    }
+
+    @Override
+    public boolean updateProfileRewardLevel(UUID id, int rewardLevel) {
+        return withProfileLocked(id, "save the reward level", t -> {
+            try (PreparedStatement st = t.connection().prepareStatement(
+                    "UPDATE profiles SET reward_level = " + greatest() + "(reward_level, ?) WHERE id = ?")) {
+                st.setInt(1, rewardLevel);
+                st.setString(2, id.toString());
+                st.executeUpdate();
+            }
+            return true;
+        });
     }
 
     /** Delete a profile, its roster and its saved state. The island is deleted separately. */

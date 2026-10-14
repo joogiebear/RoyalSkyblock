@@ -41,6 +41,9 @@ public final class Island {
     private double guestX, guestY, guestZ;
     private float guestYaw, guestPitch;
 
+    // the row's version when this copy was read; every database write raises it
+    private long version;
+
     // upgrade tier per upgrade key (e.g. "size" -> 3)
     private final Map<String, Integer> upgrades = new ConcurrentHashMap<>();
 
@@ -115,6 +118,32 @@ public final class Island {
         this.unloadedAt = unloadedAt;
     }
 
+    public long version() {
+        return version;
+    }
+
+    public void setVersion(long version) {
+        this.version = version;
+    }
+
+    /**
+     * Takes every stored field from a fresh read of the same island, in place: menus and services keep
+     * references to the cached object.
+     */
+    public void copyFrom(Island fresh) {
+        this.profileId = fresh.profileId;
+        this.radius = fresh.radius;
+        this.level = fresh.level;
+        this.rewardLevel = fresh.rewardLevel;
+        this.perkLevel = fresh.perkLevel;
+        this.unloadedAt = fresh.unloadedAt;
+        setHome(fresh.homeX, fresh.homeY, fresh.homeZ, fresh.homeYaw, fresh.homePitch);
+        loadGuestHome(fresh.serializeGuestHome());
+        loadUpgrades(fresh.serializeUpgrades());
+        loadSettings(fresh.serializeSettings());
+        this.version = fresh.version;
+    }
+
     public int upgradeTier(String key) {
         return upgrades.getOrDefault(key, 0);
     }
@@ -174,6 +203,22 @@ public final class Island {
             sb.append(e.getKey()).append('=').append(e.getValue() ? '1' : '0');
         }
         return sb.toString();
+    }
+
+    /** A serialized settings value with one key set and the others kept. */
+    public static String withSetting(String serialized, String key, boolean enabled) {
+        Island merged = new Island(new UUID(0, 0), new UUID(0, 0), "", 0);
+        merged.loadSettings(serialized);
+        merged.settings.put(key, enabled);
+        return merged.serializeSettings();
+    }
+
+    /** A serialized upgrades value with one tier set and the others kept. */
+    public static String withUpgradeTier(String serialized, String key, int tier) {
+        Island merged = new Island(new UUID(0, 0), new UUID(0, 0), "", 0);
+        merged.loadUpgrades(serialized);
+        merged.upgrades.put(key, tier);
+        return merged.serializeUpgrades();
     }
 
     /** Load overrides from the serialized {@code settings} column value. */

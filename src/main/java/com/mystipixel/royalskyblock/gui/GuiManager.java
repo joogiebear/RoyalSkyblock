@@ -360,8 +360,9 @@ public final class GuiManager implements Listener {
                     if (current == null) {
                         return;
                     }
-                    current.setSetting(setting, !current.isEnabled(setting));
-                    plugin.writeAsync(() -> plugin.storage().saveIsland(current));
+                    boolean enabled = !current.isEnabled(setting);
+                    current.setSetting(setting, enabled);
+                    plugin.writeAsync(() -> plugin.storage().updateIslandSetting(current.id(), setting.key(), enabled));
                     open(viewer, SETTINGS);
                 });
             }
