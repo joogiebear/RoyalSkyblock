@@ -201,8 +201,10 @@ class SqlStorageSharedTest {
         b.updateIslandLevel(island.id(), 9, 4);
         a.updateIslandPerkLevel(island.id(), 6);
         b.updateIslandPerkLevel(island.id(), 2);
-        assertTrue(a.updateProfileRewardLevel(profile.id(), 8));
-        assertTrue(b.updateProfileRewardLevel(profile.id(), 3));
+        long first = a.updateProfileRewardLevel(profile.id(), 8);
+        assertTrue(first > 0);
+        assertEquals(first + 1, b.updateProfileRewardLevel(profile.id(), 3));
+        assertEquals(-1, a.updateProfileRewardLevel(UUID.randomUUID(), 3));
         Island read = a.getIsland(island.id());
         assertEquals(9, read.level());
         assertEquals(7, read.rewardLevel());

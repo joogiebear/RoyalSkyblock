@@ -379,11 +379,11 @@ public final class EcoStorage implements Storage {
     }
 
     @Override
-    public boolean updateProfileRewardLevel(UUID id, int rewardLevel) {
+    public long updateProfileRewardLevel(UUID id, int rewardLevel) {
         return updateProfile(id, profile -> {
             profile.setRewardLevel(Math.max(profile.rewardLevel(), rewardLevel));
             return true;
-        });
+        }) ? 0 : -1;
     }
 
     @Override

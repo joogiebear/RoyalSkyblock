@@ -45,12 +45,16 @@ public final class SqlStorage implements Storage {
     private final Logger logger;
 
     static final int SCHEMA_VERSION = 1;
+    /** Seconds a MySQL statement waits for a row lock another connection holds. */
+    static final int LOCK_WAIT_SECONDS = 5;
     // a player's row may sit ACTIVE this long without a heartbeat before another server treats it as abandoned
     public static final Duration HANDOFF_STALE = Duration.ofSeconds(60);
 
     private Type type;
     private HikariDataSource dataSource;
     private TxRunner tx;
+    // bank movements run on the server thread, so a lock wait is tried once and then refused, not retried
+    private TxRunner bankTx;
     private PlayerHandoff handoff;
     private IslandHostLock hosts;
     private Duration hostTtl = IslandHostLock.DEFAULT_TTL;
@@ -58,6 +62,14 @@ public final class SqlStorage implements Storage {
     public SqlStorage(SqlSettings settings, Logger logger) {
         this.settings = settings;
         this.logger = logger;
+    }
+
+    /**
+     * Whether other servers can share this database. SQLite is one file on one server, so nothing it caches
+     * can change behind its back.
+     */
+    public boolean shared() {
+        return type == Type.MYSQL;
     }
 
     /** For tests: a shorter island host claim. Call before {@link #connect}. */
@@ -91,9 +103,14 @@ public final class SqlStorage implements Storage {
             // fail the call rather than hold the server thread; Hikari's 30s default could freeze the server
             // behind one stuck query
             hikari.setConnectionTimeout(10_000);
+            if (type == Type.MYSQL) {
+                // a row lock held by another server fails fast instead of after InnoDB's 50 s default
+                hikari.setConnectionInitSql("SET SESSION innodb_lock_wait_timeout = " + LOCK_WAIT_SECONDS);
+            }
 
             this.dataSource = new HikariDataSource(hikari);
             this.tx = new TxRunner(dataSource);
+            this.bankTx = type == Type.MYSQL ? new TxRunner(dataSource, 1) : tx;
             migrate();
             this.handoff = new PlayerHandoff(tx, "rsb", settings.serverId(), HANDOFF_STALE);
             handoff.createTable();
@@ -811,16 +828,24 @@ public final class SqlStorage implements Storage {
     }
 
     @Override
-    public boolean updateProfileRewardLevel(UUID id, int rewardLevel) {
-        return withProfileLocked(id, "save the reward level", t -> {
-            try (PreparedStatement st = t.connection().prepareStatement(
-                    "UPDATE profiles SET reward_level = " + greatest() + "(reward_level, ?) WHERE id = ?")) {
-                st.setInt(1, rewardLevel);
-                st.setString(2, id.toString());
-                st.executeUpdate();
-            }
-            return true;
-        });
+    public long updateProfileRewardLevel(UUID id, int rewardLevel) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement("UPDATE profiles SET reward_level = " + greatest()
+                        + "(reward_level, ?), version = version + 1 WHERE id = ?")) {
+                    st.setInt(1, rewardLevel);
+                    st.setString(2, id.toString());
+                    if (st.executeUpdate() == 0) {
+                        return -1L;
+                    }
+                }
+                return versionOf(c, "profiles", id);
+            });
+        } catch (SQLException e) {
+            logger.severe("Could not save the reward level on profile " + id + ": " + e.getMessage());
+            return -1;
+        }
     }
 
     /** Delete a profile, its roster and its saved state. The island is deleted separately. */
@@ -1099,22 +1124,21 @@ public final class SqlStorage implements Storage {
     @Override
     public BankOutcome bankTransaction(String accountId, int startingLevel, BankMutation work) {
         try {
-            return tx.inTransaction(t -> {
+            return bankTx.inTransaction(t -> {
                 Connection c = t.connection();
-                try (PreparedStatement st = c.prepareStatement(t.dialect().insertIgnore() + " INTO bank_accounts "
-                        + "(account_id, balance, level, last_interest, interest_floor) VALUES (?, 0, ?, 0, -1)")) {
-                    st.setString(1, accountId);
-                    st.setInt(2, startingLevel);
-                    st.executeUpdate();
-                }
-                com.mystipixel.royalskyblock.bank.BankAccount locked;
-                try (PreparedStatement st = c.prepareStatement("SELECT balance, level, last_interest, interest_floor "
-                        + "FROM bank_accounts WHERE account_id = ?" + t.dialect().forUpdate())) {
-                    st.setString(1, accountId);
-                    try (ResultSet rs = st.executeQuery()) {
-                        rs.next();
-                        locked = new com.mystipixel.royalskyblock.bank.BankAccount(accountId, rs.getDouble(1),
-                                rs.getInt(2), rs.getLong(3), rs.getDouble(4));
+                // lock first and create only when missing: an INSERT IGNORE on an existing row takes a shared
+                // lock, and two of those both upgrading to the FOR UPDATE lock deadlock
+                com.mystipixel.royalskyblock.bank.BankAccount locked = lockBankAccount(t, accountId);
+                if (locked == null) {
+                    try (PreparedStatement st = c.prepareStatement(t.dialect().insertIgnore() + " INTO bank_accounts "
+                            + "(account_id, balance, level, last_interest, interest_floor) VALUES (?, 0, ?, 0, -1)")) {
+                        st.setString(1, accountId);
+                        st.setInt(2, startingLevel);
+                        st.executeUpdate();
+                    }
+                    locked = lockBankAccount(t, accountId);
+                    if (locked == null) {
+                        throw new SQLException("bank account " + accountId + " vanished after it was created");
                     }
                 }
                 BankOutcome outcome = work.apply(locked);
@@ -1144,8 +1168,27 @@ public final class SqlStorage implements Storage {
                 return outcome;
             });
         } catch (SQLException e) {
-            logger.severe("Could not save bank account " + accountId + ": " + e.getMessage());
+            if (e.getErrorCode() == MYSQL_LOCK_WAIT_TIMEOUT) {
+                logger.warning("Bank account " + accountId + " is busy on another server; refused: " + e.getMessage());
+            } else {
+                logger.severe("Could not save bank account " + accountId + ": " + e.getMessage());
+            }
             return BankOutcome.failure();
+        }
+    }
+
+    private static final int MYSQL_LOCK_WAIT_TIMEOUT = 1205;
+
+    // null when the account has no row yet
+    private static com.mystipixel.royalskyblock.bank.BankAccount lockBankAccount(
+            com.mystipixel.royalcommon.storage.Tx t, String accountId) throws SQLException {
+        try (PreparedStatement st = t.connection().prepareStatement("SELECT balance, level, last_interest, "
+                + "interest_floor FROM bank_accounts WHERE account_id = ?" + t.dialect().forUpdate())) {
+            st.setString(1, accountId);
+            try (ResultSet rs = st.executeQuery()) {
+                return rs.next() ? new com.mystipixel.royalskyblock.bank.BankAccount(accountId, rs.getDouble(1),
+                        rs.getInt(2), rs.getLong(3), rs.getDouble(4)) : null;
+            }
         }
     }
 

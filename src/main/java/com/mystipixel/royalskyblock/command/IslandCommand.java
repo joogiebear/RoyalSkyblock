@@ -361,10 +361,10 @@ public final class IslandCommand {
         if (guest) {
             island.setGuestHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
             String serialized = island.serializeGuestHome();
-            plugin.writeAsync(() -> plugin.storage().updateIslandGuestHome(islandId, serialized));
+            plugin.islands().writeIsland(island, () -> plugin.storage().updateIslandGuestHome(islandId, serialized));
         } else {
             island.setHome(l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch());
-            plugin.writeAsync(() -> plugin.storage().updateIslandHome(islandId,
+            plugin.islands().writeIsland(island, () -> plugin.storage().updateIslandHome(islandId,
                     l.getX(), l.getY(), l.getZ(), l.getYaw(), l.getPitch()));
         }
         plugin.messages().send(player, guest ? "island.guest-spawn-set" : "island.spawn-set");

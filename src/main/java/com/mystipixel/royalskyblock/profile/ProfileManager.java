@@ -87,12 +87,40 @@ public final class ProfileManager {
     }
 
     /**
+     * Runs a targeted update of the profile on the database thread. Main thread. When nobody else wrote the
+     * row in between, the version it returns is marked as seen, so the poll does not reload (and briefly undo)
+     * this server's own change.
+     */
+    public void writeProfile(Profile profile, java.util.function.LongSupplier update) {
+        DbExecutor db = plugin.db();
+        if (db == null) {
+            update.getAsLong();
+            return;
+        }
+        db.submit("write profile", update::getAsLong).whenCompleteAsync((version, error) -> {
+            if (error != null) {
+                plugin.getLogger().warning("Could not save profile " + profile.id() + ": " + error.getMessage());
+                return;
+            }
+            if (version <= 0 || version != profile.version() + 1) {
+                return;                          // failed, or another server wrote too: let the poll reload it
+            }
+            profile.setVersion(version);
+            VersionPoller<UUID> current = poller;
+            if (current != null) {
+                current.seen(profile.id(), version);
+            }
+        }, db.mainThread());
+    }
+
+    /**
      * Polls the cached profiles' versions, so a roster or owner change another server made shows up here within
-     * a few seconds. Called from createTasks; a no-op unless the store is SQL.
+     * a few seconds. Called from createTasks; a no-op unless the store is a shared (MySQL) one.
      */
     public void startVersionPoll(long periodTicks) {
         DbExecutor db = plugin.db();
-        if (!(storage instanceof SqlStorage sql) || db == null) {
+        // a single SQLite server writes everything itself, so there is nothing to poll for
+        if (!(storage instanceof SqlStorage sql) || !sql.shared() || db == null) {
             return;
         }
         VersionPoller<UUID> current = poller;
@@ -191,11 +219,12 @@ public final class ProfileManager {
     // How long a joining player waits at the login screen for the server they left to finish saving them.
     private static final java.time.Duration HANDOFF_WAIT = java.time.Duration.ofSeconds(5);
 
-    // players this server has marked ACTIVE in the hand-off table; guarded by itself, together with the
-    // markActive / markSaved call that changes it
-    private final java.util.Set<UUID> claimed = new java.util.HashSet<>();
+    // players this server has (or is about to have) marked ACTIVE in the hand-off table, each with the
+    // generation of that session; a release checks it after its SQL, so no lock is held across database calls
+    private final Map<UUID, Long> claimed = new ConcurrentHashMap<>();
+    private final java.util.concurrent.atomic.AtomicLong sessions = new java.util.concurrent.atomic.AtomicLong();
     // players whose release (markSaved) failed; the heartbeat retries them
-    private final java.util.Set<UUID> releasing = ConcurrentHashMap.newKeySet();
+    private final Map<UUID, Long> releasing = new ConcurrentHashMap<>();
 
     private @Nullable PlayerHandoff handoff() {
         return storage instanceof SqlStorage sql ? sql.handoff() : null;
@@ -233,11 +262,10 @@ public final class ProfileManager {
     }
 
     private void markActive(PlayerHandoff handoff, UUID uuid) throws java.sql.SQLException {
-        synchronized (claimed) {
-            handoff.markActive(uuid);
-            claimed.add(uuid);
-            releasing.remove(uuid);
-        }
+        // recorded before the SQL: a release of an earlier session that lands meanwhile sees it and re-marks
+        claimed.put(uuid, sessions.incrementAndGet());
+        releasing.remove(uuid);
+        handoff.markActive(uuid);
     }
 
     // After the player's last write is queued: the database thread runs this after it, so the next server
@@ -247,26 +275,30 @@ public final class ProfileManager {
         if (handoff == null) {
             return;
         }
-        synchronized (claimed) {
-            if (!claimed.remove(uuid)) {
-                return;
-            }
+        Long released = claimed.remove(uuid);
+        if (released == null) {
+            return;
         }
-        plugin.writeAsync(() -> markSaved(handoff, uuid));
+        plugin.writeAsync(() -> markSaved(handoff, uuid, released));
     }
 
-    private void markSaved(PlayerHandoff handoff, UUID uuid) {
-        synchronized (claimed) {
-            if (claimed.contains(uuid)) {
-                return;                         // back on this server already
+    // Database thread. released is the generation of the session being ended: a newer one means the player
+    // logged in here again, and its ACTIVE may have landed before this SAVED, so it is said again after.
+    private void markSaved(PlayerHandoff handoff, UUID uuid, long released) {
+        if (claimed.containsKey(uuid)) {
+            releasing.remove(uuid);
+            return;                             // back on this server already
+        }
+        try {
+            handoff.markSaved(uuid);
+            releasing.remove(uuid);
+            Long current = claimed.get(uuid);
+            if (current != null && current > released) {
+                handoff.markActive(uuid);
             }
-            try {
-                handoff.markSaved(uuid);
-                releasing.remove(uuid);
-            } catch (java.sql.SQLException e) {
-                releasing.add(uuid);
-                plugin.getLogger().warning("Could not record that " + uuid + " was saved; retrying: " + e.getMessage());
-            }
+        } catch (java.sql.SQLException e) {
+            releasing.put(uuid, released);
+            plugin.getLogger().warning("Could not record that " + uuid + " was saved; retrying: " + e.getMessage());
         }
     }
 
@@ -274,8 +306,8 @@ public final class ProfileManager {
     public void retryReleases() {
         PlayerHandoff handoff = handoff();
         if (handoff != null) {
-            for (UUID uuid : List.copyOf(releasing)) {
-                markSaved(handoff, uuid);
+            for (Map.Entry<UUID, Long> release : List.copyOf(releasing.entrySet())) {
+                markSaved(handoff, release.getKey(), release.getValue());
             }
         }
     }
@@ -333,11 +365,7 @@ public final class ProfileManager {
             return;
         }
         PlayerHandoff handoff = handoff();
-        boolean marked;
-        synchronized (claimed) {
-            marked = claimed.contains(uuid);
-        }
-        if (handoff != null && !marked) {
+        if (handoff != null && !claimed.containsKey(uuid)) {
             try {
                 markActive(handoff, uuid);
             } catch (java.sql.SQLException e) {
@@ -635,39 +663,58 @@ public final class ProfileManager {
             return CompletableFuture.completedFuture(false);
         }
 
-        // Everyone but the owner leaves first, exactly as if kicked, so each is moved off or recorded as owed
-        // and gets their carried items back. Their bank savings were checked above.
-        List<ProfileMember> others = target.members().stream()
-                .filter(member -> !member.uuid().equals(uuid))
-                .toList();
-        if (!others.isEmpty()) {
-            for (ProfileMember member : others) {
-                target.removeMember(member.uuid());
-                storage.removeMember(targetId, member.uuid());
-            }
-            for (ProfileMember member : others) {
-                Player online = Bukkit.getPlayer(member.uuid());
-                if (online != null) {
-                    plugin.messages().send(online, "coop.profile-deleted", "profile", target.name());
-                }
-                owePayout(member.uuid(), targetId);
-            }
-        }
-
-        deleting.add(targetId);
-        pendingInvites.values().removeIf(invite -> invite.profileId().equals(targetId));
-        profileCache.remove(targetId);
+        // The island's host claim comes first: while a member has it loaded on another server the delete is
+        // refused there, and nothing below may have happened by then.
         Island island = plugin.islands().getIslandByProfile(targetId);
-        CompletableFuture<Void> worldDelete = island != null
-                ? plugin.islands().deleteIsland(island.id())
+        CompletableFuture<Void> claimed = island != null
+                ? plugin.islands().claimForDelete(island.id())
                 : CompletableFuture.completedFuture(null);
-        return worldDelete
-                .thenRun(() -> storage.deleteProfile(targetId))
-                .thenApply(ignored -> true)
-                .whenComplete((ok, error) -> {
-                    profileCache.remove(targetId);   // anything that re-read it meanwhile
-                    deleting.remove(targetId);
-                });
+        return afterClaim(claimed, () -> removeMembersForDelete(uuid, target), () -> {
+            deleting.add(targetId);
+            pendingInvites.values().removeIf(invite -> invite.profileId().equals(targetId));
+            profileCache.remove(targetId);
+            CompletableFuture<Void> worldDelete = island != null
+                    ? plugin.islands().deleteIsland(island.id())
+                    : CompletableFuture.completedFuture(null);
+            return worldDelete
+                    .thenRun(() -> storage.deleteProfile(targetId))
+                    .thenApply(ignored -> true)
+                    .whenComplete((ok, error) -> {
+                        profileCache.remove(targetId);   // anything that re-read it meanwhile
+                        deleting.remove(targetId);
+                    });
+        });
+    }
+
+    /**
+     * Runs {@code strip} and then {@code rest} once {@code claim} succeeded; a failed claim fails the result
+     * with neither run.
+     */
+    static <T> CompletableFuture<T> afterClaim(CompletableFuture<?> claim, Runnable strip,
+                                              java.util.function.Supplier<CompletableFuture<T>> rest) {
+        return claim.thenCompose(ignored -> {
+            strip.run();
+            return rest.get();
+        });
+    }
+
+    // Everyone but the owner leaves, exactly as if kicked, so each is moved off or recorded as owed and gets
+    // their carried items back. Their bank savings were checked before. Main thread.
+    private void removeMembersForDelete(UUID owner, Profile target) {
+        List<ProfileMember> others = target.members().stream()
+                .filter(member -> !member.uuid().equals(owner))
+                .toList();
+        for (ProfileMember member : others) {
+            target.removeMember(member.uuid());
+            storage.removeMember(target.id(), member.uuid());
+        }
+        for (ProfileMember member : others) {
+            Player online = Bukkit.getPlayer(member.uuid());
+            if (online != null) {
+                plugin.messages().send(online, "coop.profile-deleted", "profile", target.name());
+            }
+            owePayout(member.uuid(), target.id());
+        }
     }
 
     /** Invite a player to the inviter's active Coop profile. Returns why not, or null on success. */

@@ -107,6 +107,13 @@ public final class BankService {
         return outcome;
     }
 
+    // the debit landed, the purse refused the money and putting it back failed: it is now in neither place
+    private void lostInTransit(String id, Player purse, double amount, String type) {
+        plugin.getLogger().severe("Bank " + type + " of " + money(amount) + " from account " + id + " for "
+                + purse.getName() + " (" + purse.getUniqueId() + ") was debited, refused by the purse and could not"
+                + " be put back: credit it by hand.");
+    }
+
     /** Drop a cached account, so an external change (an admin edit, a reload) is picked up at once. */
     public void invalidate(String id) {
         if (id == null) {
@@ -216,8 +223,11 @@ public final class BankService {
         if (!vault.deposit(purse, amount)) {
             // The purse refused it: put it back so the payout stays owed rather than vanishing.
             String reverted = note("purse-refused", "note", note);
-            transact(id, locked -> BankOutcome.write(locked.withBalance(round(locked.balance() + amount)),
-                    "PAYOUT_REVERTED", amount, reverted));
+            BankOutcome back = transact(id, locked -> BankOutcome.write(
+                    locked.withBalance(round(locked.balance() + amount)), "PAYOUT_REVERTED", amount, reverted));
+            if (back.failed()) {
+                lostInTransit(id, purse, amount, "PAYOUT");
+            }
             return -1;
         }
         audit.paidOut(purse.getUniqueId(), purse.getName(), amount);
@@ -250,8 +260,11 @@ public final class BankService {
         }
         if (!vault.deposit(purse, wanted)) {
             String reverted = note("withdraw-reverted", "player", purse.getName());
-            transact(id, locked -> BankOutcome.write(locked.withBalance(round(locked.balance() + wanted)),
-                    "WITHDRAW_REVERTED", wanted, reverted));
+            BankOutcome back = transact(id, locked -> BankOutcome.write(
+                    locked.withBalance(round(locked.balance() + wanted)), "WITHDRAW_REVERTED", wanted, reverted));
+            if (back.failed()) {
+                lostInTransit(id, purse, wanted, "WITHDRAW");
+            }
             return result("purse-full");
         }
         audit.withdrew(id, purse.getUniqueId(), purse.getName(), wanted, round(outcome.account().balance() + wanted));

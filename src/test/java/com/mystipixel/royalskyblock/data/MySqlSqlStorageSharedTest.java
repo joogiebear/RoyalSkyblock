@@ -172,6 +172,40 @@ class MySqlSqlStorageSharedTest extends SqlStorageSharedTest {
     }
 
     @Test
+    void poolConnectionsWaitBrieflyForRowLocks() throws Exception {
+        SqlStorage a = open("a");
+        try (Connection c = a.dataSource().getConnection(); Statement st = c.createStatement();
+             java.sql.ResultSet rs = st.executeQuery("SELECT @@SESSION.innodb_lock_wait_timeout")) {
+            assertTrue(rs.next());
+            assertEquals(SqlStorage.LOCK_WAIT_SECONDS, rs.getInt(1));
+        }
+    }
+
+    @Test
+    void aBankAccountLockedElsewhereIsRefusedQuickly() throws Exception {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        String account = "c:" + UUID.randomUUID();
+        a.bankTransaction(account, 1, locked -> BankOutcome.write(locked.withBalance(100), "DEPOSIT", 100, "seed"));
+        try (Connection holder = a.dataSource().getConnection()) {
+            holder.setAutoCommit(false);
+            try (Statement st = holder.createStatement()) {
+                st.executeQuery("SELECT balance FROM bank_accounts WHERE account_id = '" + account + "' FOR UPDATE")
+                        .close();
+            }
+            long start = System.nanoTime();
+            BankOutcome outcome = b.bankTransaction(account, 1,
+                    locked -> BankOutcome.write(locked.withBalance(0), "WITHDRAW", 100, "late"));
+            long waited = (System.nanoTime() - start) / 1_000_000L;
+            assertTrue(outcome.failed());
+            // one wait of LOCK_WAIT_SECONDS, not one per retry
+            assertTrue(waited < SqlStorage.LOCK_WAIT_SECONDS * 1000L + 3000L, "waited " + waited + " ms");
+            holder.rollback();
+        }
+        assertEquals(100, b.getBankAccount(account).balance());
+    }
+
+    @Test
     void theNextServerWaitsUntilTheLastOneSaved() throws Exception {
         SqlStorage a = open("a");
         SqlStorage b = open("b");

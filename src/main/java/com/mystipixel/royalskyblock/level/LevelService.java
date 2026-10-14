@@ -120,7 +120,8 @@ public final class LevelService {
                     lastScan.put(island.id(), nowMillis());
                     grantLevelUps(island, level);
                     int rewardLevel = island.rewardLevel();
-                    plugin.writeAsync(() -> plugin.storage().updateIslandLevel(island.id(), level, rewardLevel));
+                    plugin.islands().writeIsland(island,
+                            () -> plugin.storage().updateIslandLevel(island.id(), level, rewardLevel));
                     scanning.remove(island.id());
                     result.complete(level);
                 }))
@@ -173,7 +174,7 @@ public final class LevelService {
         island.setRewardLevel(to);
         if (profile != null) {
             profile.setRewardLevel(to);
-            plugin.writeAsync(() -> plugin.storage().updateProfileRewardLevel(profile.id(), to));
+            plugin.profiles().writeProfile(profile, () -> plugin.storage().updateProfileRewardLevel(profile.id(), to));
         }
         notifyMembers(profile, island, to);
     }

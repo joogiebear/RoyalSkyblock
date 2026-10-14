@@ -98,7 +98,8 @@ public interface Storage {
     boolean transferOwner(UUID profileId, UUID newOwner, UUID oldOwner);
 
     /** Only ever goes up. */
-    boolean updateProfileRewardLevel(UUID id, int rewardLevel);
+    /** @return the row's new version, or -1 when the profile is gone or the write failed */
+    long updateProfileRewardLevel(UUID id, int rewardLevel);
 
     boolean deleteProfile(UUID id);
 

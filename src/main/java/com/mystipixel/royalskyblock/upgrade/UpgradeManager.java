@@ -26,6 +26,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -51,7 +52,8 @@ public final class UpgradeManager {
     // islandId:key to pending: the countdowns menus draw, not the source of truth (that is the database)
     private final Map<String, PendingUpgrade> pending = new ConcurrentHashMap<>();
     private final Map<UUID, Long> pendingFetchedAt = new ConcurrentHashMap<>();
-    private boolean ticking;
+    // set and cleared on the main thread only
+    private volatile boolean ticking;
 
     public UpgradeManager(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
@@ -80,9 +82,9 @@ public final class UpgradeManager {
     }
 
     /** Rereads an island's timers, e.g. after it loaded here or a purchase on another server. Main thread. */
-    public void refreshPending(UUID islandId) {
+    public CompletableFuture<Void> refreshPending(UUID islandId) {
         pendingFetchedAt.put(islandId, System.currentTimeMillis());
-        onDb("read upgrade timers", () -> plugin.storage().getPending(islandId)).thenAccept(rows -> {
+        return onDb("read upgrade timers", () -> plugin.storage().getPending(islandId)).thenAccept(rows -> {
             pending.values().removeIf(p -> p.islandId().equals(islandId));
             for (PendingUpgrade p : rows) {
                 pending.put(pkey(p.islandId(), p.upgradeKey()), p);
@@ -105,7 +107,14 @@ public final class UpgradeManager {
                 return CompletableFuture.failedFuture(e);
             }
         }
-        return db.submit(name, work).thenApplyAsync(result -> result, db.mainThread());
+        // handle, not thenApply: a failed future would skip a thenApplyAsync and run its dependents here, on
+        // the database thread
+        return db.submit(name, work).handleAsync((result, error) -> {
+            if (error != null) {
+                throw error instanceof CompletionException completion ? completion : new CompletionException(error);
+            }
+            return result;
+        }, db.mainThread());
     }
 
     private static CompletableFuture<PurchaseResult> done(PurchaseResult result) {
@@ -135,10 +144,9 @@ public final class UpgradeManager {
         return onDb("reserve upgrade", () -> plugin.storage().reservePending(reservation, current))
                 .thenCompose(reserved -> switch (reserved) {
                     case RESERVED -> chargeReserved(player, island, def, next, reservation);
-                    case IN_PROGRESS -> {
-                        refreshPending(island.id());
-                        yield done(PurchaseResult.IN_PROGRESS);
-                    }
+                    // answered once the countdown is known here, so the message shows the time left
+                    case IN_PROGRESS -> refreshPending(island.id())
+                            .handle((ignored, error) -> PurchaseResult.IN_PROGRESS);
                     case TIER_CHANGED -> done(PurchaseResult.TIER_CHANGED);
                     case FAILED -> done(PurchaseResult.FAILED);
                 });
@@ -368,7 +376,8 @@ public final class UpgradeManager {
     public void setTier(Island island, UpgradeDef def, int tier) {
         applyTier(island, def, tier);
         Integer radius = radiusFor(def, tier);
-        plugin.writeAsync(() -> plugin.storage().updateIslandUpgradeTier(island.id(), def.key(), tier, radius));
+        plugin.islands().writeIsland(island,
+                () -> plugin.storage().updateIslandUpgradeTier(island.id(), def.key(), tier, radius));
     }
 
     // a tier already saved: set it on the cached island and run its effects here
