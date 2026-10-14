@@ -1,6 +1,8 @@
 package com.mystipixel.royalskyblock.data;
 
+import com.mystipixel.royalskyblock.bank.BankAccount;
 import com.mystipixel.royalskyblock.island.Island;
+import com.mystipixel.royalskyblock.message.Reason;
 import com.mystipixel.royalskyblock.island.IslandRole;
 import com.mystipixel.royalskyblock.profile.Gamemode;
 import com.mystipixel.royalskyblock.profile.Profile;
@@ -265,5 +267,93 @@ class SqlStorageSharedTest {
         // someone no longer on the roster can't be made owner, and nothing changes
         assertFalse(a.transferOwner(profile.id(), UUID.randomUUID(), heir.uuid()));
         assertEquals(heir.uuid(), a.getProfile(profile.id()).owner());
+    }
+
+    private static final Reason NOT_ENOUGH = new Reason("bank.result.account.withdraw.not-enough-money");
+
+    static BankOutcome withdrawOne(BankAccount locked) {
+        return locked.balance() < 1 ? BankOutcome.refuse(locked, NOT_ENOUGH)
+                : BankOutcome.write(locked.withBalance(locked.balance() - 1), "WITHDRAW", 1, "test");
+    }
+
+    @Test
+    void withdrawalsNeverExceedTheBalance() throws Exception {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        String account = "c:" + UUID.randomUUID();
+        a.bankTransaction(account, 1, locked -> BankOutcome.write(locked.withBalance(100), "DEPOSIT", 100, "seed"));
+        java.util.concurrent.atomic.AtomicInteger paid = new java.util.concurrent.atomic.AtomicInteger();
+        java.util.concurrent.atomic.AtomicInteger refused = new java.util.concurrent.atomic.AtomicInteger();
+        List<Throwable> problems = java.util.Collections.synchronizedList(new ArrayList<>());
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < 4; i++) {
+            SqlStorage server = i % 2 == 0 ? a : b;
+            threads.add(new Thread(() -> {
+                for (int n = 0; n < 100; n++) {
+                    BankOutcome outcome = server.bankTransaction(account, 1, SqlStorageSharedTest::withdrawOne);
+                    if (outcome.failed()) {
+                        problems.add(new AssertionError("a withdrawal failed"));
+                    } else if (outcome.written()) {
+                        paid.incrementAndGet();
+                    } else if (outcome.refusal() == NOT_ENOUGH) {
+                        refused.incrementAndGet();
+                    } else {
+                        problems.add(new AssertionError("unexpected refusal " + outcome.refusal()));
+                    }
+                }
+            }));
+        }
+        threads.forEach(Thread::start);
+        for (Thread t : threads) {
+            t.join();
+        }
+        assertTrue(problems.isEmpty(), problems.toString());
+        assertEquals(100, paid.get());
+        assertEquals(300, refused.get());
+        assertEquals(0, b.getBankAccount(account).balance());
+        long withdrawals = a.getBankTransactions(account, 1000).stream().filter(t -> t.type().equals("WITHDRAW")).count();
+        assertEquals(100, withdrawals);
+    }
+
+    @Test
+    void depositIsCappedAtTheLockedBalance() {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        String account = "p:" + UUID.randomUUID();
+        double max = 1000;
+        BankMutation depositUpToMax = locked -> {
+            double credit = Math.min(700, max - locked.balance());
+            return credit <= 0 ? BankOutcome.refuse(locked, null)
+                    : BankOutcome.write(locked.withBalance(locked.balance() + credit), "DEPOSIT", credit, "test");
+        };
+        assertEquals(700, a.bankTransaction(account, 1, depositUpToMax).amount());
+        // b's cached view said 0; the locked row says 700, so only 300 fits
+        BankOutcome second = b.bankTransaction(account, 1, depositUpToMax);
+        assertEquals(300, second.amount());
+        assertEquals(max, second.account().balance());
+        assertFalse(a.bankTransaction(account, 1, depositUpToMax).written());
+    }
+
+    @Test
+    void interestIsPaidOncePerPeriod() {
+        SqlStorage a = open("a");
+        SqlStorage b = open("b");
+        String account = "c:" + UUID.randomUUID();
+        a.bankTransaction(account, 1, locked -> BankOutcome.write(locked.withBalance(100), "DEPOSIT", 100, "seed"));
+        long now = 1_000_000L;
+        BankMutation claim = locked -> locked.lastInterest() > 0 && now < locked.lastInterest() + 3600
+                ? BankOutcome.refuse(locked, new Reason("bank.result.interest-not-ready"))
+                : BankOutcome.write(locked.withBalance(locked.balance() + 5).withLastInterest(now), "INTEREST", 5, "i");
+        assertTrue(a.bankTransaction(account, 1, claim).written());
+        assertFalse(b.bankTransaction(account, 1, claim).written());
+        assertEquals(105, a.getBankAccount(account).balance());
+    }
+
+    @Test
+    void aNewAccountStartsAtTheStartingLevel() {
+        SqlStorage a = open("a");
+        BankOutcome outcome = a.bankTransaction("p:" + UUID.randomUUID(), 3, locked -> BankOutcome.refuse(locked, null));
+        assertEquals(3, outcome.account().level());
+        assertEquals(0, outcome.account().balance());
     }
 }

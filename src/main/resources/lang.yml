@@ -243,6 +243,7 @@ messages:
       interest: "Interest"
       coop-payout: "%player% left %profile%"
       purse-refused: "%note% (purse refused)"
+      withdraw-reverted: "%player% withdrew (purse refused, put back)"
 
   perks:
     disabled: "&cLevel-gated perks are disabled on this server."

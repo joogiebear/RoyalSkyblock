@@ -649,8 +649,20 @@ public final class EcoStorage implements Storage {
      * Write the balance and append the ledger entry. eco has no transactions, so these are two writes;
      * the balance goes first, so a crash between them loses a ledger line, never the balance.
      */
+    // one server only, so a read-mutate-write under one lock is enough
     @Override
-    public boolean saveBankAccountWithTxn(BankAccount account, String type, double amount,
+    public synchronized BankOutcome bankTransaction(String accountId, int startingLevel, BankMutation work) {
+        BankAccount stored = getBankAccount(accountId);
+        BankOutcome outcome = work.apply(stored != null ? stored : new BankAccount(accountId, 0.0, startingLevel, 0L));
+        if (!outcome.written()) {
+            return outcome;
+        }
+        BankAccount updated = outcome.account();
+        return saveBankAccountWithTxn(updated, outcome.type(), outcome.amount(), updated.balance(), outcome.note())
+                ? outcome : BankOutcome.failure();
+    }
+
+    private boolean saveBankAccountWithTxn(BankAccount account, String type, double amount,
                                           double balanceAfter, String note) {
         UUID id = bankUuid(account.id());
 

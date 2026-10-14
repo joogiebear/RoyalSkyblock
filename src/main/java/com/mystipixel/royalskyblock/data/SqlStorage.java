@@ -968,50 +968,56 @@ public final class SqlStorage implements Storage {
         }
     }
 
-    /** Upsert an account and append its ledger row in one transaction. */
-    public boolean saveBankAccountWithTxn(com.mystipixel.royalskyblock.bank.BankAccount account,
-                                          String type, double amount, double balanceAfter, String note) {
-        String upsert = mysql()
-                ? "INSERT INTO bank_accounts (account_id, balance, level, last_interest, interest_floor) VALUES (?,?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE balance=VALUES(balance), level=VALUES(level), last_interest=VALUES(last_interest), "
-                + "interest_floor=VALUES(interest_floor)"
-                : "INSERT INTO bank_accounts (account_id, balance, level, last_interest, interest_floor) VALUES (?,?,?,?,?) "
-                + "ON CONFLICT(account_id) DO UPDATE SET balance=excluded.balance, level=excluded.level, "
-                + "last_interest=excluded.last_interest, interest_floor=excluded.interest_floor";
-        String txn = "INSERT INTO bank_txns (account_id, type, amount, balance_after, created_at, note) VALUES (?,?,?,?,?,?)";
-        try (Connection c = dataSource.getConnection()) {
-            boolean auto = c.getAutoCommit();
-            c.setAutoCommit(false);
-            try {
-                try (PreparedStatement st = c.prepareStatement(upsert)) {
-                    st.setString(1, account.id());
-                    st.setDouble(2, account.balance());
-                    st.setInt(3, account.level());
-                    st.setLong(4, account.lastInterest());
-                    st.setDouble(5, account.interestFloor());
+    @Override
+    public BankOutcome bankTransaction(String accountId, int startingLevel, BankMutation work) {
+        try {
+            return tx.inTransaction(t -> {
+                Connection c = t.connection();
+                try (PreparedStatement st = c.prepareStatement(t.dialect().insertIgnore() + " INTO bank_accounts "
+                        + "(account_id, balance, level, last_interest, interest_floor) VALUES (?, 0, ?, 0, -1)")) {
+                    st.setString(1, accountId);
+                    st.setInt(2, startingLevel);
                     st.executeUpdate();
                 }
-                try (PreparedStatement st = c.prepareStatement(txn)) {
-                    st.setString(1, account.id());
-                    st.setString(2, type);
-                    st.setDouble(3, amount);
-                    st.setDouble(4, balanceAfter);
+                com.mystipixel.royalskyblock.bank.BankAccount locked;
+                try (PreparedStatement st = c.prepareStatement("SELECT balance, level, last_interest, interest_floor "
+                        + "FROM bank_accounts WHERE account_id = ?" + t.dialect().forUpdate())) {
+                    st.setString(1, accountId);
+                    try (ResultSet rs = st.executeQuery()) {
+                        rs.next();
+                        locked = new com.mystipixel.royalskyblock.bank.BankAccount(accountId, rs.getDouble(1),
+                                rs.getInt(2), rs.getLong(3), rs.getDouble(4));
+                    }
+                }
+                BankOutcome outcome = work.apply(locked);
+                if (!outcome.written()) {
+                    return outcome;
+                }
+                com.mystipixel.royalskyblock.bank.BankAccount updated = outcome.account();
+                try (PreparedStatement st = c.prepareStatement("UPDATE bank_accounts SET balance = ?, level = ?, "
+                        + "last_interest = ?, interest_floor = ? WHERE account_id = ?")) {
+                    st.setDouble(1, updated.balance());
+                    st.setInt(2, updated.level());
+                    st.setLong(3, updated.lastInterest());
+                    st.setDouble(4, updated.interestFloor());
+                    st.setString(5, accountId);
+                    st.executeUpdate();
+                }
+                try (PreparedStatement st = c.prepareStatement("INSERT INTO bank_txns "
+                        + "(account_id, type, amount, balance_after, created_at, note) VALUES (?,?,?,?,?,?)")) {
+                    st.setString(1, accountId);
+                    st.setString(2, outcome.type());
+                    st.setDouble(3, outcome.amount());
+                    st.setDouble(4, updated.balance());
                     st.setLong(5, java.time.Instant.now().getEpochSecond());
-                    st.setString(6, note == null ? "" : note);
+                    st.setString(6, outcome.note() == null ? "" : outcome.note());
                     st.executeUpdate();
                 }
-                c.commit();
-                return true;
-            } catch (SQLException e) {
-                try { c.rollback(); } catch (SQLException ignored) { }
-                logger.severe("Could not save bank account " + account.id() + ": " + e.getMessage());
-                return false;
-            } finally {
-                try { c.setAutoCommit(auto); } catch (SQLException ignored) { }
-            }
+                return outcome;
+            });
         } catch (SQLException e) {
-            logger.severe("Bank DB connection error: " + e.getMessage());
-            return false;
+            logger.severe("Could not save bank account " + accountId + ": " + e.getMessage());
+            return BankOutcome.failure();
         }
     }
 

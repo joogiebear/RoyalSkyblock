@@ -126,9 +126,12 @@ public interface Storage {
 
     @Nullable BankAccount getBankAccount(String accountId);
 
-    /** Save a balance change and its ledger entry together, so the two cannot disagree. */
-    boolean saveBankAccountWithTxn(BankAccount account, String type, double amount,
-                                   double balanceAfter, String note);
+    /**
+     * One bank movement: the account is created if missing (balance 0 at startingLevel) and locked, work
+     * decides on that locked copy, and a written outcome is stored with its ledger row before the lock is
+     * released. Servers sharing the database therefore never act on a stale balance.
+     */
+    BankOutcome bankTransaction(String accountId, int startingLevel, BankMutation work);
 
     /**
      * The most recent {@code limit} transactions for an account, newest first. Never the whole history,
