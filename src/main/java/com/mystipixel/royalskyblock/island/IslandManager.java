@@ -41,6 +41,11 @@ public final class IslandManager {
 
     private final Map<UUID, Island> byId = new ConcurrentHashMap<>();
     private final Map<UUID, UUID> profileToIsland = new ConcurrentHashMap<>();
+    // profiles the store had no island for, until when (millis); expires so one made on another server shows up
+    private final Map<UUID, Long> noIsland = new ConcurrentHashMap<>();
+    private static final long NO_ISLAND_TTL_MILLIS = 30_000L;
+    // profiles a placeholder peek is looking up on the database thread
+    private final Set<UUID> peeking = ConcurrentHashMap.newKeySet();
     // in-flight creations, so two rapid ensureIsland calls can't both allocate a world
     private final Map<UUID, CompletableFuture<Island>> creating = new ConcurrentHashMap<>();
     // null on stores nothing else writes to (eco storage)
@@ -72,16 +77,80 @@ public final class IslandManager {
         return loaded;
     }
 
+    /**
+     * The profile's island. A profile found to have none is remembered for a short while, so callers on hot paths
+     * (perks, holders, menus) don't query again each time; use {@link #getIslandByProfileFresh} before creating one.
+     */
     public @Nullable Island getIslandByProfile(UUID profileId) {
         UUID cached = profileToIsland.get(profileId);
         if (cached != null) {
             return getIsland(cached);
         }
+        if (knownMissing(profileId)) {
+            return null;
+        }
         Island island = storage.getIslandByProfile(profileId);
         if (island != null) {
             cache(island);
+        } else {
+            markMissing(profileId);
         }
         return island;
+    }
+
+    /** As {@link #getIslandByProfile}, but asks the store even when the profile was recently seen with no island. */
+    public @Nullable Island getIslandByProfileFresh(UUID profileId) {
+        noIsland.remove(profileId);
+        return getIslandByProfile(profileId);
+    }
+
+    /**
+     * The profile's island if it is cached, never touching the store; for placeholders, which may run off the
+     * main thread. A miss starts a lookup on the database thread, so a later call finds it.
+     */
+    public @Nullable Island peekIslandByProfile(UUID profileId) {
+        UUID cached = profileToIsland.get(profileId);
+        if (cached != null) {
+            return byId.get(cached);
+        }
+        if (knownMissing(profileId)) {
+            return null;
+        }
+        DbExecutor db = plugin.db();
+        if (db != null && peeking.add(profileId)) {
+            db.submit("peek island of " + profileId, () -> storage.getIslandByProfile(profileId))
+                    .whenCompleteAsync((island, error) -> {
+                        peeking.remove(profileId);
+                        // a create, load or delete on main while this ran knows better
+                        if (error != null || profileToIsland.containsKey(profileId)) {
+                            return;
+                        }
+                        if (island == null) {
+                            markMissing(profileId);
+                        } else if (!byId.containsKey(island.id())) {
+                            cache(island);
+                        }
+                    }, db.mainThread());
+        }
+        return null;
+    }
+
+    /** Forget that the profile had no island, e.g. when one of its members joins from another server. */
+    public void forgetMissing(UUID profileId) {
+        noIsland.remove(profileId);
+    }
+
+    private boolean knownMissing(UUID profileId) {
+        Long until = noIsland.get(profileId);
+        return until != null && until > System.currentTimeMillis();
+    }
+
+    private void markMissing(UUID profileId) {
+        long now = System.currentTimeMillis();
+        if (noIsland.size() > 1024) {
+            noIsland.values().removeIf(until -> until <= now);
+        }
+        noIsland.put(profileId, now + NO_ISLAND_TTL_MILLIS);
     }
 
     /** The island a world belongs to; each island's world is named {@code <prefix><islandId>}. */
@@ -104,6 +173,7 @@ public final class IslandManager {
     private void cache(Island island) {
         byId.put(island.id(), island);
         profileToIsland.put(island.profileId(), island.id());
+        noIsland.remove(island.profileId());
         VersionPoller<UUID> poller = this.poller;
         if (poller != null) {
             poller.seen(island.id(), island.version());
@@ -163,6 +233,7 @@ public final class IslandManager {
         if (!profile.equals(fresh.profileId())) {
             profileToIsland.remove(profile, id);
             profileToIsland.put(fresh.profileId(), id);
+            noIsland.remove(fresh.profileId());
         }
         if (radius != fresh.radius() && worlds.isLoaded(cached.worldName())) {
             plugin.upgrades().reapplyBorder(cached);
@@ -176,7 +247,7 @@ public final class IslandManager {
     public CompletableFuture<Island> ensureIsland(UUID profileId) {
         Island existing;
         try {
-            existing = getIslandByProfile(profileId);
+            existing = getIslandByProfileFresh(profileId);
         } catch (StorageException e) {
             // unknown is not absent: creating here would give the profile a second island
             return CompletableFuture.failedFuture(e);

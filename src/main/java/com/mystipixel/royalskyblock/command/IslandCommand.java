@@ -804,7 +804,7 @@ public final class IslandCommand {
                 say(sender, "admin.trash.no-profile");
                 return;
             }
-            if (plugin.islands().getIslandByProfile(profileId) != null) {
+            if (plugin.islands().getIslandByProfileFresh(profileId) != null) {
                 say(sender, "admin.trash.has-island");
                 return;
             }

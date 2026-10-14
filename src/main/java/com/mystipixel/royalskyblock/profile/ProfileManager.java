@@ -359,6 +359,7 @@ public final class ProfileManager {
                 plugin.getLogger().info("Profile load for " + player.getName() + " served from preload (no queries on join).");
             }
             applyPreloaded(player, ready);
+            forgetMissingIsland(uuid);
             if (!ready.payouts().isEmpty()) {
                 deliverCoopPayouts(player);
             }
@@ -374,7 +375,16 @@ public final class ProfileManager {
             }
         }
         loadOnJoin(player);
+        forgetMissingIsland(uuid);
         deliverCoopPayouts(player);
+    }
+
+    // the player may have made their island on another server since this one last looked
+    private void forgetMissingIsland(UUID uuid) {
+        UUID active = activeProfile.get(uuid);
+        if (active != null) {
+            plugin.islands().forgetMissing(active);
+        }
     }
 
     // the synchronous join load, used when no preload is waiting

@@ -16,7 +16,7 @@ import java.util.UUID;
 /**
  * Resolves RoyalSkyblock's placeholders for both front ends: {@link RoyalSkyblockExpansion} for
  * PlaceholderAPI, and eco's registry for effect chains, menus and item lore (which work without PAPI).
- * Reads hit in-memory caches; the leaderboard rank is precomputed on a background timer.
+ * Island reads hit in-memory caches only; the leaderboard rank is precomputed on a background timer.
  *
  * <table>
  *   <tr><td>{@code has_island}</td><td>true/false: the player owns/belongs to an island</td></tr>
@@ -82,7 +82,7 @@ public final class IslandPlaceholders {
                 ? plugin.profiles().getActiveProfile(player.getPlayer())
                 : null;
         UUID profileId = profile != null ? profile.id() : plugin.profiles().getActiveProfileId(uuid);
-        Island island = profileId != null ? plugin.islands().getIslandByProfile(profileId) : null;
+        Island island = profileId != null ? plugin.islands().peekIslandByProfile(profileId) : null;
 
         switch (params.toLowerCase(Locale.ROOT)) {
             case "has_island":
