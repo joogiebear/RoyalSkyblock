@@ -200,7 +200,7 @@ public final class ProfileManager {
 
     // what preload gathered off-thread, waiting to be applied on join
     private record Preloaded(List<Profile> profiles, UUID active, @Nullable Profile coop, ProfileData data,
-                             List<UUID> payouts) {
+                             List<UUID> payouts, @Nullable Island island) {
     }
 
     // The saved active profile, if it is a coop the player is a member of. A member kicked while offline
@@ -323,14 +323,17 @@ public final class ProfileManager {
             UUID active = storage.getActiveProfile(uuid);
             Profile coop = joinedCoop(uuid, active, profiles, storage::getProfile);
             ProfileData data = null;
+            Island island = null;
             if (coop != null) {
                 data = state.savedData(coop.id(), uuid);
+                island = storage.getIslandByProfile(coop.id());
             } else if (!profiles.isEmpty()) {
                 UUID resolved = active != null && profiles.stream().anyMatch(p -> p.id().equals(active))
                         ? active : profiles.get(0).id();
                 data = state.savedData(resolved, uuid);
+                island = storage.getIslandByProfile(resolved);
             }
-            preloaded.put(uuid, new Preloaded(profiles, active, coop, data, storage.getCoopPayouts(uuid)));
+            preloaded.put(uuid, new Preloaded(profiles, active, coop, data, storage.getCoopPayouts(uuid), island));
         } catch (Exception e) {
             preloaded.remove(uuid);
             plugin.getLogger().warning("Profile preload failed for " + uuid
@@ -359,6 +362,9 @@ public final class ProfileManager {
                 plugin.getLogger().info("Profile load for " + player.getName() + " served from preload (no queries on join).");
             }
             applyPreloaded(player, ready);
+            if (ready.island() != null) {
+                plugin.islands().preloaded(ready.island());
+            }
             forgetMissingIsland(uuid);
             if (!ready.payouts().isEmpty()) {
                 deliverCoopPayouts(player);
@@ -384,6 +390,7 @@ public final class ProfileManager {
         UUID active = activeProfile.get(uuid);
         if (active != null) {
             plugin.islands().forgetMissing(active);
+            plugin.islands().peekIslandByProfile(active);   // warm the cache so placeholders don't read "no island"
         }
     }
 

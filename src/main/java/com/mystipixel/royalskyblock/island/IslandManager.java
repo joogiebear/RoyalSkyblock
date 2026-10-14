@@ -135,6 +135,13 @@ public final class IslandManager {
         return null;
     }
 
+    /** Cache an island read off-thread before its player joined, unless a fresher copy is already here. Main thread. */
+    public void preloaded(Island island) {
+        if (!profileToIsland.containsKey(island.profileId()) && !byId.containsKey(island.id())) {
+            cache(island);
+        }
+    }
+
     /** Forget that the profile had no island, e.g. when one of its members joins from another server. */
     public void forgetMissing(UUID profileId) {
         noIsland.remove(profileId);
