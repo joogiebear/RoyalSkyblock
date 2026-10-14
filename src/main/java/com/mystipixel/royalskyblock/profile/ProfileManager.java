@@ -94,6 +94,38 @@ public final class ProfileManager {
         return loaded;
     }
 
+    /** The profile without adding it to the cache, for browsing other players' profiles off the main thread. */
+    public @Nullable Profile peekProfile(UUID id) {
+        Profile cached = profileCache.get(id);
+        return cached != null ? cached : storage.getProfile(id);
+    }
+
+    /**
+     * Drops a profile, and its island, from the caches once nothing here needs them: no member online and the
+     * island not loaded. Otherwise the caches and their version polls keep every profile this server touched.
+     * leaving is a player who is quitting (still online during the quit event). Main thread.
+     */
+    public void forgetIfUnused(UUID profileId, @Nullable UUID leaving) {
+        Profile profile = profileCache.get(profileId);
+        if (profile != null) {
+            for (ProfileMember member : profile.members()) {
+                if (!member.uuid().equals(leaving) && Bukkit.getPlayer(member.uuid()) != null) {
+                    return;
+                }
+            }
+        }
+        if (activeProfile.containsValue(profileId) || deleting.contains(profileId)
+                || !plugin.islands().forgetIfUnloaded(profileId)) {
+            return;
+        }
+        if (profileCache.remove(profileId) != null) {
+            VersionPoller<UUID> current = poller;
+            if (current != null) {
+                current.forget(profileId);
+            }
+        }
+    }
+
     private void cacheProfile(Profile profile) {
         profileCache.put(profile.id(), profile);
         VersionPoller<UUID> current = poller;
@@ -619,6 +651,13 @@ public final class ProfileManager {
         // back items given away since.
         preloaded.remove(player.getUniqueId());
         releaseHandoff(player.getUniqueId());
+        if (!shuttingDown) {
+            for (Profile profile : List.copyOf(profileCache.values())) {
+                if (profile.isMember(player.getUniqueId()) || profile.id().equals(active)) {
+                    forgetIfUnused(profile.id(), player.getUniqueId());
+                }
+            }
+        }
     }
 
     /**

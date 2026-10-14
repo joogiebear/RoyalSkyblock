@@ -118,6 +118,7 @@ public final class IslandUnloadService {
                 return;
             }
             plugin.islands().releaseHost(island.id());
+            plugin.profiles().forgetIfUnused(island.profileId(), null);
             if (plugin.conf().getBoolean("settings.debug", false)) {
                 plugin.getLogger().info("Unloaded empty island " + name + ".");
             }

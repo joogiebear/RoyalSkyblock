@@ -450,6 +450,32 @@ public final class IslandManager {
         }
     }
 
+    /**
+     * Drops the profile's island from the cache unless its world is loaded or being loaded or created here.
+     * False when it was kept. Main thread.
+     */
+    public boolean forgetIfUnloaded(UUID profileId) {
+        noIsland.remove(profileId);
+        if (creating.containsKey(profileId)) {
+            return false;
+        }
+        UUID id = profileToIsland.get(profileId);
+        if (id == null) {
+            return true;
+        }
+        Island island = byId.get(id);
+        if (island != null && (worlds.isLoaded(island.worldName()) || claiming.containsKey(id))) {
+            return false;
+        }
+        byId.remove(id);
+        profileToIsland.remove(profileId, id);
+        VersionPoller<UUID> current = poller;
+        if (current != null) {
+            current.forget(id);
+        }
+        return true;
+    }
+
     /** Ids of the islands whose world is loaded here. Main thread. */
     public Set<UUID> hostedIslandIds() {
         Set<UUID> hosted = new java.util.HashSet<>();

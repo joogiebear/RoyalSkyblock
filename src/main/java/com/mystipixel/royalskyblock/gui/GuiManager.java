@@ -637,7 +637,7 @@ public final class GuiManager implements Listener {
                 if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) || !island.isEnabled(IslandSetting.LISTED)) {
                     continue;
                 }
-                Profile prof = plugin.profiles().getProfile(island.profileId());
+                Profile prof = plugin.profiles().peekProfile(island.profileId());
                 if (prof == null || prof.gamemode() != mode || prof.isMember(viewerId)) {
                     continue; // gamemode must match; don't list your own
                 }
@@ -1189,7 +1189,7 @@ public final class GuiManager implements Listener {
                 if (found.size() >= slots.size()) {
                     break;
                 }
-                Profile prof = plugin.profiles().getProfile(island.profileId());
+                Profile prof = plugin.profiles().peekProfile(island.profileId());
                 if (prof == null) {
                     continue;
                 }
