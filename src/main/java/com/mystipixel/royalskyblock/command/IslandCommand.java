@@ -120,7 +120,7 @@ public final class IslandCommand {
             handleHome(player);
             return;
         }
-        UUID targetActive = plugin.profiles().getActiveProfileId(targetId);
+        UUID targetActive = plugin.profiles().peekActiveProfileId(targetId);
         Island island = targetActive == null ? null : plugin.islands().getIslandByProfile(targetActive);
         if (island == null) {
             plugin.messages().send(player, "visit.no-target-island", "player", targetName);

@@ -81,7 +81,7 @@ public final class IslandPlaceholders {
         Profile profile = player.isOnline()
                 ? plugin.profiles().getActiveProfile(player.getPlayer())
                 : null;
-        UUID profileId = profile != null ? profile.id() : plugin.profiles().getActiveProfileId(uuid);
+        UUID profileId = profile != null ? profile.id() : plugin.profiles().peekActiveProfileId(uuid);
         Island island = profileId != null ? plugin.islands().peekIslandByProfile(profileId) : null;
 
         switch (params.toLowerCase(Locale.ROOT)) {

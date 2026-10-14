@@ -41,6 +41,10 @@ public final class ProfileManager {
     private final PlayerStateService state;
 
     private final Map<UUID, UUID> activeProfile = new ConcurrentHashMap<>();  // player to active profile
+    // players not online here to their stored active profile (null: none), until when that answer is trusted
+    private final Map<UUID, OfflineActive> offlineActive = new ConcurrentHashMap<>();
+    private static final long OFFLINE_ACTIVE_TTL_MILLIS = 10_000L;
+    private static final int OFFLINE_ACTIVE_MAX = 5_000;
     private final SaveRequests saveRequests = new SaveRequests(SAVE_REQUEST_COOLDOWN_MILLIS);
     private final Map<UUID, Profile> profileCache = new ConcurrentHashMap<>();
     // null on stores nothing else writes to (eco storage)
@@ -50,6 +54,9 @@ public final class ProfileManager {
     // Profiles part-way through deletion. Invite accepts are refused for them, or a reload of the
     // still-existing row would be saved straight back.
     private final java.util.Set<UUID> deleting = ConcurrentHashMap.newKeySet();
+
+    private record OfflineActive(@Nullable UUID profileId, long until) {
+    }
 
     private record Invite(UUID profileId, String inviterName, long expiresAt) {
         boolean expired() {
@@ -186,12 +193,29 @@ public final class ProfileManager {
     }
 
     /**
-     * The active profile id without caching it, for players who are not online (the cache is cleared on
-     * quit and nothing would remove a later entry).
+     * The active profile id, for players who may not be online. An offline player's answer is kept only for a
+     * few seconds: placeholders and eco data reads ask about the same players over and over, but the player
+     * may switch profile on another server.
      */
     public @Nullable UUID peekActiveProfileId(UUID player) {
         UUID cached = activeProfile.get(player);
-        return cached != null ? cached : storage.getActiveProfile(player);
+        if (cached != null) {
+            return cached;
+        }
+        long now = System.currentTimeMillis();
+        OfflineActive known = offlineActive.get(player);
+        if (known != null && known.until() > now) {
+            return known.profileId();
+        }
+        UUID stored = storage.getActiveProfile(player);
+        if (offlineActive.size() >= OFFLINE_ACTIVE_MAX) {
+            offlineActive.values().removeIf(entry -> entry.until() <= now);
+            if (offlineActive.size() >= OFFLINE_ACTIVE_MAX) {
+                offlineActive.clear();
+            }
+        }
+        offlineActive.put(player, new OfflineActive(stored, now + OFFLINE_ACTIVE_TTL_MILLIS));
+        return stored;
     }
 
     public @Nullable Profile getActiveProfile(Player player) {
@@ -489,6 +513,7 @@ public final class ProfileManager {
         }
         saveRequests.forget(player.getUniqueId());
         activeProfile.remove(player.getUniqueId());
+        offlineActive.remove(player.getUniqueId());
         // A second login may have preloaded before this session's save above; applying it on join would hand
         // back items given away since.
         preloaded.remove(player.getUniqueId());
