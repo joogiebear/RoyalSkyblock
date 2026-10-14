@@ -700,9 +700,14 @@ public final class GuiManager implements Listener {
     }
 
     private void visitFromBrowser(Player viewer, Island listed, Profile prof, String ownerName) {
-        // the listing can be a minute old; a copy cached here has the owner's current settings
-        Island cached = plugin.islands().cachedIsland(listed.id());
-        Island island = cached != null ? cached : listed;
+        // the listing can be a minute old and is shared between viewers; visit with the island's own copy
+        Island island = plugin.islands().cachedIsland(listed.id());
+        if (island == null) {
+            island = plugin.islands().getIsland(listed.id());
+        }
+        if (island == null) {
+            island = listed;
+        }
         if (!island.isEnabled(IslandSetting.VISITORS_ALLOWED) && !prof.isMember(viewer.getUniqueId())
                 && !viewer.hasPermission("royalskyblock.bypass")) {
             plugin.messages().send(viewer, "visit.private", "player", ownerName);
