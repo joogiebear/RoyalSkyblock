@@ -5,10 +5,12 @@ import com.mystipixel.royalskyblock.island.Island;
 import com.mystipixel.royalskyblock.util.Text;
 import org.bukkit.GameMode;
 import org.bukkit.Location;
+import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.player.PlayerMoveEvent;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Locale;
 
@@ -22,8 +24,29 @@ public final class VoidListener implements Listener {
 
     private final RoyalSkyblockPlugin plugin;
 
+    // the move checks, read again whenever plugin.conf() hands back a new config (reload or a setting change)
+    private @Nullable FileConfiguration readFrom;
+    private String spawnWorld = "world";
+    private boolean spawnVoid;
+    private double spawnBelowY;
+    private boolean islandVoid;
+    private double islandBelowY;
+
     public VoidListener(RoyalSkyblockPlugin plugin) {
         this.plugin = plugin;
+    }
+
+    private void readConfig() {
+        FileConfiguration conf = plugin.conf();
+        if (conf == readFrom) {
+            return;
+        }
+        readFrom = conf;
+        spawnWorld = conf.getString("spawn.world", "world");
+        spawnVoid = conf.getBoolean("spawn.void.enabled", true);
+        spawnBelowY = conf.getDouble("spawn.void.below-y", -70.0);
+        islandVoid = conf.getBoolean("island.void.enabled", true);
+        islandBelowY = conf.getDouble("island.void.below-y", 0.0);
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -32,15 +55,17 @@ public final class VoidListener implements Listener {
         if (to == null || to.getWorld() == null) {
             return;
         }
-        if (to.getWorld().getName().equals(plugin.conf().getString("spawn.world", "world"))) {
+        readConfig();
+        double y = to.getY();
+        if (y >= islandBelowY && y >= spawnBelowY) {
+            return;                              // cheap early-out for almost every move
+        }
+        if (to.getWorld().getName().equals(spawnWorld)) {
             onSpawnWorldMove(event.getPlayer(), to);
             return;
         }
-        if (!plugin.conf().getBoolean("island.void.enabled", true)) {
+        if (!islandVoid || y >= islandBelowY) {
             return;
-        }
-        if (to.getY() >= plugin.conf().getDouble("island.void.below-y", 0.0)) {
-            return;                              // cheap early-out for almost every move
         }
         Island island = plugin.islands().getIslandByWorld(to.getWorld());
         if (island == null) {
@@ -80,9 +105,7 @@ public final class VoidListener implements Listener {
 
     // the hub usually has no damage, so a player who walks off its edge falls forever
     private void onSpawnWorldMove(Player player, Location to) {
-        if (!plugin.conf().getBoolean("spawn.void.enabled", true)
-                || to.getY() >= plugin.conf().getDouble("spawn.void.below-y", -70.0)
-                || isExempt(player)) {
+        if (!spawnVoid || to.getY() >= spawnBelowY || isExempt(player)) {
             return;
         }
         Location spawn = plugin.islands().resolveSpawnLocation();
