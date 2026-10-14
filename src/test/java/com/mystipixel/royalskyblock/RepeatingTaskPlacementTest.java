@@ -29,7 +29,9 @@ class RepeatingTaskPlacementTest {
             "island/IslandMobSpawnService.java",
             "start() is what createTasks() calls to bring the spawn timer back after a reload",
             "level/LevelService.java",
-            "a one-off per level scan that cancels itself; the scan's timeout releases it if a reload kills it");
+            "a one-off per level scan that cancels itself; the scan's timeout releases it if a reload kills it",
+            "simulation/IslandScanner.java",
+            "a one-off per catch-up that cancels itself once the changes are in; a reload only drops the rest of them");
 
     @Test
     @DisplayName("repeating tasks are started from createTasks()")
