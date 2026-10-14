@@ -200,7 +200,7 @@ public final class ProfileManager {
 
     // what preload gathered off-thread, waiting to be applied on join
     private record Preloaded(List<Profile> profiles, UUID active, @Nullable Profile coop, ProfileData data,
-                             List<UUID> payouts) {
+                             List<UUID> payouts, @Nullable Island island) {
     }
 
     // The saved active profile, if it is a coop the player is a member of. A member kicked while offline
@@ -323,14 +323,17 @@ public final class ProfileManager {
             UUID active = storage.getActiveProfile(uuid);
             Profile coop = joinedCoop(uuid, active, profiles, storage::getProfile);
             ProfileData data = null;
+            Island island = null;
             if (coop != null) {
-                data = storage.getProfileData(coop.id(), uuid);
+                data = state.savedData(coop.id(), uuid);
+                island = storage.getIslandByProfile(coop.id());
             } else if (!profiles.isEmpty()) {
                 UUID resolved = active != null && profiles.stream().anyMatch(p -> p.id().equals(active))
                         ? active : profiles.get(0).id();
-                data = storage.getProfileData(resolved, uuid);
+                data = state.savedData(resolved, uuid);
+                island = storage.getIslandByProfile(resolved);
             }
-            preloaded.put(uuid, new Preloaded(profiles, active, coop, data, storage.getCoopPayouts(uuid)));
+            preloaded.put(uuid, new Preloaded(profiles, active, coop, data, storage.getCoopPayouts(uuid), island));
         } catch (Exception e) {
             preloaded.remove(uuid);
             plugin.getLogger().warning("Profile preload failed for " + uuid
@@ -359,6 +362,10 @@ public final class ProfileManager {
                 plugin.getLogger().info("Profile load for " + player.getName() + " served from preload (no queries on join).");
             }
             applyPreloaded(player, ready);
+            if (ready.island() != null) {
+                plugin.islands().preloaded(ready.island());
+            }
+            forgetMissingIsland(uuid);
             if (!ready.payouts().isEmpty()) {
                 deliverCoopPayouts(player);
             }
@@ -374,7 +381,17 @@ public final class ProfileManager {
             }
         }
         loadOnJoin(player);
+        forgetMissingIsland(uuid);
         deliverCoopPayouts(player);
+    }
+
+    // the player may have made their island on another server since this one last looked
+    private void forgetMissingIsland(UUID uuid) {
+        UUID active = activeProfile.get(uuid);
+        if (active != null) {
+            plugin.islands().forgetMissing(active);
+            plugin.islands().peekIslandByProfile(active);   // warm the cache so placeholders don't read "no island"
+        }
     }
 
     // the synchronous join load, used when no preload is waiting
@@ -444,13 +461,32 @@ public final class ProfileManager {
         state.load(player, active, ready.data());
     }
 
-    /** On quit: save the player's live state into their active profile. Main thread. */
+    /**
+     * On quit: save the player's live state into their active profile. The row is written on the database thread,
+     * ahead of the handoff release queued after it. Main thread.
+     */
     public void handleQuit(Player player) {
+        quit(player, false);
+    }
+
+    /** As {@link #handleQuit}, but the row is written before this returns. For plugin disable. */
+    public void handleShutdown(Player player) {
+        quit(player, true);
+    }
+
+    private void quit(Player player, boolean shuttingDown) {
         UUID active = getActiveProfileId(player.getUniqueId());
-        if (active != null) {
-            state.save(player, active);
+        if (shuttingDown) {
+            if (active != null) {
+                state.save(player, active);
+            }
+            state.rows().forget(player.getUniqueId());
+        } else {
+            if (active != null) {
+                state.saveQueued(player, active);
+            }
+            state.rows().forgetQueued(player.getUniqueId());
         }
-        state.rows().forget(player.getUniqueId());
         saveRequests.forget(player.getUniqueId());
         activeProfile.remove(player.getUniqueId());
         // A second login may have preloaded before this session's save above; applying it on join would hand
@@ -588,7 +624,7 @@ public final class ProfileManager {
         }
 
         if (current != null) {
-            state.save(player, current);
+            state.saveQueued(player, current);
         }
         storage.setActiveProfile(uuid, targetId);
         activeProfile.put(uuid, targetId);
@@ -665,7 +701,8 @@ public final class ProfileManager {
 
         // The island's host claim comes first: while a member has it loaded on another server the delete is
         // refused there, and nothing below may have happened by then.
-        Island island = plugin.islands().getIslandByProfile(targetId);
+        // fresh: a coop member on another server may have just created the island
+        Island island = plugin.islands().getIslandByProfileFresh(targetId);
         CompletableFuture<Void> claimed = island != null
                 ? plugin.islands().claimForDelete(island.id())
                 : CompletableFuture.completedFuture(null);
@@ -1014,7 +1051,7 @@ public final class ProfileManager {
                 plugin.messages().send(player, "coop.payout-coins", "amount", plugin.bank().money(paid), "profile", name);
             }
 
-            ProfileData row = storage.getProfileData(from, uuid);
+            ProfileData row = state.savedData(from, uuid);
             if (row != null) {
                 List<org.bukkit.inventory.ItemStack> items = state.itemsOf(row);
                 if (items == null) {

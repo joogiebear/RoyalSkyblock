@@ -53,6 +53,24 @@ public final class PlayerStateService {
     }
 
     /**
+     * Like {@link #save}, but the row is written on the storage thread, after anything already queued there; until
+     * it lands, {@link #savedData} returns it. For quits and profile switches. Main thread.
+     */
+    public void saveQueued(Player player, UUID profileId) {
+        ProfileData data = capture(player, profileId);
+        if (data != null) {
+            rows.saveLater(profileId, player.getUniqueId(), data);
+            plugin.eco().save(player.getUniqueId(), profileId);
+        }
+    }
+
+    /** The player's saved row of a profile, including a queued save not yet written. Any thread. */
+    public @Nullable ProfileData savedData(UUID profileId, UUID player) {
+        ProfileData queued = rows.pending(profileId, player);
+        return queued != null ? queued : storage.getProfileData(profileId, player);
+    }
+
+    /**
      * Like {@link #save}, but only the capture runs here; the row is written on the storage thread, and
      * skipped if a later save of the same row happened first. Main thread.
      */
@@ -120,7 +138,7 @@ public final class PlayerStateService {
         if (profileId == null) {
             return;
         }
-        ProfileData data = preloaded != null ? preloaded : storage.getProfileData(profileId, player.getUniqueId());
+        ProfileData data = preloaded != null ? preloaded : savedData(profileId, player.getUniqueId());
         if (data == null) {
             data = ProfileData.fresh();
         }

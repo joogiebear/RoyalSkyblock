@@ -46,6 +46,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.BiConsumer;
 import java.util.function.BiFunction;
@@ -105,6 +106,8 @@ public final class GuiManager implements Listener {
     // Rows the visit browser and leaderboard fetched off-thread, per viewer and menu, waiting for the
     // refresh that paints them. Cleared on close, so every opening fetches fresh rows.
     private final Map<String, List<BrowseRow>> browseRows = new ConcurrentHashMap<>();
+    // viewers with a bank movement still running
+    private final Set<UUID> bankBusy = ConcurrentHashMap.newKeySet();
 
     private record OpenEcoMenu(String menuId, Menu menu) {
     }
@@ -908,16 +911,10 @@ public final class GuiManager implements Listener {
             int claim = place(canvas, text.slot("buttons.claim-interest"),
                     button(text, "buttons.claim-interest", "lore", ph()));
             onClick(canvas, claim, (viewer, right) -> {
-                if (!bankAccess(viewer, accountId, false)) {
+                if (bankBusy.contains(viewer.getUniqueId()) || !bankAccess(viewer, accountId, false)) {
                     return;
                 }
-                Reason error = bank.claimInterest(viewer, accountId);
-                if (error != null) {
-                    plugin.messages().send(viewer, error);
-                } else {
-                    plugin.messages().send(viewer, "bank.interest");
-                }
-                open(viewer, menu);
+                finishBank(viewer, menu, bank.claimInterest(viewer, accountId), "bank.interest");
             });
         } else {
             place(canvas, text.slot("buttons.interest-waiting"), button(text, "buttons.interest-waiting", "lore",
@@ -938,16 +935,10 @@ public final class GuiManager implements Listener {
                             "items", items,
                             "max_balance", bank.money(next.maxBalance()))));
             onClick(canvas, upgrade, (viewer, right) -> {
-                if (!bankAccess(viewer, accountId, false)) {
+                if (bankBusy.contains(viewer.getUniqueId()) || !bankAccess(viewer, accountId, false)) {
                     return;
                 }
-                Reason error = bank.upgrade(viewer, accountId);
-                if (error != null) {
-                    plugin.messages().send(viewer, error);
-                } else {
-                    plugin.messages().send(viewer, "bank.upgraded");
-                }
-                open(viewer, menu);
+                finishBank(viewer, menu, bank.upgrade(viewer, accountId), "bank.upgraded");
             });
         }
 
@@ -1024,17 +1015,37 @@ public final class GuiManager implements Listener {
     }
 
     private void runBank(Player viewer, String accountId, String menu, long amount, boolean deposit) {
-        if (!bankAccess(viewer, accountId, !deposit)) {
+        if (bankBusy.contains(viewer.getUniqueId()) || !bankAccess(viewer, accountId, !deposit)) {
             return;
         }
         BankService bank = plugin.bank();
-        Reason error = deposit ? bank.deposit(viewer, accountId, amount) : bank.withdraw(viewer, accountId, amount);
-        if (error != null) {
-            plugin.messages().send(viewer, error);
-        } else {
-            plugin.messages().send(viewer, deposit ? "bank.deposited" : "bank.withdrew", "amount", fmtCoins(amount));
-        }
-        open(viewer, menu);
+        CompletableFuture<Reason> movement = deposit ? bank.deposit(viewer, accountId, amount)
+                : bank.withdraw(viewer, accountId, amount);
+        finishBank(viewer, menu, movement, deposit ? "bank.deposited" : "bank.withdrew", "amount", fmtCoins(amount));
+    }
+
+    // Reply and reopen the menu once a bank movement finishes (on the main thread). Clicks while one is running
+    // are ignored by bankBusy, so a double click can't start a second.
+    private void finishBank(Player viewer, String menu, CompletableFuture<Reason> movement, String successKey,
+                            String... placeholders) {
+        UUID id = viewer.getUniqueId();
+        bankBusy.add(id);
+        movement.whenComplete((error, failure) -> {
+            bankBusy.remove(id);
+            if (failure != null) {
+                plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                        "Bank action for " + viewer.getName() + " failed", failure);
+                return;
+            }
+            if (error != null) {
+                plugin.messages().send(viewer, error);
+            } else {
+                plugin.messages().send(viewer, successKey, placeholders);
+            }
+            if (viewer.isOnline() && plugin.isEnabled()) {
+                open(viewer, menu);
+            }
+        });
     }
 
     private static String fmtCoins(double value) {
