@@ -45,6 +45,9 @@ public final class ProfileManager {
     private final Map<UUID, OfflineActive> offlineActive = new ConcurrentHashMap<>();
     private static final long OFFLINE_ACTIVE_TTL_MILLIS = 10_000L;
     private static final int OFFLINE_ACTIVE_MAX = 5_000;
+    // profiles no one here has loaded, read for placeholders about offline players, until when each copy is trusted
+    private final Map<UUID, OfflineProfile> offlineProfiles = new ConcurrentHashMap<>();
+    private final java.util.Set<UUID> peekingProfiles = ConcurrentHashMap.newKeySet();
     // online players' profile ids in list order, until when that list is trusted; menus and tab-complete
     private final Map<UUID, ProfileList> profileLists = new ConcurrentHashMap<>();
     private final java.util.Set<UUID> listing = ConcurrentHashMap.newKeySet();
@@ -65,6 +68,9 @@ public final class ProfileManager {
     }
 
     private record ProfileList(List<UUID> ids, long until) {
+    }
+
+    private record OfflineProfile(Profile profile, long until) {
     }
 
     private record Invite(UUID profileId, String inviterName, long expiresAt) {
@@ -98,6 +104,46 @@ public final class ProfileManager {
     public @Nullable Profile peekProfile(UUID id) {
         Profile cached = profileCache.get(id);
         return cached != null ? cached : storage.getProfile(id);
+    }
+
+    /**
+     * A profile for placeholders about players who may not be online. Never reads the store on the calling
+     * thread: a profile not cached here is read on the database thread and kept for a few seconds, so this is
+     * null until the first read lands. An expired copy is still returned while the next read runs.
+     */
+    public @Nullable Profile peekProfileOffline(UUID id) {
+        Profile cached = profileCache.get(id);
+        if (cached != null) {
+            return cached;
+        }
+        long now = System.currentTimeMillis();
+        OfflineProfile known = offlineProfiles.get(id);
+        if (known != null && known.until() > now) {
+            return known.profile();
+        }
+        DbExecutor db = plugin.db();
+        if (db != null && peekingProfiles.add(id)) {
+            db.submit("peek profile " + id, () -> storage.getProfile(id))
+                    .whenCompleteAsync((read, error) -> {
+                        peekingProfiles.remove(id);
+                        if (error != null) {
+                            return;
+                        }
+                        if (read == null) {
+                            offlineProfiles.remove(id);
+                            return;
+                        }
+                        long at = System.currentTimeMillis();
+                        if (offlineProfiles.size() >= OFFLINE_ACTIVE_MAX) {
+                            offlineProfiles.values().removeIf(entry -> entry.until() <= at);
+                            if (offlineProfiles.size() >= OFFLINE_ACTIVE_MAX) {
+                                offlineProfiles.clear();
+                            }
+                        }
+                        offlineProfiles.put(id, new OfflineProfile(read, at + OFFLINE_ACTIVE_TTL_MILLIS));
+                    }, db.mainThread());
+        }
+        return known != null ? known.profile() : null;
     }
 
     /**
@@ -247,7 +293,14 @@ public final class ProfileManager {
             return found;
         }).whenCompleteAsync((found, error) -> {
             listing.remove(player);
-            if (error != null || listChanges.get() != changesBefore) {
+            if (error != null) {
+                return;
+            }
+            if (listChanges.get() != changesBefore) {
+                // a list changed while this read ran; read again so the next Tab still has one
+                if (Bukkit.getPlayer(player) != null) {
+                    peekProfiles(player);
+                }
                 return;
             }
             List<Profile> profiles = new java.util.ArrayList<>(found.size());
@@ -286,6 +339,12 @@ public final class ProfileManager {
     private void forgetProfiles(UUID player) {
         profileLists.remove(player);
         listChanges.incrementAndGet();
+    }
+
+    // drop the player's list and start reading the new one, so the next Tab after a change already has it
+    private void reloadProfiles(UUID player) {
+        forgetProfiles(player);
+        peekProfiles(player);
     }
 
     private void rememberProfiles(UUID player, List<Profile> profiles) {
@@ -548,6 +607,7 @@ public final class ProfileManager {
             plugin.islands().forgetMissing(active);
             plugin.islands().peekIslandByProfile(active);   // warm the cache so placeholders don't read "no island"
         }
+        peekProfiles(uuid);   // and the profile list, so the first Tab of /is profile switch has names
     }
 
     // the synchronous join load, used when no preload is waiting
@@ -705,7 +765,7 @@ public final class ProfileManager {
         Profile profile = buildProfile(player, Gamemode.SOLO, null, List.of());
         storage.insertProfile(profile);
         cacheProfile(profile);
-        forgetProfiles(player.getUniqueId());
+        reloadProfiles(player.getUniqueId());
         return profile;
     }
 
@@ -770,7 +830,7 @@ public final class ProfileManager {
         Profile profile = buildProfile(player, gamemode, name, existing);
         storage.insertProfile(profile);
         cacheProfile(profile);
-        forgetProfiles(player.getUniqueId());
+        reloadProfiles(player.getUniqueId());
         return switchProfile(player, profile.id()).thenApply(ok -> profile);
     }
 
