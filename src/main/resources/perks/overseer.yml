@@ -16,10 +16,15 @@
 #  A triggered effect needs a trigger that supplies its data: drop effects such as
 #  multiply_drops want block_item_drop / entity_item_drop / catch_fish, not mine_block.
 #
-#  Requires EcoMinions (minion_pickup and minion_count_above come from RoyalSkyblock's
-#  EcoMinions bridge). Without it, a first run writes this file as _overseer.yml, which
-#  the loader skips; otherwise the condition would be dropped and everyone would get the
-#  bonus. Install EcoMinions and remove the underscore.
+#  Requires EcoMinions and RoyalSkyblock's EcoMinions extension, which registers
+#  minion_owner_mine and minion_count_above. Without them, a first run writes this
+#  file as _overseer.yml, which the loader skips; otherwise the condition would be dropped
+#  and everyone would get the bonus. Install both and remove the underscore.
+#
+#  minion_owner_mine fires for the owner when one of their minions mines a block, so the fee
+#  can't be farmed by picking a minion up and placing it again. (EcoMinions' own
+#  minion_collect only reaches the minion, never a player's perks.) It fires on every block,
+#  so the cooldown sets the real rate: at most one fee per minute per player.
 
 
 name: "&6&lMinion Overseer"
@@ -37,6 +42,8 @@ effects:
   - id: give_money
     args:
       amount: 100
+      cooldown: 60
+      send_cooldown_message: false
     triggers:
-      - minion_pickup
+      - minion_owner_mine
 unlock-commands: []

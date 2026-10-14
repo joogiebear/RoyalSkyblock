@@ -35,9 +35,9 @@ effects:
 #   - "eco give %owner% 5000"
 unlock-commands: []
 
-# Requires EcoMinions and its extension, which register minion_pickup and
-# minion_count_above. Install both, then uncomment; without them libreforge reports
-# both as unknown ids.
+# Requires EcoMinions and RoyalSkyblock's EcoMinions extension, which registers
+# minion_owner_mine and minion_count_above. Install both, then uncomment; without
+# them libreforge reports both as unknown ids.
 #
 # overseer:
 #   name: "&6&lMinion Overseer"
@@ -55,6 +55,8 @@ unlock-commands: []
 #     - id: give_money
 #       args:
 #         amount: 100
+#         cooldown: 60
+#         send_cooldown_message: false
 #       triggers:
-#         - minion_pickup
+#         - minion_owner_mine
 #   unlock-commands: []
