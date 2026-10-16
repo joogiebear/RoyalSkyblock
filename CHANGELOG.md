@@ -1,3 +1,44 @@
+## 2026.42.0 - 2026-10-15
+
+### Features
+- complete pending upgrades only where the island is hosted (`d43b1f2`)
+- hand players off between servers (`bede0ad`)
+- host each island on one server at a time (`22f07ca`)
+- write island and profile changes as targeted updates (`2319742`)
+- version the schema and run one database thread (`dd8201b`)
+
+### Fixes
+- per-player list change counter; keep deleted and stale profiles out (`54b7888`)
+- offline profile placeholders and first profile Tab (`d81011f`)
+- visit from the menu with the island's own copy, not the shared listing (`5c36825`)
+- ask the database for due upgrades every 5 seconds unless one is known to be due (`2398893`)
+- drop level scan stamps once their cooldown has passed (`c812696`)
+- spread island catch-up snapshots and block writes over ticks (`3b8be73`)
+- serve the visit and top menus from the leaderboard snapshot (`5ca5183`)
+- drop profiles and islands from the caches once nothing here needs them (`9a7edf6`)
+- keep each online player's profile list instead of querying it per keystroke (`98d61a1`)
+- keep offline players' active profile for a few seconds (`66ac89a`)
+- read the void settings once per config instead of on every move (`32a2a98`)
+- remember which island each world belongs to (`82b42c9`)
+- load the joining player's island with their profile so placeholders see it (`7718c68`)
+- close review gaps in the island lookup and profile save changes (`3843fcb`)
+- run bank menu transactions on the database thread (`f29dbad`)
+- write the quit and profile switch saves on the database thread (`566e67b`)
+- remember profiles without an island and keep placeholders off the database (`7afe835`)
+- harden the shared database after review (`7e89b01`)
+- make every bank movement one locked transaction (`e9dc80e`)
+
+### Refactors
+- build SqlStorage from a settings record (`a95e2f1`)
+
+### Documentation
+- note the instant upgrade crash window (`3807a75`)
+- say each server needs its own database for now (`63ac53d`)
+
+### Other
+- Pay the overseer fee on minion_owner_mine (`313c7eb`)
+- Pay the overseer perk on minion_collect, once a minute at most (`15c5526`)
+
 ## 2026.41.2 - 2026-10-11
 
 ### Features
