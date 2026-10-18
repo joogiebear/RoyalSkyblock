@@ -1,13 +1,31 @@
+# Build output
 build/
 bin/
+out/
 .gradle/
+.kotlin/
 *.class
 *.jar
-# The wrapper jar must be committed — CI builds with ./gradlew and has no preinstalled Gradle.
+# The wrapper jar must be committed: CI builds with ./gradlew and has no preinstalled Gradle.
 !gradle/wrapper/gradle-wrapper.jar
+
+# IDE
 .idea/
 *.iml
+.vscode/
 .settings/
 .classpath
 .project
+
+# OS junk
 .DS_Store
+Thumbs.db
+
+# Python caches from tools/ and release scripts
+__pycache__/
+
+# Logs and local server runtime state (generated on the server, never committed)
+*.log
+*.db
+*.db-shm
+*.db-wal

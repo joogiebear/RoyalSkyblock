@@ -34,7 +34,7 @@ cannot recur. Other libreforge entry points could still move; the steps below ca
 ### 1. Find the libreforge version the server actually loads
 
 ```bash
-ls S:/mcctl/instances/Skyblock/plugins/libreforge/versions/
+ls <server>/plugins/libreforge/versions/
 ```
 
 The newest jar there is the ABI you must match. The eco version is on the eco jar in `plugins/`.
@@ -50,12 +50,14 @@ libreforge-version=2026.35.1
 
 ### 3. Build RoyalSkyblock, then the extensions
 
+Commands below run from the folder holding both checkouts side by side; `<server>` is the test server's folder.
+
 ```bash
-cd S:/Claude/royal-plugins/RoyalSkyblock && ./gradlew.bat build --no-daemon
+cd RoyalSkyblock && ./gradlew.bat build --no-daemon
 ```
 
 ```bash
-cd S:/Claude/royal-plugins/royalskyblock-extensions && powershell -NoProfile -File tools/install-deps.ps1 && ./gradlew.bat build --no-daemon
+cd royalskyblock-extensions && powershell -NoProfile -File tools/install-deps.ps1 && ./gradlew.bat build --no-daemon
 ```
 
 (`install-deps.ps1` publishes the freshly built RoyalSkyblock jar to the local Maven repository
@@ -68,11 +70,11 @@ and verifies that every method we link into `com.willfp.*` exists there with the
 descriptor. It fails exactly where the server would, before the server does. Run it for both jars:
 
 ```bash
-cd S:/Claude/royal-plugins/RoyalSkyblock && bash tools/libreforge-abi-check.sh build/libs/RoyalSkyblock.jar S:/mcctl/instances/Skyblock/plugins/libreforge/versions/libreforge-2026.35.1.jar S:/mcctl/instances/Skyblock/plugins/eco-2026.35-ecohub.jar
+cd RoyalSkyblock && bash tools/libreforge-abi-check.sh build/libs/RoyalSkyblock.jar <server>/plugins/libreforge/versions/libreforge-2026.35.1.jar <server>/plugins/eco-2026.35-ecohub.jar
 ```
 
 ```bash
-cd S:/Claude/royal-plugins/RoyalSkyblock && bash tools/libreforge-abi-check.sh ../royalskyblock-extensions/ecominions/build/libs/EcoMinions.jar S:/mcctl/instances/Skyblock/plugins/libreforge/versions/libreforge-2026.35.1.jar S:/mcctl/instances/Skyblock/plugins/eco-2026.35-ecohub.jar
+cd RoyalSkyblock && bash tools/libreforge-abi-check.sh ../royalskyblock-extensions/ecominions/build/libs/EcoMinions.jar <server>/plugins/libreforge/versions/libreforge-2026.35.1.jar <server>/plugins/eco-2026.35-ecohub.jar
 ```
 
 Substitute the jar names for the versions you just installed. The pass is a final line of
@@ -89,7 +91,7 @@ downloaded — to know ahead of time whether the update needs a rebuild at all.
 ### 5. Deploy and smoke-boot
 
 ```bash
-cp S:/Claude/royal-plugins/RoyalSkyblock/build/libs/RoyalSkyblock.jar S:/mcctl/instances/Skyblock/plugins/RoyalSkyblock.jar
+cp RoyalSkyblock/build/libs/RoyalSkyblock.jar <server>/plugins/RoyalSkyblock.jar
 ```
 
 Extension jars go to `plugins/RoyalSkyblock/extensions/` (only the ones the server uses; the
@@ -98,7 +100,7 @@ Java-only ones — EcoMobs, EcoSkills, MythicMobs — never need a rebuild for a
 Boot the test instance, then:
 
 ```bash
-grep -nE 'Error occurred while enabling Royal|NoSuchMethodError|NoClassDefFoundError' S:/mcctl/instances/Skyblock/logs/latest.log
+grep -nE 'Error occurred while enabling Royal|NoSuchMethodError|NoClassDefFoundError' <server>/logs/latest.log
 ```
 
 Empty output is the pass. Also expect `[RoyalSkyblock] ... connected to SQLITE storage` followed by
